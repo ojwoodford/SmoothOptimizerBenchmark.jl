@@ -1,0 +1,3 @@
+using SmoothOptimizerBenchmark
+
+SmoothOptimizerBenchmark.run_all_benchmarks()

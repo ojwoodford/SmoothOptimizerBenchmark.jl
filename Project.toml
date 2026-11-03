@@ -1,0 +1,23 @@
+name = "SmoothOptimizerBenchmark"
+uuid = "effb52df-da80-4ab4-a5d1-3af36cb0fdcf"
+version = "0.1.0"
+
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+BlockMatrices = "a7d4e89f-9c3b-4d0e-8f5a-5b8c7d1e4f28"
+FastLinAlg = "e4b2c56d-7a1e-4f9b-8c3d-3e6f5a9b2c06"
+LeastSquaresOptim = "0fc2ff8b-aaa3-5acd-a817-1944a5e08891"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MicroInfo = "d9a1e34b-6c2f-4b8d-9e3a-2f5c4d8e1a05"
+NLLSModels = "b7e28c5a-4e6f-4d8b-9a1c-5d3e2f1a0b9c"
+NLLSsolver = "50b5cf9e-bf7a-4e29-8981-4280cbba70cb"
+NLPModels = "a4795742-8479-5a88-8948-cc11e1c8c1a6"
+Optim = "429524aa-4258-5aef-a3af-852621145aeb"
+OptimizationVariableInterface = "f1c3d78e-8b2a-4c9d-9e4f-4a7b6c0d3e17"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SecondOrderOptimization = "a3f5c71e-3b2d-4d9a-9e20-7f8e3c4b1a50"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+Static = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+ValueDispatch = "c8e4d12a-5f3b-4a9c-8d2e-1f6b3a7c9e04"
+
