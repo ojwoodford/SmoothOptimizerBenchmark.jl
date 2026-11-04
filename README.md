@@ -1,5 +1,8 @@
 # SmoothOptimizerBenchmark.jl
 
+[![Build Status](https://github.com/ojwoodford/SmoothOptimizerBenchmark.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/ojwoodford/SmoothOptimizerBenchmark.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![codecov](https://codecov.io/gh/ojwoodford/SmoothOptimizerBenchmark.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/ojwoodford/SmoothOptimizerBenchmark.jl)
+
 Benchmarking suite comparing second-order optimization and nonlinear least squares packages in Julia:
 - **SecondOrderOptimization.jl**
 - **NLLSModels.jl**
