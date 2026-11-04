@@ -215,35 +215,35 @@ end
 # Task 4: Sparse Bundle Adjustment (10 cameras, 50 points = 210 DoF)
 # ==============================================================================
 
-NLLSModels.generatemeasurement(pose::EuclideanVector{6, T}, X::EuclideanVector{3, U}) where {T, U} = SVector(dot(@inbounds(view(pose, StaticArrays.SUnitRange(1, 3))), X), dot(@inbounds(view(pose, StaticArrays.SUnitRange(4, 6))), X))
+NLLSModels.generatemeasurement(pose::SVector{6, T}, X::SVector{3, U}) where {T, U} = SVector(dot(@inbounds(view(pose, StaticArrays.SUnitRange(1, 3))), X), dot(@inbounds(view(pose, StaticArrays.SUnitRange(4, 6))), X))
 
 function benchmark_bundle_adjustment()
     println("\n[Task 4] Sparse Bundle Adjustment (10 cameras, 50 points, 30% visibility)")
 
     rng = MersenneTwister(42)
-    ba_prob = NLLSProblem(Union{EuclideanVector{6, Float64}, EuclideanVector{3, Float64}}, SimpleError2{2, Float64, EuclideanVector{6, Float64}, EuclideanVector{3, Float64}})
+    ba_prob = NLLSProblem(Union{SVector{6, Float64}, SVector{3, Float64}}, SimpleError2{2, Float64, SVector{6, Float64}, SVector{3, Float64}})
     ncameras = 10
     nlandmarks = 50
     propvisible = 0.3
 
     camoffset = SVector(1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
     for i in 1:ncameras
-        addvariable!(ba_prob, randn(rng, EuclideanVector{6, Float64}) .+ camoffset)
+        addvariable!(ba_prob, randn(rng, SVector{6, Float64}) .+ camoffset)
     end
     lmoffset = SVector(-0.5, -0.5, 10.0)
     for j in 1:nlandmarks
-        addvariable!(ba_prob, rand(rng, EuclideanVector{3, Float64}) .+ lmoffset)
+        addvariable!(ba_prob, rand(rng, SVector{3, Float64}) .+ lmoffset)
     end
 
     visibility = abs.(repeat(vec(1:ncameras), outer=(1, nlandmarks)) .- LinRange(2, ncameras - 1, nlandmarks)')
     visibility = visibility .<= sort(vec(visibility))[Int(ceil(length(visibility) * propvisible))]
     for camind in 1:ncameras
-        camera = ba_prob.variables[camind]::EuclideanVector{6, Float64}
+        camera = ba_prob.variables[camind]::SVector{6, Float64}
         for (landmark, tf) in enumerate(view(visibility, camind, :)')
             if tf
                 landmarkind = landmark + ncameras
-                meas = generatemeasurement(camera, ba_prob.variables[landmarkind]::EuclideanVector{3, Float64})
-                addcost!(ba_prob, SimpleError2{EuclideanVector{6, Float64}, EuclideanVector{3, Float64}}(meas, camind, landmarkind))
+                meas = generatemeasurement(camera, ba_prob.variables[landmarkind]::SVector{3, Float64})
+                addcost!(ba_prob, SimpleError2{SVector{6, Float64}, SVector{3, Float64}}(meas, camind, landmarkind))
             end
         end
     end
@@ -251,10 +251,10 @@ function benchmark_bundle_adjustment()
     # Perturb starting variables
     start_vars = copy(ba_prob.variables)
     for ind in eachindex(start_vars)
-        if start_vars[ind] isa EuclideanVector{3, Float64}
-            start_vars[ind] = start_vars[ind]::EuclideanVector{3, Float64} + randn(rng, SVector{3, Float64}) * 0.001
+        if start_vars[ind] isa SVector{3, Float64}
+            start_vars[ind] = start_vars[ind]::SVector{3, Float64} + randn(rng, SVector{3, Float64}) * 0.001
         else
-            start_vars[ind] = start_vars[ind]::EuclideanVector{6, Float64} + randn(rng, SVector{6, Float64}) * 0.001
+            start_vars[ind] = start_vars[ind]::SVector{6, Float64} + randn(rng, SVector{6, Float64}) * 0.001
         end
     end
     ba_prob.variables .= start_vars
@@ -278,7 +278,7 @@ function benchmark_bundle_adjustment()
     t_ba_lm_warm = @benchmark NLLSsolver.optimize!($ba_prob, $opt_ba_lm, nothing, $nullcallback, $cache_lm) setup=($ba_prob.variables .= $start_vars) samples=10 evals=1
     t_ba_dtd_warm = @benchmark NLLSsolver.optimize!($ba_prob, $opt_ba_dtd, nothing, $nullcallback, $cache_dtd) setup=($ba_prob.variables .= $start_vars) samples=10 evals=1
     t_ba_dl_warm = @benchmark NLLSsolver.optimize!($ba_prob, $opt_ba_dl, nothing, $nullcallback, $cache_dl) setup=($ba_prob.variables .= $start_vars) samples=10 evals=1
-    t_ba_singles = @benchmark NLLSsolver.optimizesingles!($ba_prob, $opt_ba_lm, EuclideanVector{3, Float64}) setup=($ba_prob.variables .= $start_vars) samples=10 evals=1
+    t_ba_singles = @benchmark NLLSsolver.optimizesingles!($ba_prob, $opt_ba_lm, SVector{3, Float64}) setup=($ba_prob.variables .= $start_vars) samples=10 evals=1
 
     println("Task 4 Results (Bundle Adjustment):")
     println("  • NLLSModels.jl (Sparse LM, cold):    $(round(median(t_ba_lm_cold).time/1e3, digits=2)) μs, $(t_ba_lm_cold.allocs) allocs ($(t_ba_lm_cold.memory) bytes)")
