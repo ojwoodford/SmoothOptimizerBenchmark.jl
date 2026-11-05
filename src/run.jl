@@ -1,3 +1,4 @@
 using SmoothOptimizerBenchmark
 
-SmoothOptimizerBenchmark.run_all_benchmarks()
+println("Starting SmoothOptimizerBenchmark Suite...")
+SmoothOptimizerBenchmark.run_all_benchmarks(quick=true)
