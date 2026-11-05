@@ -1,6 +1,6 @@
 # Multi-dimensional Rosenbrock Dense (Large Dense, from Gist 789e85)
 using Static, StaticArrays, LinearAlgebra
-using NLLSModels, LeastSquaresOptim, JuMP, Ipopt, JSOSolvers, NLPModels, NLPModelsJuMP, SecondOrderOptimization
+using NLLSModel, LeastSquaresOptim, JuMP, Ipopt, JSOSolvers, NLPModels, NLPModelsJuMP, SecondOrderOptimization
 const MOI = JuMP.MOI
 
 const rosen_diag_w_dense = 1.2
@@ -8,27 +8,27 @@ const rosen_offdiag_w_dense = 1.0
 
 rosen_startpoint(n::Int) = Float64[i % 2 == 0 ? 1.0 : -1.2 for i in 1:n]
 
-struct RosenDiagDense <: NLLSModels.AbstractResidual
+struct RosenDiagDense <: NLLSModel.AbstractResidual
     weight::Float64
     varind::Int
 end
 Base.eltype(::RosenDiagDense) = Float64
-NLLSModels.ndeps(::RosenDiagDense) = static(1)
-NLLSModels.nres(::RosenDiagDense) = static(1)
-NLLSModels.varindices(res::RosenDiagDense) = res.varind
-NLLSModels.getvars(res::RosenDiagDense, vars::Vector) = (vars[res.varind]::Float64,)
-NLLSModels.computeresidual(res::RosenDiagDense, x) = res.weight * (x - 1.0)
+NLLSModel.ndeps(::RosenDiagDense) = static(1)
+NLLSModel.nres(::RosenDiagDense) = static(1)
+NLLSModel.varindices(res::RosenDiagDense) = res.varind
+NLLSModel.getvars(res::RosenDiagDense, vars::Vector) = (vars[res.varind]::Float64,)
+NLLSModel.computeresidual(res::RosenDiagDense, x) = res.weight * (x - 1.0)
 
-struct RosenOffDiagDense <: NLLSModels.AbstractResidual
+struct RosenOffDiagDense <: NLLSModel.AbstractResidual
     weight::Float64
     varind::SVector{2, Int}
 end
 Base.eltype(::RosenOffDiagDense) = Float64
-NLLSModels.ndeps(::RosenOffDiagDense) = static(2)
-NLLSModels.nres(::RosenOffDiagDense) = static(1)
-NLLSModels.varindices(res::RosenOffDiagDense) = res.varind
-NLLSModels.getvars(res::RosenOffDiagDense, vars::Vector) = (vars[res.varind[1]]::Float64, vars[res.varind[2]]::Float64)
-NLLSModels.computeresidual(res::RosenOffDiagDense, x, y) = res.weight * (y - x^2)
+NLLSModel.ndeps(::RosenOffDiagDense) = static(2)
+NLLSModel.nres(::RosenOffDiagDense) = static(1)
+NLLSModel.varindices(res::RosenOffDiagDense) = res.varind
+NLLSModel.getvars(res::RosenOffDiagDense, vars::Vector) = (vars[res.varind[1]]::Float64, vars[res.varind[2]]::Float64)
+NLLSModel.computeresidual(res::RosenOffDiagDense, x, y) = res.weight * (y - x^2)
 
 function rosenbrock_dense_res!(out, x)
     n = length(x)
@@ -47,10 +47,10 @@ function rosenbrock_dense_res!(out, x)
 end
 
 function build_nlls_dense(n::Int)
-    costs = NLLSModels.CostStruct{Union{RosenDiagDense, RosenOffDiagDense}}()
-    costs.data[RosenDiagDense] = RosenDiagDense[RosenDiagDense(rosen_diag_w_dense, k) for k in 1:n]
-    costs.data[RosenOffDiagDense] = vcat(collect(Iterators.flatten([[RosenOffDiagDense(rosen_offdiag_w_dense, SVector(j, k)) for k in j+1:n] for j in 1:n-1])))
-    return NLLSProblem(rosen_startpoint(n), costs)
+    costs = NLLSModel.CostStruct{Union{RosenDiagDense, RosenOffDiagDense}}()
+    append!(get(costs, RosenDiagDense), [RosenDiagDense(rosen_diag_w_dense, k) for k in 1:n])
+    append!(get(costs, RosenOffDiagDense), vcat(collect(Iterators.flatten([[RosenOffDiagDense(rosen_offdiag_w_dense, SVector(j, k)) for k in j+1:n] for j in 1:n-1]))))
+    return NLLSModel(rosen_startpoint(n), costs)
 end
 
 function build_jso_dense(n::Int)
@@ -76,13 +76,13 @@ function create_rosenbrock_dense_problem()
             x0 = rosen_startpoint(n)
             m_len = n + ((n - 1) * n) >> 1
 
-            # Model 1: NLLSModels
+            # Model 1: NLLSModel
             nlls_prob = build_nlls_dense(n)
             m_nlls = ModelDefinition(
-                "NLLSModels",
+                "NLLSModel",
                 nlls_prob,
-                () -> NLLSModels.cost(nlls_prob),
-                () -> (NLLSModels.cost(nlls_prob), nothing),
+                () -> NLLSModel.cost(nlls_prob),
+                () -> (NLLSModel.cost(nlls_prob), nothing),
                 () -> copyto!(nlls_prob.variables, x0)
             )
 
@@ -130,7 +130,7 @@ function create_rosenbrock_dense_problem()
                 return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, res.bestcost < 1e-4)
             end),
             OptimizerDefinition("LeastSquaresOptim (LM)", model_def -> begin
-                n = length(rosen_startpoint(model_def.model isa NLLSProblem ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
+                n = length(rosen_startpoint(model_def.model isa NLLSModel ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
                 m_len = n + ((n - 1) * n) >> 1
                 lsp = LeastSquaresProblem(x=rosen_startpoint(n), f! = rosenbrock_dense_res!, output_length=m_len, autodiff=:forward)
                 start_c = 0.5 * sum(abs2, rosenbrock_dense_res!(zeros(m_len), lsp.x))
@@ -138,7 +138,7 @@ function create_rosenbrock_dense_problem()
                 return OptimizerResult(0.0, 0, 0, res.iterations, start_c, res.ssr * 0.5, res.converged)
             end),
             OptimizerDefinition("Ipopt", model_def -> begin
-                n = length(rosen_startpoint(model_def.model isa NLLSProblem ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
+                n = length(rosen_startpoint(model_def.model isa NLLSModel ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
                 model = Model(Ipopt.Optimizer)
                 x0 = rosen_startpoint(n)
                 @variable(model, x[i in 1:n], start = x0[i])
@@ -159,14 +159,14 @@ function create_rosenbrock_dense_problem()
                 return OptimizerResult(0.0, 0, 0, MOI.get(model, MOI.BarrierIterations()), start_c, objective_value(model), true)
             end),
             OptimizerDefinition("JSOSolvers (trunk)", model_def -> begin
-                n = length(rosen_startpoint(model_def.model isa NLLSProblem ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
+                n = length(rosen_startpoint(model_def.model isa NLLSModel ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
                 nls = build_jso_dense(n)
                 res = JSOSolvers.trunk(nls)
                 start_c = NLPModels.obj(nls, rosen_startpoint(n))
                 return OptimizerResult(0.0, 0, 0, res.iter, start_c, res.objective, res.status == :first_order)
             end),
             OptimizerDefinition("JSOSolvers (tron)", model_def -> begin
-                n = length(rosen_startpoint(model_def.model isa NLLSProblem ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
+                n = length(rosen_startpoint(model_def.model isa NLLSModel ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
                 nls = build_jso_dense(n)
                 res = JSOSolvers.tron(nls)
                 start_c = NLPModels.obj(nls, rosen_startpoint(n))

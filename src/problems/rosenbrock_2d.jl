@@ -1,6 +1,6 @@
 # 2D Rosenbrock Problem (Small Dense)
 using Static, StaticArrays, LinearAlgebra
-using SecondOrderOptimization, NLLSModels, LeastSquaresOptim, Optim
+using SecondOrderOptimization, NLLSModel, LeastSquaresOptim, Optim
 
 function rosenbrock_cost(x)
     return (1.0 - x[1])^2 + 100.0 * (x[2] - x[1]^2)^2
@@ -31,19 +31,19 @@ function rosenbrock_jacobian!(J, x)
 end
 
 struct Rosenbrock2DResidual1 <: AbstractResidual end
-NLLSModels.ndeps(::Rosenbrock2DResidual1) = static(1)
-NLLSModels.nres(::Rosenbrock2DResidual1) = static(1)
-NLLSModels.varindices(::Rosenbrock2DResidual1) = SVector(1)
-NLLSModels.getvars(::Rosenbrock2DResidual1, vars::Vector) = (vars[1]::SVector{2, Float64},)
-NLLSModels.computeresidual(::Rosenbrock2DResidual1, x) = SVector(1.0 - x[1])
+NLLSModel.ndeps(::Rosenbrock2DResidual1) = static(1)
+NLLSModel.nres(::Rosenbrock2DResidual1) = static(1)
+NLLSModel.varindices(::Rosenbrock2DResidual1) = SVector(1)
+NLLSModel.getvars(::Rosenbrock2DResidual1, vars::Vector) = (vars[1]::SVector{2, Float64},)
+NLLSModel.computeresidual(::Rosenbrock2DResidual1, x) = SVector(1.0 - x[1])
 Base.eltype(::Rosenbrock2DResidual1) = Float64
 
 struct Rosenbrock2DResidual2 <: AbstractResidual end
-NLLSModels.ndeps(::Rosenbrock2DResidual2) = static(1)
-NLLSModels.nres(::Rosenbrock2DResidual2) = static(1)
-NLLSModels.varindices(::Rosenbrock2DResidual2) = SVector(1)
-NLLSModels.getvars(::Rosenbrock2DResidual2, vars::Vector) = (vars[1]::SVector{2, Float64},)
-NLLSModels.computeresidual(::Rosenbrock2DResidual2, x) = SVector(10.0 * (x[2] - x[1]^2))
+NLLSModel.ndeps(::Rosenbrock2DResidual2) = static(1)
+NLLSModel.nres(::Rosenbrock2DResidual2) = static(1)
+NLLSModel.varindices(::Rosenbrock2DResidual2) = SVector(1)
+NLLSModel.getvars(::Rosenbrock2DResidual2, vars::Vector) = (vars[1]::SVector{2, Float64},)
+NLLSModel.computeresidual(::Rosenbrock2DResidual2, x) = SVector(10.0 * (x[2] - x[1]^2))
 Base.eltype(::Rosenbrock2DResidual2) = Float64
 
 function create_rosenbrock_2d_problem()
@@ -86,16 +86,16 @@ function create_rosenbrock_2d_problem()
                 () -> copyto!(x_lso, x0_vec)
             )
 
-            # Model 3: NLLSModels / NLLSProblem
-            nlls_prob = NLLSProblem(SVector{2, Float64}, Union{Rosenbrock2DResidual1, Rosenbrock2DResidual2})
+            # Model 3: NLLSModel / NLLSModel
+            nlls_prob = NLLSModel(SVector{2, Float64}, Union{Rosenbrock2DResidual1, Rosenbrock2DResidual2})
             addvariable!(nlls_prob, x0_static)
             addcost!(nlls_prob, Rosenbrock2DResidual1())
             addcost!(nlls_prob, Rosenbrock2DResidual2())
             m_nlls = ModelDefinition(
-                "NLLSModels (Static)",
+                "NLLSModel (Static)",
                 nlls_prob,
-                () -> NLLSModels.cost(nlls_prob),
-                () -> (NLLSModels.cost(nlls_prob), nothing),
+                () -> NLLSModel.cost(nlls_prob),
+                () -> (NLLSModel.cost(nlls_prob), nothing),
                 () -> (nlls_prob.variables[1] = x0_static)
             )
 

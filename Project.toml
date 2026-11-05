@@ -14,7 +14,7 @@ LeastSquaresOptim = "0fc2ff8b-aaa3-5acd-a817-1944a5e08891"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Manifolds = "1cead3c2-87b3-11e9-0ccd-23c62b72b94e"
 Manopt = "0fc0a36d-df90-57f3-8f93-d78a9fc72bb5"
-NLLSModels = "b7e28c5a-4e6f-4d8b-9a1c-5d3e2f1a0b9c"
+NLLSModel = "b7e28c5a-4e6f-4d8b-9a1c-5d3e2f1a0b9c"
 NLPModels = "a4795742-8479-5a88-8948-cc11e1c8c1a6"
 NLPModelsJuMP = "792afdf1-32c1-5681-94e0-d7bf7a5df49e"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
@@ -32,11 +32,6 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]
-
-[sources]
-NLLSModels = {path = "/Users/olly/.julia/dev/NLLSModels.jl"}
-OptimizationVariableInterface = {path = "/Users/olly/.julia/dev/OptimizationVariableInterface.jl"}
-SecondOrderOptimization = {path = "/Users/olly/.julia/dev/SecondOrderOptimization.jl"}
 
 [compat]
 BundleAdjustmentModels = "0.4.1"

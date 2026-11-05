@@ -1,16 +1,16 @@
 # Exponential Curve Fitting Problem (Small Dense)
 using Static, StaticArrays, LinearAlgebra, Random
-using SecondOrderOptimization, NLLSModels, LeastSquaresOptim
+using SecondOrderOptimization, NLLSModel, LeastSquaresOptim
 
 struct ExpFitResidual <: AbstractResidual
     t::Float64
     y::Float64
 end
-NLLSModels.ndeps(::ExpFitResidual) = static(1)
-NLLSModels.nres(::ExpFitResidual) = static(1)
-NLLSModels.varindices(::ExpFitResidual) = SVector(1)
-NLLSModels.getvars(::ExpFitResidual, vars::Vector) = (vars[1]::SVector{3, Float64},)
-NLLSModels.computeresidual(res::ExpFitResidual, p) = SVector(p[1] * exp(-p[2] * res.t) + p[3] - res.y)
+NLLSModel.ndeps(::ExpFitResidual) = static(1)
+NLLSModel.nres(::ExpFitResidual) = static(1)
+NLLSModel.varindices(::ExpFitResidual) = SVector(1)
+NLLSModel.getvars(::ExpFitResidual, vars::Vector) = (vars[1]::SVector{3, Float64},)
+NLLSModel.computeresidual(res::ExpFitResidual, p) = SVector(p[1] * exp(-p[2] * res.t) + p[3] - res.y)
 Base.eltype(::ExpFitResidual) = Float64
 
 function generate_exp_data(n_points::Int)
@@ -48,17 +48,17 @@ function create_curve_fitting_problem()
             p0_static = SVector(1.0, 1.0, 1.0)
             p0_vec = [1.0, 1.0, 1.0]
 
-            # Model 1: NLLSModels
-            nlls_prob = NLLSProblem(SVector{3, Float64}, ExpFitResidual)
+            # Model 1: NLLSModel
+            nlls_prob = NLLSModel(SVector{3, Float64}, ExpFitResidual)
             addvariable!(nlls_prob, p0_static)
             for i in 1:n_points
                 addcost!(nlls_prob, ExpFitResidual(t_pts[i], y_data[i]))
             end
             m_nlls = ModelDefinition(
-                "NLLSModels (Static)",
+                "NLLSModel (Static)",
                 nlls_prob,
-                () -> NLLSModels.cost(nlls_prob),
-                () -> (NLLSModels.cost(nlls_prob), nothing),
+                () -> NLLSModel.cost(nlls_prob),
+                () -> (NLLSModel.cost(nlls_prob), nothing),
                 () -> (nlls_prob.variables[1] = p0_static)
             )
 
@@ -112,7 +112,7 @@ function create_curve_fitting_problem()
         [
             OptimizerDefinition("SecondOrderOptimization (Dogleg)", model_def -> begin
                 opt = OptimizationOptions(iterator = :dogleg)
-                if model_def.model isa NLLSProblem || model_def.model isa LeastSquaresProblem
+                if model_def.model isa NLLSModel || model_def.model isa LeastSquaresProblem
                     p = deepcopy(model_def.model)
                     _, res = SecondOrderOptimization.optimize!(p, opt)
                     return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
@@ -136,7 +136,7 @@ function create_curve_fitting_problem()
             end),
             OptimizerDefinition("SecondOrderOptimization (LM)", model_def -> begin
                 opt = OptimizationOptions(iterator = :levenbergmarquardt)
-                if model_def.model isa NLLSProblem || model_def.model isa LeastSquaresProblem
+                if model_def.model isa NLLSModel || model_def.model isa LeastSquaresProblem
                     p = deepcopy(model_def.model)
                     _, res = SecondOrderOptimization.optimize!(p, opt)
                     return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
@@ -162,7 +162,7 @@ function create_curve_fitting_problem()
                 lsp = if model_def.model isa LeastSquaresProblem
                     deepcopy(model_def.model)
                 else
-                    n_pts = model_def.model isa NLLSProblem ? length(model_def.model.costs.data[ExpFitResidual]) : 20
+                    n_pts = model_def.model isa NLLSModel ? length(model_def.model.costs[ExpFitResidual]) : 20
                     t_pts, y_data = generate_exp_data(n_pts)
                     LeastSquaresProblem(x=[1.0, 1.0, 1.0], f! = (r, p) -> exp_residuals!(r, p, t_pts, y_data), g! = (J, p) -> exp_jacobian!(J, p, t_pts), output_length=n_pts)
                 end
@@ -176,7 +176,7 @@ function create_curve_fitting_problem()
                 lsp = if model_def.model isa LeastSquaresProblem
                     deepcopy(model_def.model)
                 else
-                    n_pts = model_def.model isa NLLSProblem ? length(model_def.model.costs.data[ExpFitResidual]) : 20
+                    n_pts = model_def.model isa NLLSModel ? length(model_def.model.costs[ExpFitResidual]) : 20
                     t_pts, y_data = generate_exp_data(n_pts)
                     LeastSquaresProblem(x=[1.0, 1.0, 1.0], f! = (r, p) -> exp_residuals!(r, p, t_pts, y_data), g! = (J, p) -> exp_jacobian!(J, p, t_pts), output_length=n_pts)
                 end

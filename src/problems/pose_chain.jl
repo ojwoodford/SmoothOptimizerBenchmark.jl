@@ -1,24 +1,24 @@
 # 3D Pose Chain Problem (Large Sparse Block Tridiagonal)
 using Static, StaticArrays, LinearAlgebra, SparseArrays
-using NLLSModels, SecondOrderOptimization, LeastSquaresOptim
+using NLLSModel, SecondOrderOptimization, LeastSquaresOptim
 
 struct BenchChainLink <: AbstractResidual
     offset::SVector{3, Float64}
     varind::SVector{2, Int}
 end
-NLLSModels.ndeps(::BenchChainLink) = static(2)
-NLLSModels.nres(::BenchChainLink) = static(3)
-NLLSModels.varindices(r::BenchChainLink) = r.varind
-NLLSModels.getvars(r::BenchChainLink, vars::Vector) = (vars[r.varind[1]]::SVector{3, Float64}, vars[r.varind[2]]::SVector{3, Float64})
-NLLSModels.computeresidual(r::BenchChainLink, a, b) = b - a - r.offset + 0.1 * sin.(a)
+NLLSModel.ndeps(::BenchChainLink) = static(2)
+NLLSModel.nres(::BenchChainLink) = static(3)
+NLLSModel.varindices(r::BenchChainLink) = r.varind
+NLLSModel.getvars(r::BenchChainLink, vars::Vector) = (vars[r.varind[1]]::SVector{3, Float64}, vars[r.varind[2]]::SVector{3, Float64})
+NLLSModel.computeresidual(r::BenchChainLink, a, b) = b - a - r.offset + 0.1 * sin.(a)
 Base.eltype(::BenchChainLink) = Float64
 
 struct BenchChainAnchor <: AbstractResidual end
-NLLSModels.ndeps(::BenchChainAnchor) = static(1)
-NLLSModels.nres(::BenchChainAnchor) = static(3)
-NLLSModels.varindices(::BenchChainAnchor) = SVector(1)
-NLLSModels.getvars(::BenchChainAnchor, vars::Vector) = (vars[1]::SVector{3, Float64},)
-NLLSModels.computeresidual(::BenchChainAnchor, a) = a
+NLLSModel.ndeps(::BenchChainAnchor) = static(1)
+NLLSModel.nres(::BenchChainAnchor) = static(3)
+NLLSModel.varindices(::BenchChainAnchor) = SVector(1)
+NLLSModel.getvars(::BenchChainAnchor, vars::Vector) = (vars[1]::SVector{3, Float64},)
+NLLSModel.computeresidual(::BenchChainAnchor, a) = a
 Base.eltype(::BenchChainAnchor) = Float64
 
 function generate_chain_start_vars(n_poses::Int)
@@ -27,7 +27,7 @@ end
 
 function build_chain_nlls(n_poses::Int)
     start_vars = generate_chain_start_vars(n_poses)
-    chain_prob = NLLSProblem(SVector{3, Float64}, Union{BenchChainLink, BenchChainAnchor})
+    chain_prob = NLLSModel(SVector{3, Float64}, Union{BenchChainLink, BenchChainAnchor})
     for v in start_vars
         addvariable!(chain_prob, v)
     end
@@ -67,13 +67,13 @@ function create_pose_chain_problem()
             x_flat = reduce(vcat, [collect(v) for v in start_vars])
             m_res = 3 * n_poses
 
-            # Model 1: NLLSModels Sparse Block Tridiagonal
+            # Model 1: NLLSModel Sparse Block Tridiagonal
             nlls_prob = build_chain_nlls(n_poses)
             m_nlls = ModelDefinition(
-                "NLLSModels (Sparse)",
+                "NLLSModel (Sparse)",
                 nlls_prob,
-                () -> NLLSModels.cost(nlls_prob),
-                () -> (NLLSModels.cost(nlls_prob), nothing),
+                () -> NLLSModel.cost(nlls_prob),
+                () -> (NLLSModel.cost(nlls_prob), nothing),
                 () -> copyto!(nlls_prob.variables, start_vars)
             )
 
@@ -112,7 +112,7 @@ function create_pose_chain_problem()
                 return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
             end),
             OptimizerDefinition("LeastSquaresOptim (LM)", model_def -> begin
-                n_poses = model_def.model isa NLLSProblem ? length(model_def.model.variables) : (length(model_def.model.x) ÷ 3)
+                n_poses = model_def.model isa NLLSModel ? length(model_def.model.variables) : (length(model_def.model.x) ÷ 3)
                 start_vars = generate_chain_start_vars(n_poses)
                 x_flat = reduce(vcat, [collect(v) for v in start_vars])
                 m_res = 3 * n_poses

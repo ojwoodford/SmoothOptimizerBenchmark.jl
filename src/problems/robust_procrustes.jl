@@ -1,6 +1,6 @@
 # Robust Procrustes Problem on SO(d) (Manifold, from Gist cad99d)
 using LinearAlgebra, Manopt, Manifolds, Random, Static, StaticArrays
-using NLLSModels, SecondOrderOptimization, OptimizationVariableInterface
+using NLLSModel, SecondOrderOptimization, OptimizationVariableInterface
 
 # Generate deterministic data matrix A (d x n)
 function generate_procrustes_data(d::Int)
@@ -40,21 +40,21 @@ function generate_procrustes_experiment(d::Int)
     return A, B, M, p_star
 end
 
-# 1. ManifoldVar residual for NLLSModels
-struct ProcrustesOVIResidual <: NLLSModels.AbstractResidual
+# 1. ManifoldVar residual for NLLSModel
+struct ProcrustesOVIResidual <: NLLSModel.AbstractResidual
     a::Vector{Float64}
     b::Vector{Float64}
 end
 Base.eltype(::ProcrustesOVIResidual) = Float64
-NLLSModels.ndeps(::ProcrustesOVIResidual) = static(1)
-NLLSModels.nres(res::ProcrustesOVIResidual) = length(res.a)
-NLLSModels.varindices(::ProcrustesOVIResidual) = 1
-NLLSModels.getvars(::ProcrustesOVIResidual, vars::Vector) = (vars[1],)
-NLLSModels.computeresidual(res::ProcrustesOVIResidual, v::ManifoldVar) = res.a - v.point * res.b
-const procrustes_huber_kernel = NLLSModels.Huber2oKernel(1e-5)
-NLLSModels.robustkernel(::ProcrustesOVIResidual) = procrustes_huber_kernel
+NLLSModel.ndeps(::ProcrustesOVIResidual) = static(1)
+NLLSModel.nres(res::ProcrustesOVIResidual) = length(res.a)
+NLLSModel.varindices(::ProcrustesOVIResidual) = 1
+NLLSModel.getvars(::ProcrustesOVIResidual, vars::Vector) = (vars[1],)
+NLLSModel.computeresidual(res::ProcrustesOVIResidual, v::ManifoldVar) = res.a - v.point * res.b
+const procrustes_huber_kernel = NLLSModel.Huber2oKernel(1e-5)
+NLLSModel.robustkernel(::ProcrustesOVIResidual) = procrustes_huber_kernel
 
-# 2. Specialized closed-form Rotation residual for NLLSModels
+# 2. Specialized closed-form Rotation residual for NLLSModel
 function vec2skew(v, ind, N)
     M = MMatrix{N, N, eltype(v), N*N}(undef)
     for i = 1:N
@@ -87,20 +87,20 @@ OptimizationVariableInterface.nvars(::SpecializedRotation{N, N2, T}) where {N, N
 OptimizationVariableInterface.update(var::SpecializedRotation{N, N2, T}, updatevec, start=1) where {N, N2, T} =
     SpecializedRotation(var.R * proj2rot(vec2skew(updatevec, start, N)))
 
-struct SpecializedProcrustesResidual{N} <: NLLSModels.AbstractResidual
+struct SpecializedProcrustesResidual{N} <: NLLSModel.AbstractResidual
     A::SVector{N, Float64}
     B::SVector{N, Float64}
 end
-NLLSModels.ndeps(::SpecializedProcrustesResidual) = static(1)
-NLLSModels.nres(::SpecializedProcrustesResidual{N}) where N = static(N)
-NLLSModels.varindices(::SpecializedProcrustesResidual) = 1
-NLLSModels.getvars(res::SpecializedProcrustesResidual, vars::Vector) = (vars[1],)
-NLLSModels.computeresidual(res::SpecializedProcrustesResidual, var::SpecializedRotation) = res.A - var.R * res.B
-NLLSModels.robustkernel(::SpecializedProcrustesResidual) = procrustes_huber_kernel
+NLLSModel.ndeps(::SpecializedProcrustesResidual) = static(1)
+NLLSModel.nres(::SpecializedProcrustesResidual{N}) where N = static(N)
+NLLSModel.varindices(::SpecializedProcrustesResidual) = 1
+NLLSModel.getvars(res::SpecializedProcrustesResidual, vars::Vector) = (vars[1],)
+NLLSModel.computeresidual(res::SpecializedProcrustesResidual, var::SpecializedRotation) = res.A - var.R * res.B
+NLLSModel.robustkernel(::SpecializedProcrustesResidual) = procrustes_huber_kernel
 Base.eltype(::SpecializedProcrustesResidual) = Float64
 
 function get_procrustes_dim(model)
-    if model isa NLLSProblem
+    if model isa NLLSModel
         v = model.variables[1]
         return hasfield(typeof(v), :point) ? size(v.point, 1) : size(v.R, 1)
     else
@@ -118,32 +118,32 @@ function create_robust_procrustes_problem()
             n = size(A, 2)
             p0 = Matrix{Float64}(I, d, d)
 
-            # Model 1: NLLSModels with OptimizationVariableInterface.ManifoldVar
+            # Model 1: NLLSModel with OptimizationVariableInterface.ManifoldVar
             var_ovi = ManifoldVar(copy(p0), M)
-            nlls_ovi = NLLSProblem(typeof(var_ovi), ProcrustesOVIResidual)
+            nlls_ovi = NLLSModel(typeof(var_ovi), ProcrustesOVIResidual)
             addvariable!(nlls_ovi, var_ovi)
             for i in 1:n
                 addcost!(nlls_ovi, ProcrustesOVIResidual(A[:, i], B[:, i]))
             end
             m_ovi = ModelDefinition(
-                "NLLSModels (ManifoldVar)",
+                "NLLSModel (ManifoldVar)",
                 nlls_ovi,
-                () -> NLLSModels.cost(nlls_ovi),
-                () -> (NLLSModels.cost(nlls_ovi), nothing),
+                () -> NLLSModel.cost(nlls_ovi),
+                () -> (NLLSModel.cost(nlls_ovi), nothing),
                 () -> (nlls_ovi.variables[1] = ManifoldVar(copy(p0), M))
             )
 
-            # Model 2: NLLSModels with Specialized SMatrix Rotation
+            # Model 2: NLLSModel with Specialized SMatrix Rotation
             R0_static = SMatrix{d, d, Float64, d * d}(p0)
-            nlls_spec = NLLSProblem([SpecializedRotation(R0_static)])
+            nlls_spec = NLLSModel([SpecializedRotation(R0_static)], SpecializedProcrustesResidual{d})
             for i in 1:n
                 addcost!(nlls_spec, SpecializedProcrustesResidual{d}(SVector{d, Float64}(A[:, i]), SVector{d, Float64}(B[:, i])))
             end
             m_spec = ModelDefinition(
-                "NLLSModels (Specialized)",
+                "NLLSModel (Specialized)",
                 nlls_spec,
-                () -> NLLSModels.cost(nlls_spec),
-                () -> (NLLSModels.cost(nlls_spec), nothing),
+                () -> NLLSModel.cost(nlls_spec),
+                () -> (NLLSModel.cost(nlls_spec), nothing),
                 () -> (nlls_spec.variables[1] = SpecializedRotation(R0_static))
             )
 
@@ -177,7 +177,7 @@ function create_robust_procrustes_problem()
         end,
         [
             OptimizerDefinition("SecondOrderOptimization (LM)", model_def -> begin
-                prob = if model_def.model isa NLLSProblem
+                prob = if model_def.model isa NLLSModel
                     deepcopy(model_def.model)
                 else
                     d = get_procrustes_dim(model_def.model)
@@ -185,7 +185,7 @@ function create_robust_procrustes_problem()
                     n = size(A, 2)
                     p0 = Matrix{Float64}(I, d, d)
                     var_ovi = ManifoldVar(copy(p0), M)
-                    p = NLLSProblem(typeof(var_ovi), ProcrustesOVIResidual)
+                    p = NLLSModel(typeof(var_ovi), ProcrustesOVIResidual)
                     addvariable!(p, var_ovi)
                     for i in 1:n; addcost!(p, ProcrustesOVIResidual(A[:, i], B[:, i])); end
                     p
@@ -195,7 +195,7 @@ function create_robust_procrustes_problem()
                 return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
             end),
             OptimizerDefinition("SecondOrderOptimization (Dogleg)", model_def -> begin
-                prob = if model_def.model isa NLLSProblem
+                prob = if model_def.model isa NLLSModel
                     deepcopy(model_def.model)
                 else
                     d = get_procrustes_dim(model_def.model)
@@ -203,7 +203,7 @@ function create_robust_procrustes_problem()
                     n = size(A, 2)
                     p0 = Matrix{Float64}(I, d, d)
                     var_ovi = ManifoldVar(copy(p0), M)
-                    p = NLLSProblem(typeof(var_ovi), ProcrustesOVIResidual)
+                    p = NLLSModel(typeof(var_ovi), ProcrustesOVIResidual)
                     addvariable!(p, var_ovi)
                     for i in 1:n; addcost!(p, ProcrustesOVIResidual(A[:, i], B[:, i])); end
                     p

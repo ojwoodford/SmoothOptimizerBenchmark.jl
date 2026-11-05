@@ -4,7 +4,7 @@ using LeastSquaresOptim
 using NLPModels
 using LinearAlgebra
 using StaticArrays
-using NLLSModels
+using NLLSModel
 using Optim
 
 """
@@ -71,16 +71,16 @@ function SecondOrderOptimization.optimize(nlp::AbstractNLPModel, options::Optimi
 end
 
 """
-    SecondOrderOptimization.optimize!(prob::NLLSProblem, options::OptimizationOptions=OptimizationOptions(); unfixed=nothing, kwargs...)
+    SecondOrderOptimization.optimize!(prob::NLLSModel, options::OptimizationOptions=OptimizationOptions(); unfixed=nothing, kwargs...)
 
-Optimizes an `NLLSModels.NLLSProblem` in-place using `SecondOrderOptimization.optimize!`.
+Optimizes an `NLLSModel.NLLSModel` in-place using `SecondOrderOptimization.optimize!`.
 """
-function SecondOrderOptimization.optimize!(prob::NLLSProblem, options::OptimizationOptions=OptimizationOptions(); unfixed=nothing, kwargs...)
-    f, fdf!, x0, H = NLLSModels.optimvars(prob, unfixed)
+function SecondOrderOptimization.optimize!(prob::NLLSModel, options::OptimizationOptions=OptimizationOptions(); unfixed=nothing, kwargs...)
+    f, fdf!, x0, H = NLLSModel.optimvars(prob, unfixed)
     return SecondOrderOptimization.optimize!(f, fdf!, x0, options; H=H, kwargs...)
 end
 
-function SecondOrderOptimization.optimize(prob::NLLSProblem, options::OptimizationOptions=OptimizationOptions(); unfixed=nothing, kwargs...)
+function SecondOrderOptimization.optimize(prob::NLLSModel, options::OptimizationOptions=OptimizationOptions(); unfixed=nothing, kwargs...)
     p = deepcopy(prob)
     return SecondOrderOptimization.optimize!(p, options; unfixed=unfixed, kwargs...)
 end

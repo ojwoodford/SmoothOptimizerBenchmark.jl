@@ -1,6 +1,6 @@
 # Dense Affine Alignment Problem (Large Dense, from Gist 0af1c9)
 using Distances, LinearAlgebra, Random, Static
-using NLLSModels, LeastSquaresOptim, SecondOrderOptimization
+using NLLSModel, LeastSquaresOptim, SecondOrderOptimization
 
 safe_dist(X, Y) = [!iszero(z) ? sqrt(z) : z for z in pairwise(SqEuclidean(), X, Y; dims=2)]
 
@@ -22,17 +22,17 @@ function affine_resfun(x, X, Y, D)
     return vec(D - safe_dist(warped, Y))
 end
 
-struct AffineResidual <: NLLSModels.AbstractResidual
+struct AffineResidual <: NLLSModel.AbstractResidual
     X::Matrix{Float64}
     Y::Matrix{Float64}
     D::Matrix{Float64}
 end
 Base.eltype(::AffineResidual) = Float64
-NLLSModels.ndeps(::AffineResidual) = static(1)
-NLLSModels.nres(res::AffineResidual) = length(res.D)
-NLLSModels.varindices(::AffineResidual) = 1
-NLLSModels.getvars(::AffineResidual, vars::Vector) = (vars[1],)
-NLLSModels.computeresidual(res::AffineResidual, x) = affine_resfun(x, res.X, res.Y, res.D)
+NLLSModel.ndeps(::AffineResidual) = static(1)
+NLLSModel.nres(res::AffineResidual) = length(res.D)
+NLLSModel.varindices(::AffineResidual) = 1
+NLLSModel.getvars(::AffineResidual, vars::Vector) = (vars[1],)
+NLLSModel.computeresidual(res::AffineResidual, x) = affine_resfun(x, res.X, res.Y, res.D)
 
 function create_affine_alignment_problem()
     ProblemDefinition(
@@ -44,15 +44,15 @@ function create_affine_alignment_problem()
             start_vec = zeros(n * n + n)
             start_vec[1:n+1:end] .= 1.0
 
-            # Model 1: NLLSModels Problem
-            nlls_prob = NLLSProblem(Vector{Float64}, AffineResidual)
+            # Model 1: NLLSModel Problem
+            nlls_prob = NLLSModel(Vector{Float64}, AffineResidual)
             addvariable!(nlls_prob, copy(start_vec))
             addcost!(nlls_prob, AffineResidual(X, Y, D))
             m_nlls = ModelDefinition(
-                "NLLSModels",
+                "NLLSModel",
                 nlls_prob,
-                () -> NLLSModels.cost(nlls_prob),
-                () -> (NLLSModels.cost(nlls_prob), nothing),
+                () -> NLLSModel.cost(nlls_prob),
+                () -> (NLLSModel.cost(nlls_prob), nothing),
                 () -> begin
                     nlls_prob.variables[1] .= 0.0
                     nlls_prob.variables[1][1:n+1:end] .= 1.0
@@ -93,7 +93,7 @@ function create_affine_alignment_problem()
             end),
             OptimizerDefinition("LeastSquaresOptim (LM)", model_def -> begin
                 lsp = model_def.model isa LeastSquaresProblem ? deepcopy(model_def.model) : begin
-                    n = size(model_def.model.costs.data[AffineResidual][1].X, 1)
+                    n = size(model_def.model.costs[AffineResidual][1].X, 1)
                     X, Y, D = generate_affine_data(n)
                     start_vec = zeros(n*n+n)
                     start_vec[1:n+1:end] .= 1.0

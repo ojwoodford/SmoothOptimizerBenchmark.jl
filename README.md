@@ -5,7 +5,7 @@
 
 Benchmarking suite comparing smooth optimization, nonlinear least squares, and manifold optimization packages across Julia:
 - **SecondOrderOptimization.jl**
-- **NLLSModels.jl**
+- **NLLSModel.jl**
 - **Optim.jl**
 - **LeastSquaresOptim.jl**
 - **JuMP.jl** / **Ipopt.jl**
@@ -35,14 +35,14 @@ Each problem resides in its own source file (`src/problems/`), is adjustable in 
 
 | Problem | Category | Implementations Tested | Compatible Optimizers |
 | :--- | :--- | :--- | :--- |
-| **2D Rosenbrock** (`rosenbrock_2d.jl`) | Small Dense | `SecondOrderOptimization` (static `SVector`), `LeastSquaresOptim`, `NLLSModels`, `Optim` | `SecondOrderOptimization` (Dogleg, LM), `Optim` (Newton, NewtonTrustRegion), `LeastSquaresOptim` (Dogleg, LM) |
-| **Exponential Curve Fitting** (`curve_fitting.jl`) | Small Dense | `NLLSModels` (static), `LeastSquaresOptim` (in-place), `SecondOrderOptimization` | `SecondOrderOptimization` (Dogleg, LM), `LeastSquaresOptim` (Dogleg, LM) |
-| **Dense Affine Alignment** (`affine_alignment.jl`) | Large Dense | `NLLSModels`, `LeastSquaresOptim` (autodiff) | `SecondOrderOptimization` (Dogleg, LM), `LeastSquaresOptim` (LM) |
-| **Dense Multi-dimensional Rosenbrock** (`rosenbrock_dense.jl`) | Large Dense | `NLLSModels`, `LeastSquaresOptim`, `NLPModels` (`MathOptNLSModel`) | `SecondOrderOptimization` (Dogleg, LM), `LeastSquaresOptim` (LM), `Ipopt`, `JSOSolvers` (trunk, tron) |
-| **Sparse Multi-dimensional Rosenbrock** (`rosenbrock_sparse.jl`) | Large Sparse | `NLLSModels`, `LeastSquaresOptim` (sparse Jacobian), `NLPModels` (`MathOptNLSModel`) | `SecondOrderOptimization` (Sparse LM `:ldl`), `LeastSquaresOptim` (Sparse LM), `Ipopt`, `JSOSolvers` (trunk, tron) |
-| **Nonlinear 3D Pose Chain** (`pose_chain.jl`) | Large Sparse | `NLLSModels` (sparse block-tridiagonal), `LeastSquaresOptim` (sparse) | `SecondOrderOptimization` (Sparse LM, Sparse Dogleg), `LeastSquaresOptim` (LM) |
-| **Robust Procrustes on $SO(d)$** (`robust_procrustes.jl`) | Manifold | `NLLSModels` (`OptimizationVariableInterface.ManifoldVar`), `NLLSModels` (closed-form `Rotation`), `Manopt` (`Rotations(d)`) | `SecondOrderOptimization` (LM, Dogleg), `Manopt` (Riemannian LevenbergMarquardt) |
-| **Sparse Bundle Adjustment** (`bundle_adjustment.jl`) | Large Sparse | `NLLSModels` (synthetic & BAL), `BundleAdjustmentModels` | `SecondOrderOptimization` (Sparse LM, Sparse Dogleg, Landmark singles), `CaNNOLeS` (`cannoles`) |
+| **2D Rosenbrock** (`rosenbrock_2d.jl`) | Small Dense | `SecondOrderOptimization` (static `SVector`), `LeastSquaresOptim`, `NLLSModel`, `Optim` | `SecondOrderOptimization` (Dogleg, LM), `Optim` (Newton, NewtonTrustRegion), `LeastSquaresOptim` (Dogleg, LM) |
+| **Exponential Curve Fitting** (`curve_fitting.jl`) | Small Dense | `NLLSModel` (static), `LeastSquaresOptim` (in-place), `SecondOrderOptimization` | `SecondOrderOptimization` (Dogleg, LM), `LeastSquaresOptim` (Dogleg, LM) |
+| **Dense Affine Alignment** (`affine_alignment.jl`) | Large Dense | `NLLSModel`, `LeastSquaresOptim` (autodiff) | `SecondOrderOptimization` (Dogleg, LM), `LeastSquaresOptim` (LM) |
+| **Dense Multi-dimensional Rosenbrock** (`rosenbrock_dense.jl`) | Large Dense | `NLLSModel`, `LeastSquaresOptim`, `NLPModels` (`MathOptNLSModel`) | `SecondOrderOptimization` (Dogleg, LM), `LeastSquaresOptim` (LM), `Ipopt`, `JSOSolvers` (trunk, tron) |
+| **Sparse Multi-dimensional Rosenbrock** (`rosenbrock_sparse.jl`) | Large Sparse | `NLLSModel`, `LeastSquaresOptim` (sparse Jacobian), `NLPModels` (`MathOptNLSModel`) | `SecondOrderOptimization` (Sparse LM `:ldl`), `LeastSquaresOptim` (Sparse LM), `Ipopt`, `JSOSolvers` (trunk, tron) |
+| **Nonlinear 3D Pose Chain** (`pose_chain.jl`) | Large Sparse | `NLLSModel` (sparse block-tridiagonal), `LeastSquaresOptim` (sparse) | `SecondOrderOptimization` (Sparse LM, Sparse Dogleg), `LeastSquaresOptim` (LM) |
+| **Robust Procrustes on $SO(d)$** (`robust_procrustes.jl`) | Manifold | `NLLSModel` (`OptimizationVariableInterface.ManifoldVar`), `NLLSModel` (closed-form `Rotation`), `Manopt` (`Rotations(d)`) | `SecondOrderOptimization` (LM, Dogleg), `Manopt` (Riemannian LevenbergMarquardt) |
+| **Sparse Bundle Adjustment** (`bundle_adjustment.jl`) | Large Sparse | `NLLSModel` (synthetic & BAL), `BundleAdjustmentModels` | `SecondOrderOptimization` (Sparse LM, Sparse Dogleg, Landmark singles), `CaNNOLeS` (`cannoles`) |
 
 ---
 

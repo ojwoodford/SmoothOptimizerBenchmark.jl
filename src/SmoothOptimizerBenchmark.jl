@@ -10,7 +10,7 @@ using Printf
 using Statistics
 
 using SecondOrderOptimization
-using NLLSModels
+using NLLSModel
 using Optim
 using LeastSquaresOptim
 using NLPModels
