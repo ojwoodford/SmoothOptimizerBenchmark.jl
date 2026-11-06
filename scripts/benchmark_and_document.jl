@@ -14,7 +14,7 @@ mkpath(plots_dir)
 
 # Run scaling benchmarks
 t_start = time()
-results = run_all_scaling_benchmarks(samples=1, verbose=true)
+results = run_all_scaling_benchmarks(verbose=true)
 t_elapsed = time() - t_start
 println(@sprintf("\n✓ All scaling benchmarks completed in %.1f seconds.", t_elapsed))
 

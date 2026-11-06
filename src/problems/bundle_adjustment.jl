@@ -43,6 +43,60 @@ function generate_synthetic_ba(ncameras::Int, nlandmarks::Int=ncameras * 5, prop
     return prob
 end
 
+function make_synthetic_bam(ncams::Int, npnts::Int=ncams * 5, propvisible::Float64=0.3; rng=MersenneTwister(42 + ncams))
+    nobs = 0
+    cams_indices = Int[]
+    pnts_indices = Int[]
+
+    visibility = abs.(repeat(vec(1:ncams), outer=(1, npnts)) .- transpose(LinRange(2, ncams - 1, npnts)))
+    visibility = visibility .<= sort(vec(visibility))[Int(ceil(length(visibility) * propvisible))]
+    for c in 1:ncams, p in 1:npnts
+        if visibility[c, p]
+            push!(cams_indices, c)
+            push!(pnts_indices, p)
+            nobs += 1
+        end
+    end
+
+    x0 = randn(rng, 3 * npnts + 9 * ncams)
+    for c in 1:ncams
+        offset = 3 * npnts + 9 * (c - 1)
+        x0[offset + 7] = 0.0 # k1
+        x0[offset + 8] = 0.0 # k2
+        x0[offset + 9] = 500.0 # f
+    end
+
+    pt2d = randn(rng, 2 * nobs)
+
+    nvar = 9 * ncams + 3 * npnts
+    nequ = 2 * nobs
+    meta = NLPModelMeta(nvar; x0=x0, name="BundleAdjustmentModel")
+    nls_meta = NLSMeta(nequ, nvar; x0=x0, nnzj=2 * nobs * 12, nnzh=0)
+
+    T = Float64
+    S = Vector{Float64}
+
+    k = similar(x0)
+    P1 = similar(x0)
+    JProdP321 = Matrix{T}(undef, 2, 12)
+    JProdP32 = Matrix{T}(undef, 2, 6)
+    JP1_mat = Matrix{T}(undef, 6, 12)
+    JP2_mat = Matrix{T}(undef, 5, 6)
+    JP3_mat = Matrix{T}(undef, 2, 5)
+    P1_vec = S(undef, 3)
+    P1_cross = S(undef, 3)
+    P2_vec = S(undef, 2)
+
+    return BundleAdjustmentModel(
+        meta, nls_meta, NLSCounters(),
+        cams_indices, pnts_indices, pt2d,
+        nobs, npnts, ncams,
+        k, P1, JProdP321, JProdP32,
+        JP1_mat, JP2_mat, JP3_mat,
+        P1_vec, P1_cross, P2_vec
+    )
+end
+
 function create_bundle_adjustment_problem()
     ProblemDefinition(
         "Sparse Bundle Adjustment",
@@ -51,13 +105,22 @@ function create_bundle_adjustment_problem()
         sz -> begin
             if sz isa String
                 bam_model = BundleAdjustmentModel(sz)
-                x0_bam = copy(bam_model.meta.x0)
+                start_bam_x0 = copy(bam_model.meta.x0)
+                rx_bam = zeros(Float64, bam_model.nls_meta.nequ)
+                vals_bam = zeros(Float64, bam_model.nls_meta.nnzj)
                 m_bam = ModelDefinition(
                     "BundleAdjustmentModels",
                     bam_model,
-                    () -> NLPModels.obj(bam_model, x0_bam),
-                    () -> (NLPModels.obj(bam_model, x0_bam), nothing),
-                    () -> copyto!(bam_model.meta.x0, x0_bam)
+                    () -> begin
+                        NLPModels.residual!(bam_model, bam_model.meta.x0, rx_bam)
+                        0.5 * dot(rx_bam, rx_bam)
+                    end,
+                    () -> begin
+                        NLPModels.residual!(bam_model, bam_model.meta.x0, rx_bam)
+                        NLPModels.jac_coord_residual!(bam_model, bam_model.meta.x0, vals_bam)
+                        (0.5 * dot(rx_bam, rx_bam), vals_bam)
+                    end,
+                    () -> copyto!(bam_model.meta.x0, start_bam_x0)
                 )
                 return [m_bam]
             else
@@ -65,22 +128,46 @@ function create_bundle_adjustment_problem()
                 npts = ncams * 5
                 nlls_prob = generate_synthetic_ba(ncams, npts)
                 start_vars = copy(nlls_prob.variables)
+                f, fdf!, _, H_csc = NLLSModel.optimvars(nlls_prob)
+                g = zeros(Float64, size(H_csc, 1))
+                H = deepcopy(H_csc)
 
                 m_nlls = ModelDefinition(
-                    "NLLSModel (Synthetic Sparse)",
+                    "NLLSModel",
                     nlls_prob,
-                    () -> NLLSModel.cost(nlls_prob),
-                    () -> (NLLSModel.cost(nlls_prob), nothing),
+                    () -> f(nlls_prob.variables),
+                    () -> (fdf!(g, H, nlls_prob.variables), H),
                     () -> copyto!(nlls_prob.variables, start_vars)
                 )
-                return [m_nlls]
+
+                bam_model = make_synthetic_bam(ncams, npts)
+                start_bam_x0 = copy(bam_model.meta.x0)
+                rx_bam = zeros(Float64, bam_model.nls_meta.nequ)
+                vals_bam = zeros(Float64, bam_model.nls_meta.nnzj)
+
+                m_bam = ModelDefinition(
+                    "BundleAdjustmentModels",
+                    bam_model,
+                    () -> begin
+                        NLPModels.residual!(bam_model, bam_model.meta.x0, rx_bam)
+                        0.5 * dot(rx_bam, rx_bam)
+                    end,
+                    () -> begin
+                        NLPModels.residual!(bam_model, bam_model.meta.x0, rx_bam)
+                        NLPModels.jac_coord_residual!(bam_model, bam_model.meta.x0, vals_bam)
+                        (0.5 * dot(rx_bam, rx_bam), vals_bam)
+                    end,
+                    () -> copyto!(bam_model.meta.x0, start_bam_x0)
+                )
+                return [m_nlls, m_bam]
             end
         end,
         [
-            OptimizerDefinition("SecondOrderOptimization (Sparse LM)", m -> optimize_soo(m; method=:lm, linsolver=:ldl)),
-            OptimizerDefinition("SecondOrderOptimization (Sparse Dogleg)", m -> optimize_soo(m; method=:dogleg, linsolver=:ldl)),
-            OptimizerDefinition("JSOSolvers (trunk)", m -> optimize_jsosolvers(m; solver=:trunk)),
-            OptimizerDefinition("Ipopt", m -> optimize_ipopt(m))
+            OptimizerDefinition("SecondOrderOptimization (Sparse LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, linsolver=:ldl, kwargs...)),
+            OptimizerDefinition("SecondOrderOptimization (Sparse Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, linsolver=:ldl, kwargs...)),
+            OptimizerDefinition("JSOSolvers (trunk)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:trunk, kwargs...)),
+            OptimizerDefinition("Ipopt", (m; kwargs...) -> optimize_ipopt(m; kwargs...)),
+            OptimizerDefinition("MadNLP", (m; kwargs...) -> optimize_madnlp(m; kwargs...))
         ],
         "Cameras Ncam"
     )

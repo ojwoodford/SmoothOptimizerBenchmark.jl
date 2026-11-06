@@ -32,6 +32,106 @@ function problem_slug(name::String)
 end
 
 """
+    model_style(m_name::String) -> (Symbol, Symbol, Symbol, Symbol)
+
+Maps a model formulation name to a consistent (color, marker, linsys_style, cost_style) tuple:
+- Specific color for each package:
+  - NLLSModel: :red (matches SecondOrderOptimization)
+  - Standalone: :blue
+  - NLPModels: :forestgreen (matches JSOSolvers)
+  - BundleAdjustmentModels: :teal
+  - Manifolds: :brown (matches Manopt)
+- Different flavours within the same package use distinct markers and linestyles:
+  - Standard / Static: :circle marker, :solid linsys, :dash cost
+  - Specialized: :square marker, :dashdot linsys, :dot cost
+  - ManifoldVar: :diamond marker, :dash linsys, :dot cost
+  - Sparse: :utriangle marker, :solid linsys, :dash cost
+"""
+function model_style(m_name::String)
+    name_lower = lowercase(m_name)
+
+    # 1. Package color (matching optimizer package where related; Red for NLLSModel, Blue for Standalone)
+    color = if occursin("nllsmodel", name_lower)
+        :red
+    elseif occursin("standalone", name_lower) || occursin("leastsquares", name_lower) || occursin("lso", name_lower)
+        :blue
+    elseif occursin("nlpmodels", name_lower)
+        :forestgreen
+    elseif occursin("bundleadjustment", name_lower) || occursin("bam", name_lower)
+        :teal
+    elseif occursin("manifold", name_lower) || occursin("manopt", name_lower)
+        :brown
+    else
+        :black
+    end
+
+    # 2. Flavour point marker and linestyles (linsys_style, cost_style)
+    if occursin("specialized", name_lower)
+        marker = :square
+        linsys_style = :dashdot
+        cost_style = :dot
+    elseif occursin("manifoldvar", name_lower)
+        marker = :diamond
+        linsys_style = :dash
+        cost_style = :dot
+    elseif occursin("sparse", name_lower)
+        marker = :utriangle
+        linsys_style = :solid
+        cost_style = :dash
+    else
+        marker = :circle
+        linsys_style = :solid
+        cost_style = :dash
+    end
+
+    return color, marker, linsys_style, cost_style
+end
+
+"""
+    compute_mean_ranks(item_names::Vector{String}, sizes, get_time::Function) -> Dict{String, Float64}
+
+Computes the mean rank per size for each item in `item_names`.
+At each size `j`, items are ranked from 1 (fastest) to K (slowest).
+Items that failed or have NaN/Inf time receive the worst rank.
+Returns a dictionary mapping item name to its mean rank across all sizes.
+"""
+function compute_mean_ranks(item_names::Vector{String}, sizes, get_time::Function)
+    n_items = length(item_names)
+    n_sizes = length(sizes)
+    if n_items == 0 || n_sizes == 0
+        return Dict{String, Float64}()
+    end
+
+    rank_sums = Dict{String, Float64}(name => 0.0 for name in item_names)
+
+    for (j, sz) in enumerate(sizes)
+        times_at_sz = Float64[]
+        for name in item_names
+            t = get_time(name, j)
+            val = (!isnan(t) && t > 0 && isfinite(t)) ? t : Inf
+            push!(times_at_sz, val)
+        end
+
+        perm = sortperm(times_at_sz)
+        i = 1
+        while i <= n_items
+            j_end = i
+            while j_end < n_items && times_at_sz[perm[j_end + 1]] == times_at_sz[perm[i]]
+                j_end += 1
+            end
+            avg_rank = (i + j_end) / 2.0
+            for k in i:j_end
+                name = item_names[perm[k]]
+                rank_sums[name] += avg_rank
+            end
+            i = j_end + 1
+        end
+    end
+
+    return Dict{String, Float64}(name => rank_sums[name] / n_sizes for name in item_names)
+end
+
+"""
     plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir="docs/src/assets/plots") -> String
 
 Generates a log-log scaling plot of model evaluation time vs problem size.
@@ -54,6 +154,31 @@ function plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir="docs/src
         end
     end
 
+    # Rank models according to their mean rank per size (slowest at top, fastest at bottom)
+    get_model_time(m_name, j) = begin
+        s_res = res.size_results[j]
+        if haskey(s_res.model_results, m_name)
+            mr = s_res.model_results[m_name]
+            if !isnan(mr.linsys_time_ns) && mr.linsys_time_ns > 0
+                return mr.linsys_time_ns
+            end
+        end
+        return Inf
+    end
+    model_mean_ranks = compute_mean_ranks(all_models, sizes, get_model_time)
+    sort!(all_models, by = m -> (model_mean_ranks[m], m), rev = true)
+
+    is_small_sizes = maximum(sizes) <= 32
+    plot_kwargs = if is_small_sizes
+        if minimum(sizes) >= 2 || occursin("so(", lowercase(res.problem)) || occursin("procrustes", lowercase(res.problem))
+            (xticks = ([2, 4, 8, 16, 32], ["2", "4", "8", "16", "32"]), xlims = (1.8, 36.0))
+        else
+            (xticks = ([1, 2, 4, 8, 16, 32], ["1", "2", "4", "8", "16", "32"]), xlims = (0.85, 36.0))
+        end
+    else
+        NamedTuple()
+    end
+
     p = plot(
         title = "$(res.problem): Model Evaluation Scaling",
         xlabel = res.size_metric_name * " (log scale)",
@@ -62,14 +187,12 @@ function plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir="docs/src
         yscale = :log10,
         legend = :topleft,
         grid = true,
-        size = (800, 500),
-        dpi = 150
+        size = (850, 550),
+        dpi = 150;
+        plot_kwargs...
     )
 
-    markers = [:circle, :square, :utriangle, :diamond, :hexagon, :star5]
-    colors = [:blue, :red, :green, :purple, :orange, :teal]
-
-    for (i, m_name) in enumerate(all_models)
+    for m_name in all_models
         cost_times = Float64[]
         linsys_times = Float64[]
         valid_sizes = Float64[]
@@ -88,37 +211,93 @@ function plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir="docs/src
             end
         end
 
-        c_color = colors[mod1(i, length(colors))]
-        m_shape = markers[mod1(i, length(markers))]
+        c_color, m_shape, linsys_style, cost_style = model_style(m_name)
 
         if !isempty(valid_sizes)
-            # Cost evaluation curve (dashed)
-            plot!(
-                p, valid_sizes, cost_times,
-                label = "$(m_name) (Cost)",
-                linestyle = :dash,
-                color = c_color,
-                markershape = m_shape,
-                markerstrokecolor = c_color,
-                markersize = 4,
-                linewidth = 1.5
-            )
-            # Linear system assembly curve (solid)
+            # Linear system assembly curve (solid, slower -> plotted first)
             plot!(
                 p, valid_sizes, linsys_times,
                 label = "$(m_name) (Cost + Linsys)",
-                linestyle = :solid,
+                linestyle = linsys_style,
                 color = c_color,
                 markershape = m_shape,
                 markerstrokecolor = c_color,
                 markersize = 5,
                 linewidth = 2.0
             )
+            # Cost evaluation curve (dashed, faster -> plotted second)
+            plot!(
+                p, valid_sizes, cost_times,
+                label = "$(m_name) (Cost)",
+                linestyle = cost_style,
+                color = c_color,
+                markershape = m_shape,
+                markerstrokecolor = c_color,
+                markersize = 4,
+                linewidth = 1.5
+            )
         end
     end
 
     savefig(p, filepath)
     return filepath
+end
+
+"""
+    optimizer_style(opt_name::String) -> (Symbol, Symbol, Symbol)
+
+Maps an optimizer name to a consistent (color, linestyle, marker) tuple:
+- Single color per package across all benchmark problems:
+  - SecondOrderOptimization: :red
+  - LeastSquaresOptim: :blue
+  - Optim: :darkorange
+  - JSOSolvers: :forestgreen
+  - Ipopt: :purple
+  - MadNLP: :teal
+  - NonlinearSolve: :deeppink
+  - Manopt: :brown
+- Different flavours (e.g. LM, Dogleg, tron, trunk) use distinct linestyles and markers:
+  - LM / trunk / default Newton: :solid with :circle
+  - Dogleg / tron / TrustRegion: :dash with :square
+  - GaussNewton: :dot with :diamond
+"""
+function optimizer_style(opt_name::String)
+    name_lower = lowercase(opt_name)
+
+    # 1. Package color
+    color = if occursin("secondorder", name_lower) || startswith(name_lower, "soo")
+        :red
+    elseif occursin("leastsquares", name_lower) || occursin("lso", name_lower)
+        :blue
+    elseif occursin("nonlinearsolve", name_lower)
+        :deeppink
+    elseif occursin("optim", name_lower) # checked after leastsquaresoptim
+        :darkorange
+    elseif occursin("jsosolvers", name_lower)
+        :forestgreen
+    elseif occursin("ipopt", name_lower)
+        :purple
+    elseif occursin("madnlp", name_lower)
+        :teal
+    elseif occursin("manopt", name_lower)
+        :brown
+    else
+        :black
+    end
+
+    # 2. Flavour linestyle & marker
+    if occursin("dogleg", name_lower) || occursin("trustregion", name_lower) || occursin("trust_region", name_lower) || occursin("tron", name_lower)
+        linestyle = :dash
+        marker = :square
+    elseif occursin("gaussnewton", name_lower) || occursin("gauss_newton", name_lower)
+        linestyle = :dot
+        marker = :diamond
+    else
+        linestyle = :solid
+        marker = :circle
+    end
+
+    return color, linestyle, marker
 end
 
 """
@@ -149,6 +328,30 @@ function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir="docs
         end
     end
 
+    # Rank optimizers according to their mean rank per size (slowest at top, fastest at bottom)
+    get_opt_time(opt_name, j) = begin
+        s_res = res.size_results[j]
+        opt_r = get(s_res.tier2_optimizer_results, opt_name, get(s_res.tier1_optimizer_results, opt_name, nothing))
+        if opt_r !== nothing && opt_r.converged && !isnan(opt_r.time_ns) && opt_r.time_ns > 0
+            return opt_r.time_ns
+        else
+            return Inf
+        end
+    end
+    opt_mean_ranks = compute_mean_ranks(all_optimizers, sizes, get_opt_time)
+    sort!(all_optimizers, by = o -> (opt_mean_ranks[o], o), rev = true)
+
+    is_small_sizes = maximum(sizes) <= 32
+    plot_kwargs = if is_small_sizes
+        if minimum(sizes) >= 2 || occursin("so(", lowercase(res.problem)) || occursin("procrustes", lowercase(res.problem))
+            (xticks = ([2, 4, 8, 16, 32], ["2", "4", "8", "16", "32"]), xlims = (1.8, 36.0))
+        else
+            (xticks = ([1, 2, 4, 8, 16, 32], ["1", "2", "4", "8", "16", "32"]), xlims = (0.85, 36.0))
+        end
+    else
+        NamedTuple()
+    end
+
     p = plot(
         title = "$(res.problem): Optimizer Convergence Scaling",
         xlabel = res.size_metric_name * " (log scale)",
@@ -157,14 +360,12 @@ function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir="docs
         yscale = :log10,
         legend = :topleft,
         grid = true,
-        size = (800, 500),
-        dpi = 150
+        size = (850, 550),
+        dpi = 150;
+        plot_kwargs...
     )
 
-    colors = [:blue, :dodgerblue, :red, :crimson, :green, :darkgreen, :purple, :darkmagenta, :darkorange]
-    markers = [:circle, :diamond, :square, :cross, :utriangle, :dtriangle, :hexagon, :star6, :pentagon]
-
-    for (i, opt_name) in enumerate(all_optimizers)
+    for opt_name in all_optimizers
         run_times = Float64[]
         valid_sizes = Float64[]
 
@@ -179,12 +380,12 @@ function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir="docs
         end
 
         if !isempty(valid_sizes)
-            c_color = colors[mod1(i, length(colors))]
-            m_shape = markers[mod1(i, length(markers))]
+            c_color, l_style, m_shape = optimizer_style(opt_name)
             plot!(
                 p, valid_sizes, run_times,
                 label = opt_name,
                 color = c_color,
+                linestyle = l_style,
                 markershape = m_shape,
                 markerstrokecolor = c_color,
                 markersize = 5,

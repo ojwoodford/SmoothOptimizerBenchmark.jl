@@ -25,6 +25,8 @@ using JSOSolvers
 using NLPModelsJuMP
 using BundleAdjustmentModels
 using CaNNOLeS
+using MadNLP
+using NonlinearSolve
 
 include("types.jl")
 include("adapters.jl")

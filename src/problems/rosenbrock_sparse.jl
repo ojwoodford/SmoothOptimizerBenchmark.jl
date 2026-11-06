@@ -94,11 +94,11 @@ function create_rosenbrock_sparse_problem()
                 () -> copyto!(nlls_prob.variables, x0)
             )
 
-            # Model 2: LeastSquaresOptim Sparse
+            # Model 2: Standalone Sparse
             lsp = build_sparse_lso(n)
             r_buf = zeros(Float64, len)
             m_lso = ModelDefinition(
-                "LeastSquaresOptim (Sparse)",
+                "Standalone (Sparse)",
                 lsp,
                 () -> begin
                     rosenbrock_sparse_res!(r_buf, lsp.x)

@@ -59,14 +59,14 @@ function create_affine_alignment_problem()
                 end
             )
 
-            # Model 2: LeastSquaresOptim Problem
+            # Model 2: Standalone
             x_lso = copy(start_vec)
             r_len = length(D)
             r_buf = zeros(Float64, r_len)
             costfun!(out, x) = (out .= affine_resfun(x, X, Y, D))
             lsp = LeastSquaresProblem(x=x_lso, f! = costfun!, output_length=r_len, autodiff=:forward)
             m_lso = ModelDefinition(
-                "LeastSquaresOptim",
+                "Standalone",
                 lsp,
                 () -> begin
                     costfun!(r_buf, x_lso)

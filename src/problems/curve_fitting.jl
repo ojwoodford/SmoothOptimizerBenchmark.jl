@@ -62,52 +62,33 @@ function create_curve_fitting_problem()
                 () -> (nlls_prob.variables[1] = p0_static)
             )
 
-            # Model 2: LeastSquaresOptim
+            # Model 2: Standalone
             r_buf = zeros(Float64, n_points)
             J_buf = zeros(Float64, n_points, 3)
-            p_lso = copy(p0_vec)
-            f_lso!(r, p) = exp_residuals!(r, p, t_pts, y_data)
-            g_lso!(J, p) = exp_jacobian!(J, p, t_pts)
-            lsp = LeastSquaresProblem(x=p_lso, f! = f_lso!, g! = g_lso!, output_length=n_points)
-            m_lso = ModelDefinition(
-                "LeastSquaresOptim",
+            g_buf = zeros(Float64, 3)
+            H_buf = zeros(Float64, 3, 3)
+            p_standalone = copy(p0_vec)
+            f_res!(r, p) = exp_residuals!(r, p, t_pts, y_data)
+            g_jac!(J, p) = exp_jacobian!(J, p, t_pts)
+            lsp = LeastSquaresProblem(x=p_standalone, f! = f_res!, g! = g_jac!, output_length=n_points)
+            m_standalone = ModelDefinition(
+                "Standalone",
                 lsp,
                 () -> begin
-                    f_lso!(r_buf, p_lso)
+                    f_res!(r_buf, p_standalone)
                     return 0.5 * sum(abs2, r_buf)
                 end,
                 () -> begin
-                    f_lso!(r_buf, p_lso)
-                    g_lso!(J_buf, p_lso)
-                    return (0.5 * sum(abs2, r_buf), (r_buf, J_buf))
+                    f_res!(r_buf, p_standalone)
+                    g_jac!(J_buf, p_standalone)
+                    mul!(g_buf, J_buf', r_buf)
+                    mul!(H_buf, J_buf', J_buf)
+                    return (0.5 * sum(abs2, r_buf), (g_buf, H_buf))
                 end,
-                () -> copyto!(p_lso, p0_vec)
+                () -> copyto!(p_standalone, p0_vec)
             )
 
-            # Model 3: SecondOrderOptimization Native
-            g_buf = zeros(Float64, 3)
-            H_buf = zeros(Float64, 3, 3)
-            p_soo = copy(p0_vec)
-            f_soo(p) = begin
-                f_lso!(r_buf, p)
-                return 0.5 * sum(abs2, r_buf)
-            end
-            fdf_soo!(g, H, p) = begin
-                f_lso!(r_buf, p)
-                g_lso!(J_buf, p)
-                mul!(g, J_buf', r_buf)
-                mul!(H, J_buf', J_buf)
-                return 0.5 * sum(abs2, r_buf)
-            end
-            m_soo = ModelDefinition(
-                "SecondOrderOpt",
-                lsp, # Using lsp allows all adapters to run on m_soo if needed
-                () -> f_soo(p_soo),
-                () -> (fdf_soo!(g_buf, H_buf, p_soo), (g_buf, H_buf)),
-                () -> copyto!(p_soo, p0_vec)
-            )
-
-            return [m_nlls, m_lso, m_soo]
+            return [m_nlls, m_standalone]
         end,
         get_tier1_optimizers(),
         "Data Points m"

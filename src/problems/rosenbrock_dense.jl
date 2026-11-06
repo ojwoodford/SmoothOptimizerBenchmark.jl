@@ -86,12 +86,12 @@ function create_rosenbrock_dense_problem()
                 () -> copyto!(nlls_prob.variables, x0)
             )
 
-            # Model 2: LeastSquaresOptim
+            # Model 2: Standalone
             r_buf = zeros(Float64, m_len)
             x_lso = copy(x0)
             lsp = LeastSquaresProblem(x=x_lso, f! = rosenbrock_dense_res!, output_length=m_len, autodiff=:forward)
             m_lso = ModelDefinition(
-                "LeastSquaresOptim",
+                "Standalone",
                 lsp,
                 () -> begin
                     rosenbrock_dense_res!(r_buf, x_lso)

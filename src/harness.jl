@@ -65,45 +65,79 @@ end
 Finds a universal Common Model (e.g. `LeastSquaresOptim` / `LeastSquaresProblem` / `NLSModel`).
 """
 function find_common_model(models::Vector{<:ModelDefinition})
-    idx = findfirst(m -> occursin("leastsquares", lowercase(m.name)) || m.model isa LeastSquaresProblem, models)
+    idx = findfirst(m -> occursin("standalone", lowercase(m.name)) || occursin("leastsquares", lowercase(m.name)) || m.model isa LeastSquaresProblem, models)
     return idx === nothing ? nothing : models[idx]
 end
 
 """
-    run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, target_model::ModelDefinition; samples=3, evals=1)
+    run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, target_model::ModelDefinition;
+                             max_samples::Int=50, target_total_time_sec::Float64=1.0, samples=nothing)
 
 Runs all compatible optimizers on the target model, returning performance statistics.
+Times the first (non-warmup) run with no run time limits, then calculates the number of further
+samples needed for up to 1s total computation (or up to `max_samples`), collecting at least 1 sample.
 """
-function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, target_model::ModelDefinition; samples=3, evals=1)
+function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, target_model::ModelDefinition;
+                                 max_samples::Int=50, target_total_time_sec::Float64=1.0, samples=nothing)
     results = Dict{String, OptimizerResult}()
+    effective_max = samples !== nothing ? max(1, Int(samples)) : max_samples
+
     for opt in optimizers
         target_model.reset!()
-        # Warmup and initial run to capture iterations and costs
+
+        # 1. First (non-warmup) run with NO run time limits
         init_res = nothing
+        timed_first = nothing
+        t1_start = time_ns()
         try
-            init_res = opt.optimize(target_model)
+            timed_first = @timed opt.optimize(target_model; time_limit=nothing)
+            init_res = timed_first.value
         catch err
             results[opt.name] = OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
             continue
         end
+        t1_elapsed_ns = Float64(time_ns() - t1_start)
+        t1_sec = t1_elapsed_ns / 1e9
 
         if isnan(init_res.time_ns) || !init_res.converged
-            results[opt.name] = init_res
+            results[opt.name] = OptimizerResult(
+                isnan(init_res.time_ns) ? NaN : t1_elapsed_ns,
+                Base.gc_alloc_count(timed_first.gcstats),
+                timed_first.bytes,
+                init_res.iterations,
+                init_res.start_cost,
+                init_res.final_cost,
+                init_res.converged
+            )
             continue
         end
 
-        times = Float64[init_res.time_ns]
-        allocs = init_res.allocs
-        bytes = init_res.bytes
-        for _ in 1:(samples - 1)
+        # 2. Check runtime to estimate number of further samples needed
+        # based on up to 50 samples, or number of samples required for 1s total computation (min 1 sample)
+        samples_for_1s = t1_sec > 0.0 ? ceil(Int, target_total_time_sec / t1_sec) : effective_max
+        total_samples = clamp(samples_for_1s, 1, effective_max)
+        further_samples = total_samples - 1
+
+        times = Float64[t1_elapsed_ns]
+        allocs = Base.gc_alloc_count(timed_first.gcstats)
+        bytes = timed_first.bytes
+        total_accumulated_ns = t1_elapsed_ns
+
+        # 3. Collect further samples
+        for _ in 1:further_samples
+            if total_accumulated_ns >= target_total_time_sec * 1e9
+                break
+            end
             target_model.reset!()
             t_start = time_ns()
-            timed = @timed opt.optimize(target_model)
-            t_elapsed = time_ns() - t_start
-            push!(times, Float64(t_elapsed))
-            allocs = timed.gcstats.allocd
+            timed = @timed opt.optimize(target_model; time_limit=nothing)
+            dt = Float64(time_ns() - t_start)
+            total_accumulated_ns += dt
+            push!(times, dt)
+            allocs = Base.gc_alloc_count(timed.gcstats)
             bytes = timed.bytes
         end
+
         results[opt.name] = OptimizerResult(
             median(times),
             allocs,
@@ -118,7 +152,72 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
 end
 
 """
-    run_problem_benchmark(prob::ProblemDefinition, size; samples=5, verbose=true) -> SingleSizeBenchmarkResult
+    warmup_problem_optimizers!(prob::ProblemDefinition, sizes; verbose=true)
+
+For each optimizer, performs a warmup run on both the smallest and largest problem size
+with run time limited to 1s to trigger JIT compilation for both small and large code paths.
+"""
+function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; verbose=true)
+    isempty(sizes) && return
+    warmup_sizes = unique([first(sizes), last(sizes)])
+    if verbose
+        println("\n>>> [Warmup] Performing 1s-limited warmup on sizes $(warmup_sizes) to precompile code paths...")
+    end
+
+    for sz in warmup_sizes
+        models = prob.generate_models(sz)
+        isempty(models) && continue
+
+        # Warmup models
+        for m in models
+            try
+                m.reset!()
+                m.eval_cost()
+                m.reset!()
+                m.eval_cost_and_linear_system()
+            catch
+            finally
+                m.reset!()
+            end
+        end
+
+        # Pick best model and common model
+        bench_res = run_model_benchmarks(models; samples=1)
+        best_m = select_best_model(models, bench_res)
+        common_m = find_common_model(models)
+
+        # Tier 1 warmup (1s limit)
+        for opt in prob.compatible_optimizers
+            target = (best_m.model isa NLLSModel.Model || common_m === nothing) ? best_m : common_m
+            try
+                target.reset!()
+                opt.optimize(target; time_limit=1.0)
+            catch
+            finally
+                target.reset!()
+            end
+        end
+
+        # Tier 2 warmup (1s limit)
+        if common_m !== nothing && prob.category != :manifold
+            for opt in get_tier2_optimizers()
+                try
+                    common_m.reset!()
+                    opt.optimize(common_m; time_limit=1.0)
+                catch
+                finally
+                    common_m.reset!()
+                end
+            end
+        end
+    end
+    if verbose
+        println(">>> [Warmup] Completed 1s warmup on sizes $(warmup_sizes).\n")
+    end
+end
+
+"""
+    run_problem_benchmark(prob::ProblemDefinition, size; samples=nothing, verbose=true) -> SingleSizeBenchmarkResult
 
 Executes the two-phase benchmark for a single problem and size:
 1. Model evaluation comparison (cost vs linear system)
@@ -126,15 +225,16 @@ Executes the two-phase benchmark for a single problem and size:
 3. Tier 1 optimizer comparison on the best model
 4. Tier 2 optimizer comparison on the universal common model (when available)
 """
-function run_problem_benchmark(prob::ProblemDefinition, size; samples=5, verbose=true)
+function run_problem_benchmark(prob::ProblemDefinition, size; samples=nothing, verbose=true)
     if verbose
         println("\n" * "="^85)
         println("PROBLEM: $(prob.name) [Category: $(prob.category), $(prob.size_metric_name): $size]")
         println("="^85)
     end
 
+    model_samples = samples !== nothing ? max(1, Int(samples)) : 5
     models = prob.generate_models(size)
-    model_results = run_model_benchmarks(models; samples=samples)
+    model_results = run_model_benchmarks(models; samples=model_samples)
     best_model = select_best_model(models, model_results)
     common_model = find_common_model(models)
 
@@ -152,7 +252,7 @@ function run_problem_benchmark(prob::ProblemDefinition, size; samples=5, verbose
     end
 
     # Phase 2A: Tier 1 Optimizers on Best Model
-    tier1_results = run_optimizer_benchmarks(prob.compatible_optimizers, best_model; samples=max(2, samples ÷ 2))
+    tier1_results = run_optimizer_benchmarks(prob.compatible_optimizers, best_model; samples=samples)
 
     if verbose
         println("\n--- [Phase 2A: Compatible Optimizers on Best Model: $(best_model.name)] ---")
@@ -174,7 +274,7 @@ function run_problem_benchmark(prob::ProblemDefinition, size; samples=5, verbose
     tier2_results = Dict{String, OptimizerResult}()
     if common_model !== nothing && prob.category != :manifold
         t2_opts = get_tier2_optimizers()
-        tier2_results = run_optimizer_benchmarks(t2_opts, common_model; samples=max(2, samples ÷ 2))
+        tier2_results = run_optimizer_benchmarks(t2_opts, common_model; samples=samples)
 
         if verbose
             println("\n--- [Phase 2B: Universal Comparison on Common Model: $(common_model.name)] ---")
@@ -210,14 +310,19 @@ function run_problem_benchmark(prob::ProblemDefinition, size; samples=5, verbose
 end
 
 """
-    run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes, samples=3, verbose=true) -> ProblemScalingBenchmarkResult
+    run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes, samples=nothing, verbose=true) -> ProblemScalingBenchmarkResult
 
 Runs the benchmark across all specified problem sizes (collecting at least 10 problem sizes for scaling).
+Performs 1s warmup on both smallest and largest problem sizes before collecting benchmark data.
 """
-function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes, samples=3, verbose=true)
+function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes, samples=nothing, verbose=true)
     if verbose
         println("\n>>> STARTING SCALING BENCHMARK FOR $(prob.name) [$(length(sizes)) SIZES] <<<")
     end
+
+    # Warmup both smallest and largest sizes for each optimizer (1s time limit)
+    warmup_problem_optimizers!(prob, sizes; verbose=verbose)
+
     size_results = SingleSizeBenchmarkResult[]
     for sz in sizes
         res = run_problem_benchmark(prob, sz; samples=samples, verbose=verbose)
@@ -233,11 +338,11 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
 end
 
 """
-    run_all_scaling_benchmarks(; problems=get_all_problems(), quick=false, samples=quick ? 2 : 4, verbose=true) -> Vector{ProblemScalingBenchmarkResult}
+    run_all_scaling_benchmarks(; problems=get_all_problems(), quick=false, samples=nothing, verbose=true) -> Vector{ProblemScalingBenchmarkResult}
 
 Executes scaling benchmarks across all registered problems.
 """
-function run_all_scaling_benchmarks(; problems=get_all_problems(), quick=false, samples=quick ? 2 : 4, verbose=true)
+function run_all_scaling_benchmarks(; problems=get_all_problems(), quick=false, samples=nothing, verbose=true)
     scaling_results = ProblemScalingBenchmarkResult[]
     for prob in problems
         sizes = quick ? prob.default_sizes[1:min(3, length(prob.default_sizes))] : prob.default_sizes

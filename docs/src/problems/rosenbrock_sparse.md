@@ -2,7 +2,7 @@
 
 - **Category**: `large_sparse`
 - **Scaling Metric**: Variables n
-- **Problem Sizes Evaluated**: 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000 (10 sizes)
+- **Problem Sizes Evaluated**: 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576 (11 sizes)
 
 ---
 
@@ -16,36 +16,34 @@ The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed lin
 
 | Variables n | Model | Cost Time | Cost Allocs | Linsys Time | Linsys Allocs | Linsys Memory |
 |:---|:---|:---|:---|:---|:---|:---|
-| 2 | NLPModels (MathOptNLSModel) | 2.69 μs | 5 | 5.65 μs | 7 | 160 B |
-| 2 | LeastSquaresOptim (Sparse) ★ | 21.0 ns | 0 | 21.0 ns | 0 | 0 B |
-| 2 | NLLSModel | 21.0 ns | 0 | 41.0 ns | 0 | 0 B |
-| 5 | NLPModels (MathOptNLSModel) | 3.29 μs | 5 | 6.52 μs | 7 | 160 B |
-| 5 | LeastSquaresOptim (Sparse) ★ | 21.0 ns | 0 | 20.5 ns | 0 | 0 B |
-| 5 | NLLSModel | 42.0 ns | 0 | 41.0 ns | 0 | 0 B |
-| 10 | NLPModels (MathOptNLSModel) | 2.52 μs | 5 | 6.56 μs | 7 | 160 B |
-| 10 | LeastSquaresOptim (Sparse) ★ | 42.0 ns | 0 | 42.0 ns | 0 | 0 B |
-| 10 | NLLSModel | 21.0 ns | 0 | 42.0 ns | 0 | 0 B |
-| 20 | NLPModels (MathOptNLSModel) | 2.40 μs | 5 | 9.15 μs | 7 | 160 B |
-| 20 | LeastSquaresOptim (Sparse) ★ | 21.0 ns | 0 | 42.0 ns | 0 | 0 B |
-| 20 | NLLSModel | 42.0 ns | 0 | 62.5 ns | 0 | 0 B |
-| 50 | NLPModels (MathOptNLSModel) | 2.77 μs | 5 | 9.42 μs | 7 | 160 B |
-| 50 | LeastSquaresOptim (Sparse) ★ | 62.5 ns | 0 | 83.0 ns | 0 | 0 B |
-| 50 | NLLSModel | 145.5 ns | 0 | 125.0 ns | 0 | 0 B |
-| 100 | NLPModels (MathOptNLSModel) | 4.46 μs | 5 | 13.27 μs | 7 | 160 B |
-| 100 | LeastSquaresOptim (Sparse) ★ | 104.0 ns | 0 | 125.0 ns | 0 | 0 B |
-| 100 | NLLSModel | 229.0 ns | 0 | 250.0 ns | 0 | 0 B |
-| 200 | NLPModels (MathOptNLSModel) | 5.77 μs | 5 | 20.58 μs | 7 | 160 B |
-| 200 | LeastSquaresOptim (Sparse) ★ | 146.0 ns | 0 | 229.0 ns | 0 | 0 B |
-| 200 | NLLSModel | 542.0 ns | 0 | 521.0 ns | 0 | 0 B |
-| 500 | NLPModels (MathOptNLSModel) | 4.88 μs | 5 | 49.08 μs | 7 | 160 B |
-| 500 | LeastSquaresOptim (Sparse) ★ | 333.5 ns | 0 | 500.0 ns | 0 | 0 B |
-| 500 | NLLSModel | 1.31 μs | 0 | 1.29 μs | 0 | 0 B |
-| 1000 | NLPModels (MathOptNLSModel) | 6.79 μs | 5 | 89.88 μs | 7 | 160 B |
-| 1000 | LeastSquaresOptim (Sparse) ★ | 667.0 ns | 0 | 979.5 ns | 0 | 0 B |
-| 1000 | NLLSModel | 2.65 μs | 0 | 2.62 μs | 0 | 0 B |
-| 2000 | NLPModels (MathOptNLSModel) | 10.58 μs | 5 | 174.27 μs | 7 | 160 B |
-| 2000 | LeastSquaresOptim (Sparse) ★ | 1.25 μs | 0 | 1.94 μs | 0 | 0 B |
-| 2000 | NLLSModel | 10.58 μs | 0 | 5.25 μs | 0 | 0 B |
+| 1024 | NLPModels (MathOptNLSModel) | 4.96 μs | 5 | 34.21 μs | 7 | 160 B |
+| 1024 | NLLSModel | 2.71 μs | 0 | 2.71 μs | 0 | 0 B |
+| 1024 | Standalone (Sparse) ★ | 667.0 ns | 0 | 1.04 μs | 0 | 0 B |
+| 2048 | NLPModels (MathOptNLSModel) | 8.00 μs | 5 | 71.04 μs | 7 | 160 B |
+| 2048 | NLLSModel | 5.00 μs | 0 | 5.00 μs | 0 | 0 B |
+| 2048 | Standalone (Sparse) ★ | 1.21 μs | 0 | 1.92 μs | 0 | 0 B |
+| 4096 | NLPModels (MathOptNLSModel) | 16.46 μs | 5 | 163.04 μs | 7 | 160 B |
+| 4096 | NLLSModel | 10.58 μs | 0 | 10.62 μs | 0 | 0 B |
+| 4096 | Standalone (Sparse) ★ | 2.50 μs | 0 | 4.04 μs | 0 | 0 B |
+| 8192 | NLPModels (MathOptNLSModel) | 30.83 μs | 5 | 636.00 μs | 7 | 160 B |
+| 8192 | NLLSModel | 19.88 μs | 0 | 19.83 μs | 0 | 0 B |
+| 8192 | Standalone (Sparse) ★ | 4.75 μs | 0 | 7.88 μs | 0 | 0 B |
+| 16384 | NLPModels (MathOptNLSModel) | 61.29 μs | 5 | 2.03 ms | 7 | 160 B |
+| 16384 | NLLSModel | 39.67 μs | 0 | 39.67 μs | 0 | 0 B |
+| 16384 | Standalone (Sparse) ★ | 9.25 μs | 0 | 15.58 μs | 0 | 0 B |
+| 32768 | NLPModels (MathOptNLSModel) | 122.38 μs | 5 | 3.56 ms | 7 | 160 B |
+| 32768 | NLLSModel | 79.29 μs | 0 | 79.29 μs | 0 | 0 B |
+| 32768 | Standalone (Sparse) ★ | 18.42 μs | 0 | 31.04 μs | 0 | 0 B |
+| 65536 | NLLSModel | 162.62 μs | 0 | 158.79 μs | 0 | 0 B |
+| 65536 | Standalone (Sparse) ★ | 36.71 μs | 0 | 59.38 μs | 0 | 0 B |
+| 131072 | NLLSModel | 317.79 μs | 0 | 317.88 μs | 0 | 0 B |
+| 131072 | Standalone (Sparse) ★ | 73.62 μs | 0 | 123.42 μs | 0 | 0 B |
+| 262144 | NLLSModel | 653.62 μs | 0 | 655.17 μs | 0 | 0 B |
+| 262144 | Standalone (Sparse) ★ | 147.75 μs | 0 | 248.50 μs | 0 | 0 B |
+| 524288 | NLLSModel | 1.32 ms | 0 | 1.32 ms | 0 | 0 B |
+| 524288 | Standalone (Sparse) ★ | 311.33 μs | 0 | 512.08 μs | 0 | 0 B |
+| 1048576 | NLLSModel | 2.56 ms | 0 | 2.58 ms | 0 | 0 B |
+| 1048576 | Standalone (Sparse) ★ | 628.67 μs | 0 | 1.10 ms | 0 | 0 B |
 
 ---
 
@@ -59,101 +57,143 @@ The plot below shows the log-log scaling of **Optimizer Runtime to Convergence**
 
 | Variables n | Optimizer | Runtime | Allocs | Memory | Iterations | Final Cost | Converged |
 |:---|:---|:---|:---|:---|:---|:---|:---|
-| 2 | LeastSquaresOptim (LM) | 56.96 μs | 9168 | 9.0 KiB | 25 | 6.5890e-23 | ✓ Yes |
-| 2 | SecondOrderOptimization (Dogleg) | 21.44 μs | 16464 | 16.1 KiB | 13 | 0.0000e+00 | ✓ Yes |
-| 2 | LeastSquaresOptim (Dogleg) | 63.35 μs | 7984 | 7.8 KiB | 24 | 0.0000e+00 | ✓ Yes |
-| 2 | Ipopt | 1.87 ms | 47248 | 46.1 KiB | 12 | 0.0000e+00 | ✓ Yes |
-| 2 | Optim (NewtonTrustRegion) | 93.29 μs | 60880 | 59.5 KiB | 16 | 8.7550e-21 | ✓ Yes |
-| 2 | JSOSolvers (tron) | 59.96 μs | 11168 | 10.9 KiB | 17 | 5.4183e-21 | ✓ Yes |
-| 2 | Optim (Newton) | 85.50 μs | 56560 | 55.2 KiB | 35 | 0.0000e+00 | ✓ Yes |
-| 2 | SecondOrderOptimization (LM) | 24.38 μs | 18384 | 18.0 KiB | 13 | 2.5160e-25 | ✓ Yes |
-| 2 | JSOSolvers (trunk) | 26.23 μs | 7616 | 7.4 KiB | 16 | 7.3366e-25 | ✓ Yes |
-| 5 | LeastSquaresOptim (LM) | 35.79 μs | 12784 | 12.5 KiB | 21 | 1.8825e-23 | ✓ Yes |
-| 5 | SecondOrderOptimization (Dogleg) | 25.02 μs | 24032 | 23.5 KiB | 13 | 0.0000e+00 | ✓ Yes |
-| 5 | LeastSquaresOptim (Dogleg) | 22.69 μs | 11792 | 11.5 KiB | 25 | 0.0000e+00 | ✓ Yes |
-| 5 | Ipopt | 1.66 ms | 56240 | 54.9 KiB | 12 | 0.0000e+00 | ✓ Yes |
-| 5 | Optim (NewtonTrustRegion) | 171.38 μs | 179328 | 175.1 KiB | 25 | 0.0000e+00 | ✓ Yes |
-| 5 | JSOSolvers (tron) | 47.81 μs | 12768 | 12.5 KiB | 20 | 1.8612e-15 | ✓ Yes |
-| 5 | Optim (Newton) | 94.42 μs | 104208 | 101.8 KiB | 47 | 0.0000e+00 | ✓ Yes |
-| 5 | SecondOrderOptimization (LM) | 19.71 μs | 27632 | 27.0 KiB | 15 | 0.0000e+00 | ✓ Yes |
-| 5 | JSOSolvers (trunk) | 24.58 μs | 9040 | 8.8 KiB | 16 | 4.1159e-14 | ✓ Yes |
-| 10 | LeastSquaresOptim (LM) | 108.48 μs | 35216 | 34.4 KiB | 44 | 3.2607e-18 | ✓ Yes |
-| 10 | SecondOrderOptimization (Dogleg) | 48.58 μs | 65840 | 64.3 KiB | 25 | 0.0000e+00 | ✓ Yes |
-| 10 | LeastSquaresOptim (Dogleg) | 52.69 μs | 28016 | 27.4 KiB | 27 | 0.0000e+00 | ✓ Yes |
-| 10 | Ipopt | 2.29 ms | 114160 | 111.5 KiB | 19 | 3.7398e-24 | ✓ Yes |
-| 10 | Optim (NewtonTrustRegion) | 702.98 μs | 883696 | 863.0 KiB | 48 | 3.2621e-25 | ✓ Yes |
-| 10 | JSOSolvers (tron) | 99.21 μs | 16176 | 15.8 KiB | 34 | 1.2855e-18 | ✓ Yes |
-| 10 | Optim (Newton) | 148.92 μs | 210432 | 205.5 KiB | 54 | 2.0443e-29 | ✓ Yes |
-| 10 | SecondOrderOptimization (LM) | 32.77 μs | 56032 | 54.7 KiB | 19 | 1.2696e-30 | ✓ Yes |
-| 10 | JSOSolvers (trunk) | 55.46 μs | 11920 | 11.6 KiB | 23 | 4.5569e-17 | ✓ Yes |
-| 20 | LeastSquaresOptim (LM) | 315.25 μs | 54944 | 53.7 KiB | 61 | 1.6528e-17 | ✓ Yes |
-| 20 | SecondOrderOptimization (Dogleg) | 206.69 μs | 410176 | 400.6 KiB | 100 | 7.7164e+00 | ✓ Yes |
-| 20 | LeastSquaresOptim (Dogleg) | 250.98 μs | 50256 | 49.1 KiB | 45 | 0.0000e+00 | ✓ Yes |
-| 20 | Ipopt | 3.36 ms | 254704 | 248.7 KiB | 30 | 1.2149e-27 | ✓ Yes |
-| 20 | Optim (NewtonTrustRegion) | 3.05 ms | 4322496 | 4.1 MiB | 76 | 1.3385e-23 | ✓ Yes |
-| 20 | JSOSolvers (tron) | 191.73 μs | 22368 | 21.8 KiB | 46 | 1.2753e-12 | ✓ Yes |
-| 20 | Optim (Newton) | 385.81 μs | 711568 | 694.9 KiB | 85 | 0.0000e+00 | ✓ Yes |
-| 20 | SecondOrderOptimization (LM) | 63.08 μs | 130480 | 127.4 KiB | 29 | 1.4370e-28 | ✓ Yes |
-| 20 | JSOSolvers (trunk) | 135.04 μs | 17232 | 16.8 KiB | 35 | 5.9024e-17 | ✓ Yes |
-| 50 | LeastSquaresOptim (LM) | 1.50 ms | 109872 | 107.3 KiB | 94 | 1.1360e-17 | ✓ Yes |
-| 50 | SecondOrderOptimization (Dogleg) | 416.04 μs | 1038688 | 1014.3 KiB | 100 | 2.2351e+01 | ✓ Yes |
-| 50 | LeastSquaresOptim (Dogleg) | 1.32 ms | 112720 | 110.1 KiB | 82 | 5.6420e-26 | ✓ Yes |
-| 50 | Ipopt | 8.81 ms | 1181920 | 1.1 MiB | 69 | 8.9240e-29 | ✓ Yes |
-| 50 | Optim (NewtonTrustRegion) | 23.75 ms | 28086784 | 26.8 MiB | 100 | 1.0065e+01 | ✗ No |
-| 50 | JSOSolvers (tron) | 641.52 μs | 42384 | 41.4 KiB | 98 | 1.2412e-12 | ✓ Yes |
-| 50 | Optim (Newton) | 1.56 ms | 3186448 | 3.0 MiB | 100 | 8.4206e+00 | ✗ No |
-| 50 | SecondOrderOptimization (LM) | 268.31 μs | 625968 | 611.3 KiB | 61 | 6.2246e-31 | ✓ Yes |
-| 50 | JSOSolvers (trunk) | 587.98 μs | 34432 | 33.6 KiB | 68 | 3.9804e-18 | ✓ Yes |
-| 100 | LeastSquaresOptim (LM) | 3.16 ms | 128096 | 125.1 KiB | 100 | 1.5493e+01 | ✗ No |
-| 100 | SecondOrderOptimization (Dogleg) | 671.00 μs | 2031216 | 1.9 MiB | 100 | 4.7141e+01 | ✓ Yes |
-| 100 | LeastSquaresOptim (Dogleg) | 2.91 ms | 139904 | 136.6 KiB | 100 | 1.6889e+01 | ✗ No |
-| 100 | Ipopt | 17.27 ms | 3104016 | 3.0 MiB | 100 | 1.5343e+01 | ✗ No |
-| 100 | Optim (NewtonTrustRegion) | 94.35 ms | 105912032 | 101.0 MiB | 100 | 3.4825e+01 | ✗ No |
-| 100 | JSOSolvers (tron) | 1.23 ms | 25488 | 24.9 KiB | 101 | 2.1885e+01 | ✗ No |
-| 100 | Optim (Newton) | 4.14 ms | 10563552 | 10.1 MiB | 100 | 3.3166e+01 | ✗ No |
-| 100 | SecondOrderOptimization (LM) | 763.69 μs | 1943744 | 1.9 MiB | 100 | 4.4403e+00 | ✓ Yes |
-| 100 | JSOSolvers (trunk) | 1.77 ms | 12592 | 12.3 KiB | 101 | 1.1190e+01 | ✗ No |
-| 200 | LeastSquaresOptim (LM) | 5.94 ms | 144368 | 141.0 KiB | 100 | 6.3497e+01 | ✗ No |
-| 200 | SecondOrderOptimization (Dogleg) | 1.57 ms | 3997808 | 3.8 MiB | 100 | 9.6649e+01 | ✓ Yes |
-| 200 | LeastSquaresOptim (Dogleg) | 5.14 ms | 148864 | 145.4 KiB | 100 | 6.6764e+01 | ✗ No |
-| 200 | Ipopt | 25.84 ms | 5981296 | 5.7 MiB | 100 | 6.4838e+01 | ✗ No |
-| 200 | Optim (NewtonTrustRegion) | 594.83 ms | 408176288 | 389.3 MiB | 100 | 8.3895e+01 | ✗ No |
-| 200 | JSOSolvers (tron) | 2.05 ms | 42432 | 41.4 KiB | 101 | 7.0573e+01 | ✗ No |
-| 200 | Optim (Newton) | 18.51 ms | 38227072 | 36.5 MiB | 100 | 8.2431e+01 | ✗ No |
-| 200 | SecondOrderOptimization (LM) | 1.47 ms | 3850080 | 3.7 MiB | 100 | 5.5173e+01 | ✓ Yes |
-| 200 | JSOSolvers (trunk) | 3.19 ms | 21424 | 20.9 KiB | 101 | 6.0010e+01 | ✗ No |
-| 500 | LeastSquaresOptim (LM) | 12.05 ms | 180448 | 176.2 KiB | 100 | 2.1387e+02 | ✗ No |
-| 500 | SecondOrderOptimization (Dogleg) | 3.38 ms | 9530064 | 9.1 MiB | 100 | 2.4501e+02 | ✓ Yes |
-| 500 | LeastSquaresOptim (Dogleg) | 12.14 ms | 195536 | 191.0 KiB | 100 | 2.1209e+02 | ✗ No |
-| 500 | Ipopt | 37.36 ms | 13891376 | 13.2 MiB | 100 | 2.1332e+02 | ✗ No |
-| 500 | Optim (NewtonTrustRegion) | 2.02 s | 1509612128 | 1439.7 MiB | 62 | 2.3820e+02 | ✗ No |
-| 500 | JSOSolvers (tron) | 5.37 ms | 99872 | 97.5 KiB | 101 | 2.1021e+02 | ✗ No |
-| 500 | Optim (Newton) | 156.02 ms | 220590592 | 210.4 MiB | 100 | 2.3090e+02 | ✗ No |
-| 500 | SecondOrderOptimization (LM) | 3.88 ms | 9146752 | 8.7 MiB | 100 | 2.0355e+02 | ✓ Yes |
-| 500 | JSOSolvers (trunk) | 7.57 ms | 51376 | 50.2 KiB | 101 | 2.0917e+02 | ✗ No |
-| 1000 | LeastSquaresOptim (LM) | 28.78 ms | 252832 | 246.9 KiB | 100 | 4.5948e+02 | ✗ No |
-| 1000 | SecondOrderOptimization (Dogleg) | 7.75 ms | 18985296 | 18.1 MiB | 100 | 4.9212e+02 | ✓ Yes |
-| 1000 | LeastSquaresOptim (Dogleg) | 33.63 ms | 261520 | 255.4 KiB | 100 | 4.6035e+02 | ✗ No |
-| 1000 | Ipopt | 67.78 ms | 27483056 | 26.2 MiB | 100 | 4.6080e+02 | ✗ No |
-| 1000 | Optim (NewtonTrustRegion) | 2.09 s | 1203679264 | 1147.9 MiB | 16 | 4.9282e+02 | ✗ No |
-| 1000 | JSOSolvers (tron) | 11.26 ms | 194144 | 189.6 KiB | 101 | 4.6834e+02 | ✗ No |
-| 1000 | Optim (Newton) | 675.05 ms | 859098400 | 819.3 MiB | 100 | 4.7836e+02 | ✗ No |
-| 1000 | SecondOrderOptimization (LM) | 18.99 ms | 18234496 | 17.4 MiB | 100 | 4.5031e+02 | ✓ Yes |
-| 1000 | JSOSolvers (trunk) | 20.19 ms | 100592 | 98.2 KiB | 101 | 4.5664e+02 | ✗ No |
-| 2000 | LeastSquaresOptim (LM) | 53.57 ms | 387376 | 378.3 KiB | 100 | 9.5488e+02 | ✗ No |
-| 2000 | SecondOrderOptimization (Dogleg) | 14.68 ms | 37889472 | 36.1 MiB | 100 | 9.8690e+02 | ✓ Yes |
-| 2000 | LeastSquaresOptim (Dogleg) | 53.42 ms | 410080 | 400.5 KiB | 100 | 9.5496e+02 | ✗ No |
-| 2000 | Ipopt | 187.17 ms | 54652016 | 52.1 MiB | 100 | 9.5575e+02 | ✗ No |
-| 2000 | Optim (NewtonTrustRegion) | 2.44 s | 1504583376 | 1434.9 MiB | 4 | 8.7791e+04 | ✗ No |
-| 2000 | JSOSolvers (tron) | 24.13 ms | 382688 | 373.7 KiB | 101 | 9.5030e+02 | ✗ No |
-| 2000 | Optim (Newton) | 2.02 s | 2299795952 | 2193.3 MiB | 66 | 9.8019e+02 | ✗ No |
-| 2000 | SecondOrderOptimization (LM) | 15.21 ms | 36395088 | 34.7 MiB | 100 | 9.4500e+02 | ✓ Yes |
-| 2000 | JSOSolvers (trunk) | 35.66 ms | 198896 | 194.2 KiB | 101 | 9.5159e+02 | ✗ No |
+| 1024 | SecondOrderOptimization (Dogleg) | 6.17 ms | 19298640 | 18.4 MiB | 100 | 5.0401e+02 | ✓ Yes |
+| 1024 | LeastSquaresOptim (Dogleg) | 54.29 ms | 2208288 | 2.1 MiB | 100 | 4.7209e+02 | ✗ No |
+| 1024 | NonlinearSolve (TrustRegion) | 132.47 ms | 153823840 | 146.7 MiB | 100 | 4.8210e+02 | ✗ No |
+| 1024 | Optim (NewtonTrustRegion) | FAILED | 243168 | 237.5 KiB | 0 | NaN | ✗ No |
+| 1024 | MadNLP | 50.76 ms | 28937872 | 27.6 MiB | 100 | 4.6278e+02 | ✗ No |
+| 1024 | NonlinearSolve (LM) | 2.07 s | 432007824 | 412.0 MiB | 100 | 4.9602e+02 | ✗ No |
+| 1024 | Optim (Newton) | 42.51 ms | 63622208 | 60.7 MiB | 100 | 4.9299e+02 | ✗ No |
+| 1024 | LeastSquaresOptim (LM) | 27.04 ms | 504448 | 492.6 KiB | 100 | 4.7139e+02 | ✗ No |
+| 1024 | Ipopt | 56.59 ms | 28647136 | 27.3 MiB | 100 | 4.7268e+02 | ✗ No |
+| 1024 | JSOSolvers (tron) | 12.07 ms | 847632 | 827.8 KiB | 101 | 4.7802e+02 | ✗ No |
+| 1024 | JSOSolvers (trunk) | 18.07 ms | 754176 | 736.5 KiB | 101 | 4.6852e+02 | ✗ No |
+| 1024 | SecondOrderOptimization (LM) | 6.73 ms | 18551936 | 17.7 MiB | 100 | 4.6212e+02 | ✓ Yes |
+| 2048 | SecondOrderOptimization (Dogleg) | 12.19 ms | 38521008 | 36.7 MiB | 100 | 1.0106e+03 | ✓ Yes |
+| 2048 | LeastSquaresOptim (Dogleg) | 49.79 ms | 612192 | 597.8 KiB | 100 | 9.7840e+02 | ✗ No |
+| 2048 | NonlinearSolve (TrustRegion) | 193.90 ms | 305495776 | 291.3 MiB | 100 | 9.8071e+02 | ✗ No |
+| 2048 | Optim (NewtonTrustRegion) | FAILED | 185728 | 181.4 KiB | 0 | NaN | ✗ No |
+| 2048 | MadNLP | 93.51 ms | 57559104 | 54.9 MiB | 100 | 9.6960e+02 | ✗ No |
+| 2048 | NonlinearSolve (LM) | 8.47 s | 110514800 | 105.4 MiB | 100 | 1.0028e+03 | ✗ No |
+| 2048 | Optim (Newton) | 56.66 ms | 126699648 | 120.8 MiB | 100 | 9.9980e+02 | ✗ No |
+| 2048 | LeastSquaresOptim (LM) | 53.96 ms | 589488 | 575.7 KiB | 100 | 9.7852e+02 | ✗ No |
+| 2048 | Ipopt | 99.31 ms | 56812032 | 54.2 MiB | 100 | 9.7950e+02 | ✗ No |
+| 2048 | JSOSolvers (tron) | 22.01 ms | 1308464 | 1.2 MiB | 101 | 9.7833e+02 | ✗ No |
+| 2048 | JSOSolvers (trunk) | 32.39 ms | 1124672 | 1.1 MiB | 101 | 9.7535e+02 | ✗ No |
+| 2048 | SecondOrderOptimization (LM) | 13.55 ms | 37034912 | 35.3 MiB | 100 | 9.6875e+02 | ✓ Yes |
+| 4096 | SecondOrderOptimization (Dogleg) | 24.38 ms | 77815984 | 74.2 MiB | 100 | 2.0245e+03 | ✓ Yes |
+| 4096 | LeastSquaresOptim (Dogleg) | 92.56 ms | 1102880 | 1.1 MiB | 100 | 1.9930e+03 | ✗ No |
+| 4096 | NonlinearSolve (TrustRegion) | 296.45 ms | 619905984 | 591.2 MiB | 100 | 2.0029e+03 | ✗ No |
+| 4096 | Optim (NewtonTrustRegion) | FAILED | 378240 | 369.4 KiB | 0 | NaN | ✗ No |
+| 4096 | MadNLP | 179.23 ms | 117466944 | 112.0 MiB | 100 | 1.9833e+03 | ✗ No |
+| 4096 | NonlinearSolve (LM) | 30.69 s | 1726709040 | 1646.7 MiB | 100 | 2.0165e+03 | ✗ No |
+| 4096 | Optim (Newton) | 100.31 ms | 262238400 | 250.1 MiB | 100 | 2.0134e+03 | ✗ No |
+| 4096 | LeastSquaresOptim (LM) | 105.20 ms | 1066096 | 1.0 MiB | 100 | 1.9933e+03 | ✗ No |
+| 4096 | Ipopt | 190.87 ms | 115806144 | 110.4 MiB | 100 | 1.9932e+03 | ✗ No |
+| 4096 | JSOSolvers (tron) | 46.68 ms | 2639408 | 2.5 MiB | 101 | 1.9904e+03 | ✗ No |
+| 4096 | JSOSolvers (trunk) | 64.23 ms | 2275136 | 2.2 MiB | 101 | 1.9890e+03 | ✗ No |
+| 4096 | SecondOrderOptimization (LM) | 27.70 ms | 74867616 | 71.4 MiB | 100 | 1.9823e+03 | ✓ Yes |
+| 8192 | SecondOrderOptimization (Dogleg) | 49.42 ms | 153841840 | 146.7 MiB | 100 | 4.0516e+03 | ✓ Yes |
+| 8192 | LeastSquaresOptim (Dogleg) | FAILED | 673088 | 657.3 KiB | 0 | NaN | ✗ No |
+| 8192 | NonlinearSolve (TrustRegion) | 582.07 ms | 1201065088 | 1145.4 MiB | 100 | 4.0216e+03 | ✗ No |
+| 8192 | Optim (NewtonTrustRegion) | FAILED | 738688 | 721.4 KiB | 0 | NaN | ✗ No |
+| 8192 | MadNLP | 365.16 ms | 229852960 | 219.2 MiB | 100 | 4.0106e+03 | ✗ No |
+| 8192 | NonlinearSolve (LM) | 121.52 s | 3379280112 | 3222.7 MiB | 100 | 4.0438e+03 | ✗ No |
+| 8192 | Optim (Newton) | 188.74 ms | 506061344 | 482.6 MiB | 100 | 4.0402e+03 | ✗ No |
+| 8192 | LeastSquaresOptim (LM) | 193.16 ms | 2005232 | 1.9 MiB | 100 | 4.0207e+03 | ✗ No |
+| 8192 | Ipopt | 384.43 ms | 226323136 | 215.8 MiB | 100 | 4.0195e+03 | ✗ No |
+| 8192 | JSOSolvers (tron) | 89.69 ms | 5203216 | 5.0 MiB | 101 | 4.0199e+03 | ✗ No |
+| 8192 | JSOSolvers (trunk) | 131.56 ms | 4477952 | 4.3 MiB | 101 | 4.0163e+03 | ✗ No |
+| 8192 | SecondOrderOptimization (LM) | 56.61 ms | 147919776 | 141.1 MiB | 100 | 4.0096e+03 | ✓ Yes |
+| 16384 | SecondOrderOptimization (Dogleg) | 99.33 ms | 305893552 | 291.7 MiB | 100 | 8.1064e+03 | ✓ Yes |
+| 16384 | LeastSquaresOptim (Dogleg) | FAILED | 1328448 | 1.3 MiB | 0 | NaN | ✗ No |
+| 16384 | NonlinearSolve (TrustRegion) | 1.16 s | 2506447920 | 2390.3 MiB | 100 | 8.0842e+03 | ✗ No |
+| 16384 | Optim (NewtonTrustRegion) | FAILED | 1459584 | 1.4 MiB | 0 | NaN | ✗ No |
+| 16384 | MadNLP | 707.35 ms | 454500672 | 433.4 MiB | 100 | 8.0652e+03 | ✗ No |
+| 16384 | NonlinearSolve (LM) | 480.93 s | 6850572544 | 6533.2 MiB | 100 | 8.0984e+03 | ✗ No |
+| 16384 | Optim (Newton) | 359.92 ms | 993706528 | 947.7 MiB | 100 | 8.0948e+03 | ✗ No |
+| 16384 | LeastSquaresOptim (LM) | 379.34 ms | 3873904 | 3.7 MiB | 100 | 8.0753e+03 | ✗ No |
+| 16384 | Ipopt | 784.10 ms | 447357312 | 426.6 MiB | 100 | 8.0741e+03 | ✗ No |
+| 16384 | JSOSolvers (tron) | 189.82 ms | 10330288 | 9.9 MiB | 101 | 8.0684e+03 | ✗ No |
+| 16384 | JSOSolvers (trunk) | 266.20 ms | 8883008 | 8.5 MiB | 101 | 8.0709e+03 | ✗ No |
+| 16384 | SecondOrderOptimization (LM) | 110.16 ms | 294024096 | 280.4 MiB | 100 | 8.0641e+03 | ✓ Yes |
+| 32768 | SecondOrderOptimization (Dogleg) | 226.94 ms | 610128048 | 581.9 MiB | 100 | 1.6215e+04 | ✓ Yes |
+| 32768 | LeastSquaresOptim (Dogleg) | FAILED | 2639168 | 2.5 MiB | 0 | NaN | ✗ No |
+| 32768 | NonlinearSolve (TrustRegion) | FAILED | 2901376 | 2.8 MiB | 0 | NaN | ✗ No |
+| 32768 | Optim (NewtonTrustRegion) | FAILED | 2901376 | 2.8 MiB | 0 | NaN | ✗ No |
+| 32768 | MadNLP | 1.46 s | 903797056 | 861.9 MiB | 100 | 1.6174e+04 | ✗ No |
+| 32768 | NonlinearSolve (LM) | FAILED | 2901376 | 2.8 MiB | 0 | NaN | ✗ No |
+| 32768 | Optim (Newton) | 754.94 ms | 1968996976 | 1877.8 MiB | 100 | 1.6204e+04 | ✗ No |
+| 32768 | LeastSquaresOptim (LM) | FAILED | 2639168 | 2.5 MiB | 0 | NaN | ✗ No |
+| 32768 | Ipopt | 1.47 s | 889426304 | 848.2 MiB | 100 | 1.6183e+04 | ✗ No |
+| 32768 | JSOSolvers (tron) | 424.15 ms | 20584544 | 19.6 MiB | 101 | 1.6183e+04 | ✗ No |
+| 32768 | JSOSolvers (trunk) | 524.05 ms | 17693504 | 16.9 MiB | 101 | 1.6181e+04 | ✗ No |
+| 32768 | SecondOrderOptimization (LM) | 247.49 ms | 586363808 | 559.2 MiB | 100 | 1.6173e+04 | ✓ Yes |
+| 65536 | SecondOrderOptimization (Dogleg) | 485.55 ms | 1214845104 | 1158.6 MiB | 100 | 3.2434e+04 | ✓ Yes |
+| 65536 | LeastSquaresOptim (Dogleg) | FAILED | 5260608 | 5.0 MiB | 0 | NaN | ✗ No |
+| 65536 | NonlinearSolve (TrustRegion) | FAILED | 5784960 | 5.5 MiB | 0 | NaN | ✗ No |
+| 65536 | Optim (NewtonTrustRegion) | FAILED | 5784960 | 5.5 MiB | 0 | NaN | ✗ No |
+| 65536 | MadNLP | 2.97 s | 1799080256 | 1715.7 MiB | 100 | 3.2393e+04 | ✗ No |
+| 65536 | NonlinearSolve (LM) | FAILED | 5784960 | 5.5 MiB | 0 | NaN | ✗ No |
+| 65536 | Optim (Newton) | 1.48 s | 3916202592 | 3734.8 MiB | 100 | 3.2422e+04 | ✗ No |
+| 65536 | LeastSquaresOptim (LM) | FAILED | 5260608 | 5.0 MiB | 0 | NaN | ✗ No |
+| 65536 | Ipopt | 3.02 s | 1770254720 | 1688.2 MiB | 100 | 3.2402e+04 | ✗ No |
+| 65536 | JSOSolvers (tron) | 730.73 ms | 41060400 | 39.2 MiB | 101 | 3.2400e+04 | ✗ No |
+| 65536 | JSOSolvers (trunk) | 1.05 s | 35281792 | 33.6 MiB | 101 | 3.2400e+04 | ✗ No |
+| 65536 | SecondOrderOptimization (LM) | 539.32 ms | 1167274912 | 1113.2 MiB | 100 | 3.2392e+04 | ✓ Yes |
+| 131072 | SecondOrderOptimization (Dogleg) | 965.82 ms | 2435453104 | 2322.6 MiB | 100 | 6.4871e+04 | ✓ Yes |
+| 131072 | LeastSquaresOptim (Dogleg) | FAILED | 10503488 | 10.0 MiB | 0 | NaN | ✗ No |
+| 131072 | NonlinearSolve (TrustRegion) | FAILED | 11552128 | 11.0 MiB | 0 | NaN | ✗ No |
+| 131072 | Optim (NewtonTrustRegion) | FAILED | 11552128 | 11.0 MiB | 0 | NaN | ✗ No |
+| 131072 | MadNLP | 5.94 s | 3629902144 | 3461.7 MiB | 100 | 6.4830e+04 | ✗ No |
+| 131072 | NonlinearSolve (LM) | FAILED | 11552128 | 11.0 MiB | 0 | NaN | ✗ No |
+| 131072 | Optim (Newton) | 3.00 s | 8231289440 | 7850.0 MiB | 100 | 6.4859e+04 | ✗ No |
+| 131072 | LeastSquaresOptim (LM) | FAILED | 10503488 | 10.0 MiB | 0 | NaN | ✗ No |
+| 131072 | Ipopt | 6.20 s | 3543462272 | 3379.3 MiB | 100 | 6.4839e+04 | ✗ No |
+| 131072 | JSOSolvers (tron) | 1.43 s | 82012272 | 78.2 MiB | 101 | 6.4843e+04 | ✗ No |
+| 131072 | JSOSolvers (trunk) | 2.17 s | 70458176 | 67.2 MiB | 101 | 6.4837e+04 | ✗ No |
+| 131072 | SecondOrderOptimization (LM) | 1.08 s | 2336502688 | 2228.3 MiB | 100 | 6.4829e+04 | ✓ Yes |
+| 262144 | SecondOrderOptimization (Dogleg) | 2.03 s | 4861874352 | 4636.6 MiB | 100 | 1.2974e+05 | ✓ Yes |
+| 262144 | LeastSquaresOptim (Dogleg) | FAILED | 20989248 | 20.0 MiB | 0 | NaN | ✗ No |
+| 262144 | NonlinearSolve (TrustRegion) | FAILED | 23086464 | 22.0 MiB | 0 | NaN | ✗ No |
+| 262144 | Optim (NewtonTrustRegion) | FAILED | 23086464 | 22.0 MiB | 0 | NaN | ✗ No |
+| 262144 | MadNLP | 11.90 s | 7271213376 | 6934.4 MiB | 100 | 1.2970e+05 | ✗ No |
+| 262144 | NonlinearSolve (LM) | FAILED | 23086464 | 22.0 MiB | 0 | NaN | ✗ No |
+| 262144 | Optim (Newton) | 6.02 s | 16888365712 | 16106.0 MiB | 100 | 1.2973e+05 | ✗ No |
+| 262144 | LeastSquaresOptim (LM) | FAILED | 20989248 | 20.0 MiB | 0 | NaN | ✗ No |
+| 262144 | Ipopt | 12.78 s | 7083700624 | 6755.5 MiB | 100 | 1.2971e+05 | ✗ No |
+| 262144 | JSOSolvers (tron) | 2.60 s | 163948592 | 156.4 MiB | 101 | 1.2972e+05 | ✗ No |
+| 262144 | JSOSolvers (trunk) | 4.25 s | 140843840 | 134.3 MiB | 101 | 1.2971e+05 | ✗ No |
+| 262144 | SecondOrderOptimization (LM) | 2.14 s | 4693930912 | 4476.5 MiB | 100 | 1.2970e+05 | ✓ Yes |
+| 524288 | SecondOrderOptimization (Dogleg) | 4.01 s | 9699496112 | 9250.2 MiB | 100 | 2.5949e+05 | ✓ Yes |
+| 524288 | LeastSquaresOptim (Dogleg) | FAILED | 41960768 | 40.0 MiB | 0 | NaN | ✗ No |
+| 524288 | NonlinearSolve (TrustRegion) | FAILED | 46187904 | 44.0 MiB | 0 | NaN | ✗ No |
+| 524288 | Optim (NewtonTrustRegion) | FAILED | 46155136 | 44.0 MiB | 0 | NaN | ✗ No |
+| 524288 | MadNLP | 24.09 s | 14479354176 | 13808.6 MiB | 100 | 2.5945e+05 | ✗ No |
+| 524288 | NonlinearSolve (LM) | FAILED | 46171520 | 44.0 MiB | 0 | NaN | ✗ No |
+| 524288 | Optim (Newton) | 11.81 s | 34401747584 | 32808.1 MiB | 100 | 2.5948e+05 | ✗ No |
+| 524288 | LeastSquaresOptim (LM) | FAILED | 41960768 | 40.0 MiB | 0 | NaN | ✗ No |
+| 524288 | Ipopt | 25.54 s | 14455714176 | 13786.0 MiB | 100 | 2.5946e+05 | ✗ No |
+| 524288 | JSOSolvers (tron) | 6.10 s | 327985232 | 312.8 MiB | 101 | 2.5946e+05 | ✗ No |
+| 524288 | JSOSolvers (trunk) | 8.63 s | 285825856 | 272.6 MiB | 101 | 2.5946e+05 | ✗ No |
+| 524288 | SecondOrderOptimization (LM) | 4.30 s | 9573529040 | 9130.0 MiB | 100 | 2.5945e+05 | ✓ Yes |
+| 1048576 | SecondOrderOptimization (Dogleg) | 7.78 s | 19462656176 | 18561.0 MiB | 100 | 5.1899e+05 | ✓ Yes |
+| 1048576 | LeastSquaresOptim (Dogleg) | FAILED | 83903808 | 80.0 MiB | 0 | NaN | ✗ No |
+| 1048576 | NonlinearSolve (TrustRegion) | FAILED | 100681088 | 96.0 MiB | 0 | NaN | ✗ No |
+| 1048576 | Optim (NewtonTrustRegion) | FAILED | 92292480 | 88.0 MiB | 0 | NaN | ✗ No |
+| 1048576 | MadNLP | 47.72 s | 29176768832 | 27825.1 MiB | 100 | 5.1895e+05 | ✗ No |
+| 1048576 | NonlinearSolve (LM) | FAILED | 92308864 | 88.0 MiB | 0 | NaN | ✗ No |
+| 1048576 | Optim (Newton) | 23.25 s | 68123771488 | 64967.9 MiB | 100 | 5.1898e+05 | ✗ No |
+| 1048576 | LeastSquaresOptim (LM) | FAILED | 83903808 | 80.0 MiB | 0 | NaN | ✗ No |
+| 1048576 | Ipopt | 51.04 s | 29507416448 | 28140.5 MiB | 100 | 5.1896e+05 | ✗ No |
+| 1048576 | JSOSolvers (tron) | 12.00 s | 664004656 | 633.2 MiB | 101 | 5.1896e+05 | ✗ No |
+| 1048576 | JSOSolvers (trunk) | 17.39 s | 612637568 | 584.3 MiB | 101 | 5.1896e+05 | ✗ No |
+| 1048576 | SecondOrderOptimization (LM) | 8.86 s | 19262206880 | 18369.9 MiB | 100 | 5.1895e+05 | ✓ Yes |
 
 ---
 
 ## 3. Analysis & Key Takeaways
 
 - **Asymptotic Complexity**: Log-log scaling indicates the empirical runtime growth rate as Variables n expands.
-- **Fastest Model**: The fastest linear system assembly was consistently achieved by `LeastSquaresOptim (Sparse)`.
+- **Fastest Model**: The fastest linear system assembly was consistently achieved by `Standalone (Sparse)`.
 - **Top Optimizer**: Solvers leveraging specialized structure (e.g. sparse block factorization in SecondOrderOptimization) demonstrate superior scaling exponents on large problem regimes.

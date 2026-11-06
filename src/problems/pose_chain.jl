@@ -119,7 +119,7 @@ function create_pose_chain_problem()
                 () -> copyto!(nlls_prob.variables, start_vars)
             )
 
-            # Model 2: LeastSquaresOptim (Sparse)
+            # Model 2: Standalone (Sparse)
             r_buf = zeros(Float64, m_res)
             x_lso = copy(x_flat)
             J_sp = build_chain_sparse_jacobian(n_poses)
@@ -128,7 +128,7 @@ function create_pose_chain_problem()
             g!(J, x) = chain_jac!(J, x, n_poses)
             lsp = LeastSquaresProblem(x=x_lso, y=r_buf, f! = f!, g! = g!, J=J_sp)
             m_lso = ModelDefinition(
-                "LeastSquaresOptim (Sparse)",
+                "Standalone (Sparse)",
                 lsp,
                 () -> begin
                     f!(r_buf, x_lso)

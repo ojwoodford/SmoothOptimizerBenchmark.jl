@@ -9,8 +9,11 @@ using SparseArrays
 using StaticArrays
 using NLLSModel
 using Optim
+using MadNLP
+using NonlinearSolve
 
 export optimize_soo, optimize_least_squares, optimize_optim, optimize_jsosolvers, optimize_ipopt
+export optimize_madnlp, optimize_nonlinearsolve
 export get_tier1_optimizers, get_tier2_optimizers, as_nlpmodel, LeastSquaresNLPModel
 
 # -----------------------------------------------------------------------------
@@ -137,6 +140,10 @@ function NLPModels.hess_coord!(nlp::LeastSquaresNLPModel, x::AbstractVector, val
     return vals
 end
 
+function NLPModels.hess_coord!(nlp::LeastSquaresNLPModel, x::AbstractVector, y::AbstractVector, vals::AbstractVector; obj_weight::Real=1.0)
+    return NLPModels.hess_coord!(nlp, x, vals; obj_weight=obj_weight)
+end
+
 function NLPModels.hprod!(nlp::LeastSquaresNLPModel, x::AbstractVector, v::AbstractVector, Hv::AbstractVector; obj_weight::Real=1.0)
     NLPModels.increment!(nlp, :neval_hprod)
     update_evals!(nlp, x)
@@ -256,12 +263,12 @@ end
 # -----------------------------------------------------------------------------
 
 """
-    optimize_soo(model; method=:dogleg, maxiters=100, maxtime=2.0, kwargs...) -> OptimizerResult
+    optimize_soo(model; method=:dogleg, maxiters=100, time_limit=nothing, maxtime=time_limit === nothing ? 1e6 : Float64(time_limit), kwargs...) -> OptimizerResult
 
 Optimizes a model using `SecondOrderOptimization.jl`.
 Supported methods: `:dogleg`, `:lm` / `:levenbergmarquardt`.
 """
-function optimize_soo(target; method=:dogleg, maxiters=100, maxtime=2.0, kwargs...)
+function optimize_soo(target; method=:dogleg, maxiters=100, time_limit=nothing, maxtime=time_limit === nothing ? 1e6 : Float64(time_limit), kwargs...)
     actual_method = method === :lm ? :levenbergmarquardt : method
     opt = OptimizationOptions(iterator=actual_method, maxiters=maxiters, maxtime=maxtime; kwargs...)
     m = target isa ModelDefinition ? target.model : target
@@ -272,33 +279,33 @@ function optimize_soo(target; method=:dogleg, maxiters=100, maxtime=2.0, kwargs.
         timed = @timed SecondOrderOptimization.optimize!(p, opt)
         t_total = time_ns() - t_start
         _, res = timed.value
-        return OptimizerResult(Float64(t_total), timed.gcstats.allocd, timed.bytes, res.niterations, res.startcost, res.bestcost, res.termination != 0)
+        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, res.termination != 0)
     elseif m isa LeastSquaresProblem
         p = deepcopy(m)
         t_start = time_ns()
         timed = @timed SecondOrderOptimization.optimize!(p, opt)
         t_total = time_ns() - t_start
         _, res = timed.value
-        return OptimizerResult(Float64(t_total), timed.gcstats.allocd, timed.bytes, res.niterations, res.startcost, res.bestcost, res.termination != 0)
+        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, res.termination != 0)
     elseif m isa AbstractNLPModel
         p = deepcopy(m)
         t_start = time_ns()
         timed = @timed SecondOrderOptimization.optimize!(p, opt)
         t_total = time_ns() - t_start
         _, res = timed.value
-        return OptimizerResult(Float64(t_total), timed.gcstats.allocd, timed.bytes, res.niterations, res.startcost, res.bestcost, res.termination != 0)
+        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, res.termination != 0)
     else
         error("Unsupported model type for optimize_soo: $(typeof(m))")
     end
 end
 
 """
-    optimize_least_squares(model; method=:dogleg, maxiters=100, kwargs...) -> OptimizerResult
+    optimize_least_squares(model; method=:dogleg, maxiters=100, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `LeastSquaresOptim.jl`.
 Supported methods: `:dogleg`, `:lm` / `:levenbergmarquardt`.
 """
-function optimize_least_squares(target; method=:dogleg, maxiters=100, kwargs...)
+function optimize_least_squares(target; method=:dogleg, maxiters=100, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
     lso_method = (method === :lm || method === :levenbergmarquardt) ? LeastSquaresOptim.LevenbergMarquardt() : LeastSquaresOptim.Dogleg()
 
@@ -322,23 +329,26 @@ function optimize_least_squares(target; method=:dogleg, maxiters=100, kwargs...)
     lsp.f!(r0, lsp.x)
     start_c = 0.5 * sum(abs2, r0)
 
+    actual_maxiters = (time_limit !== nothing && time_limit <= 1.0) ? min(maxiters, 10) : maxiters
+
     t_start = time_ns()
-    timed = @timed LeastSquaresOptim.optimize!(lsp, lso_method; iterations=maxiters, kwargs...)
+    timed = @timed LeastSquaresOptim.optimize!(lsp, lso_method; iterations=actual_maxiters, kwargs...)
     t_total = time_ns() - t_start
     res = timed.value
 
-    return OptimizerResult(Float64(t_total), timed.gcstats.allocd, timed.bytes, res.iterations, start_c, res.ssr * 0.5, res.converged)
+    return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.iterations, start_c, res.ssr * 0.5, res.converged)
 end
 
 """
-    optimize_optim(model; method=:newton_trust_region, maxiters=100, time_limit=2.0, kwargs...) -> OptimizerResult
+    optimize_optim(model; method=:newton_trust_region, maxiters=100, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `Optim.jl`.
 Supported methods: `:newton_trust_region`, `:newton`.
 """
-function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_limit=2.0, kwargs...)
+function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
     optim_method = method === :newton ? Optim.Newton(linesearch=Optim.LineSearches.BackTracking()) : Optim.NewtonTrustRegion()
+    t_lim = time_limit === nothing ? NaN : Float64(time_limit)
 
     if m isa LeastSquaresProblem
         lsp = deepcopy(m)
@@ -391,13 +401,16 @@ function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_
         g0 = zeros(Float64, n)
         g!(g0, x0)
         h!(H0, x0)
-        td = Optim.NLSolversBase.TwiceDifferentiable(f, g!, h!, copy(x0), start_c, g0, H0)
+
+        td = TwiceDifferentiable(f, g!, h!, x0, start_c, g0, H0)
+        opts = Optim.Options(iterations=maxiters, time_limit=t_lim; kwargs...)
 
         t_start = time_ns()
-        timed = @timed Optim.optimize(td, copy(x0), optim_method, Optim.Options(iterations=maxiters, time_limit=time_limit; kwargs...))
+        timed = @timed Optim.optimize(td, x0, optim_method, opts)
         t_total = time_ns() - t_start
         res = timed.value
-        return OptimizerResult(Float64(t_total), timed.gcstats.allocd, timed.bytes, Optim.iterations(res), start_c, Optim.minimum(res), Optim.converged(res))
+
+        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.iterations, start_c, res.minimum, Optim.converged(res))
 
     elseif m isa NLLSModel.Model
         p = deepcopy(m)
@@ -435,12 +448,13 @@ function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_
         end
 
         td = Optim.NLSolversBase.TwiceDifferentiable(f_opt, g_opt!, h_opt!, copy(x0), start_c, g0, H0)
+        opts = Optim.Options(iterations=maxiters, time_limit=t_lim; kwargs...)
 
         t_start = time_ns()
-        timed = @timed Optim.optimize(td, copy(x0), optim_method, Optim.Options(iterations=maxiters, time_limit=time_limit; kwargs...))
+        timed = @timed Optim.optimize(td, copy(x0), optim_method, opts)
         t_total = time_ns() - t_start
         res = timed.value
-        return OptimizerResult(Float64(t_total), timed.gcstats.allocd, timed.bytes, Optim.iterations(res), start_c, Optim.minimum(res), Optim.converged(res))
+        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, Optim.iterations(res), start_c, Optim.minimum(res), Optim.converged(res))
 
     elseif m isa AbstractNLPModel
         nlp = deepcopy(m)
@@ -484,12 +498,13 @@ function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_
         end
 
         td = Optim.NLSolversBase.TwiceDifferentiable(f_nlp, g_nlp!, h_nlp!, copy(x0), start_c, g0, H0)
+        opts = Optim.Options(iterations=maxiters, time_limit=t_lim; kwargs...)
 
         t_start = time_ns()
-        timed = @timed Optim.optimize(td, copy(x0), optim_method, Optim.Options(iterations=maxiters, time_limit=time_limit; kwargs...))
+        timed = @timed Optim.optimize(td, copy(x0), optim_method, opts)
         t_total = time_ns() - t_start
         res = timed.value
-        return OptimizerResult(Float64(t_total), timed.gcstats.allocd, timed.bytes, Optim.iterations(res), start_c, Optim.minimum(res), Optim.converged(res))
+        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, Optim.iterations(res), start_c, Optim.minimum(res), Optim.converged(res))
 
     else
         error("Unsupported model type for optimize_optim: $(typeof(m))")
@@ -497,12 +512,12 @@ function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_
 end
 
 """
-    optimize_jsosolvers(model; solver=:trunk, maxiters=100, max_time=2.0, kwargs...) -> OptimizerResult
+    optimize_jsosolvers(model; solver=:trunk, maxiters=100, time_limit=nothing, max_time=time_limit === nothing ? 3600.0 : Float64(time_limit), kwargs...) -> OptimizerResult
 
 Optimizes a model using `JSOSolvers.jl`.
 Supported solvers: `:trunk`, `:tron`.
 """
-function optimize_jsosolvers(target; solver=:trunk, maxiters=100, max_time=2.0, kwargs...)
+function optimize_jsosolvers(target; solver=:trunk, maxiters=100, time_limit=nothing, max_time=time_limit === nothing ? 3600.0 : Float64(time_limit), kwargs...)
     nlp = as_nlpmodel(target)
     NLPModels.reset!(nlp)
     start_c = NLPModels.obj(nlp, nlp.meta.x0)
@@ -518,7 +533,7 @@ function optimize_jsosolvers(target; solver=:trunk, maxiters=100, max_time=2.0, 
 
     return OptimizerResult(
         Float64(t_total),
-        timed.gcstats.allocd,
+        Base.gc_alloc_count(timed.gcstats),
         timed.bytes,
         res.iter,
         start_c,
@@ -528,11 +543,11 @@ function optimize_jsosolvers(target; solver=:trunk, maxiters=100, max_time=2.0, 
 end
 
 """
-    optimize_ipopt(model; maxiters=100, print_level=0, max_cpu_time=2.0, kwargs...) -> OptimizerResult
+    optimize_ipopt(model; maxiters=100, print_level=0, time_limit=nothing, max_cpu_time=time_limit === nothing ? 1e6 : Float64(time_limit), kwargs...) -> OptimizerResult
 
 Optimizes a model using `Ipopt` via `NLPModelsIpopt`.
 """
-function optimize_ipopt(target; maxiters=100, print_level=0, max_cpu_time=2.0, kwargs...)
+function optimize_ipopt(target; maxiters=100, print_level=0, time_limit=nothing, max_cpu_time=time_limit === nothing ? 1e6 : Float64(time_limit), kwargs...)
     nlp = as_nlpmodel(target)
     NLPModels.reset!(nlp)
     start_c = NLPModels.obj(nlp, nlp.meta.x0)
@@ -545,11 +560,99 @@ function optimize_ipopt(target; maxiters=100, print_level=0, max_cpu_time=2.0, k
     converged = res.status in (:first_order, :acceptable_level)
     return OptimizerResult(
         Float64(t_total),
-        timed.gcstats.allocd,
+        Base.gc_alloc_count(timed.gcstats),
         timed.bytes,
         res.iter,
         start_c,
         res.objective,
+        converged
+    )
+end
+
+"""
+    optimize_madnlp(model; maxiters=100, time_limit=nothing, max_wall_time=time_limit === nothing ? 1e6 : Float64(time_limit), kwargs...) -> OptimizerResult
+
+Optimizes a model using `MadNLP.jl`.
+"""
+function optimize_madnlp(target; maxiters=100, time_limit=nothing, max_wall_time=time_limit === nothing ? 1e6 : Float64(time_limit), kwargs...)
+    nlp = as_nlpmodel(target)
+    NLPModels.reset!(nlp)
+    start_c = NLPModels.obj(nlp, nlp.meta.x0)
+
+    t_start = time_ns()
+    timed = @timed MadNLP.madnlp(nlp; max_iter=maxiters, max_wall_time=max_wall_time, print_level=MadNLP.ERROR, kwargs...)
+    t_total = time_ns() - t_start
+    res = timed.value
+
+    converged = res.status in (MadNLP.SOLVE_SUCCEEDED, MadNLP.SOLVED_TO_ACCEPTABLE_LEVEL)
+    return OptimizerResult(
+        Float64(t_total),
+        Base.gc_alloc_count(timed.gcstats),
+        timed.bytes,
+        res.iter,
+        start_c,
+        res.objective,
+        converged
+    )
+end
+
+"""
+    optimize_nonlinearsolve(model; method=:lm, maxiters=100, time_limit=nothing, maxtime=time_limit === nothing ? Inf : Float64(time_limit), kwargs...) -> OptimizerResult
+
+Optimizes a model using `NonlinearSolve.jl`.
+Supported methods: `:lm`, `:trust_region`, `:gauss_newton`.
+"""
+function optimize_nonlinearsolve(target; method=:lm, maxiters=100, time_limit=nothing, maxtime=time_limit === nothing ? Inf : Float64(time_limit), kwargs...)
+    m = target isa ModelDefinition ? target.model : target
+
+    if !(m isa LeastSquaresProblem)
+        return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+    end
+
+    lsp = deepcopy(m)
+    m_len = length(lsp.y)
+    n_len = length(lsp.x)
+    x0 = copy(lsp.x)
+
+    if lsp.J isa SparseMatrixCSC && n_len > 25000
+        # Avoid excessive sparse QR solve time on massive sparse regimes
+        return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+    end
+
+    r_init = zeros(Float64, m_len)
+    lsp.f!(r_init, x0)
+    start_c = 0.5 * sum(abs2, r_init)
+
+    f_nls!(du, u, p) = lsp.f!(du, u)
+    jac_nls!(J, u, p) = lsp.g!(J, u)
+
+    nl_func = NonlinearFunction(f_nls!; jac=jac_nls!, resid_prototype=zeros(Float64, m_len), jac_prototype=deepcopy(lsp.J))
+    prob = NonlinearLeastSquaresProblem(nl_func, x0)
+
+    solver = if method === :trust_region || method === :dogleg
+        NonlinearSolve.TrustRegion()
+    elseif method === :gauss_newton
+        NonlinearSolve.GaussNewton()
+    else
+        NonlinearSolve.LevenbergMarquardt()
+    end
+
+    t_start = time_ns()
+    timed = @timed solve(prob, solver; maxiters=maxiters, maxtime=maxtime, kwargs...)
+    t_total = time_ns() - t_start
+    sol = timed.value
+
+    final_c = 0.5 * sum(abs2, sol.resid)
+    converged = NonlinearSolve.SciMLBase.successful_retcode(sol.retcode)
+    iters = sol.stats.nsteps
+
+    return OptimizerResult(
+        Float64(t_total),
+        Base.gc_alloc_count(timed.gcstats),
+        timed.bytes,
+        iters,
+        start_c,
+        final_c,
         converged
     )
 end
@@ -562,17 +665,18 @@ end
     get_tier1_optimizers() -> Vector{OptimizerDefinition}
 
 Returns optimizer definitions capable of running directly on peak-performance models (e.g. `NLLSModel.Model`).
-Includes SecondOrderOptimization, Optim, JSOSolvers, and Ipopt.
+Includes SecondOrderOptimization, Optim, JSOSolvers, Ipopt, and MadNLP.
 """
 function get_tier1_optimizers()
     return OptimizerDefinition[
-        OptimizerDefinition("SecondOrderOptimization (Dogleg)", m -> optimize_soo(m; method=:dogleg)),
-        OptimizerDefinition("SecondOrderOptimization (LM)", m -> optimize_soo(m; method=:lm)),
-        OptimizerDefinition("Optim (NewtonTrustRegion)", m -> optimize_optim(m; method=:newton_trust_region)),
-        OptimizerDefinition("Optim (Newton)", m -> optimize_optim(m; method=:newton)),
-        OptimizerDefinition("JSOSolvers (trunk)", m -> optimize_jsosolvers(m; solver=:trunk)),
-        OptimizerDefinition("JSOSolvers (tron)", m -> optimize_jsosolvers(m; solver=:tron)),
-        OptimizerDefinition("Ipopt", m -> optimize_ipopt(m))
+        OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),
+        OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)),
+        OptimizerDefinition("Optim (NewtonTrustRegion)", (m; kwargs...) -> optimize_optim(m; method=:newton_trust_region, kwargs...)),
+        OptimizerDefinition("Optim (Newton)", (m; kwargs...) -> optimize_optim(m; method=:newton, kwargs...)),
+        OptimizerDefinition("JSOSolvers (trunk)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:trunk, kwargs...)),
+        OptimizerDefinition("JSOSolvers (tron)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:tron, kwargs...)),
+        OptimizerDefinition("Ipopt", (m; kwargs...) -> optimize_ipopt(m; kwargs...)),
+        OptimizerDefinition("MadNLP", (m; kwargs...) -> optimize_madnlp(m; kwargs...))
     ]
 end
 
@@ -580,18 +684,21 @@ end
     get_tier2_optimizers() -> Vector{OptimizerDefinition}
 
 Returns optimizer definitions for universal apples-to-apples comparison on Common Models (e.g. `LeastSquaresProblem`).
-Includes all 5 solver families: SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, and Ipopt.
+Includes all solver families: SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, and NonlinearSolve.
 """
 function get_tier2_optimizers()
     return OptimizerDefinition[
-        OptimizerDefinition("SecondOrderOptimization (Dogleg)", m -> optimize_soo(m; method=:dogleg)),
-        OptimizerDefinition("SecondOrderOptimization (LM)", m -> optimize_soo(m; method=:lm)),
-        OptimizerDefinition("LeastSquaresOptim (Dogleg)", m -> optimize_least_squares(m; method=:dogleg)),
-        OptimizerDefinition("LeastSquaresOptim (LM)", m -> optimize_least_squares(m; method=:lm)),
-        OptimizerDefinition("Optim (NewtonTrustRegion)", m -> optimize_optim(m; method=:newton_trust_region)),
-        OptimizerDefinition("Optim (Newton)", m -> optimize_optim(m; method=:newton)),
-        OptimizerDefinition("JSOSolvers (trunk)", m -> optimize_jsosolvers(m; solver=:trunk)),
-        OptimizerDefinition("JSOSolvers (tron)", m -> optimize_jsosolvers(m; solver=:tron)),
-        OptimizerDefinition("Ipopt", m -> optimize_ipopt(m))
+        OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),
+        OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)),
+        OptimizerDefinition("LeastSquaresOptim (Dogleg)", (m; kwargs...) -> optimize_least_squares(m; method=:dogleg, kwargs...)),
+        OptimizerDefinition("LeastSquaresOptim (LM)", (m; kwargs...) -> optimize_least_squares(m; method=:lm, kwargs...)),
+        OptimizerDefinition("Optim (NewtonTrustRegion)", (m; kwargs...) -> optimize_optim(m; method=:newton_trust_region, kwargs...)),
+        OptimizerDefinition("Optim (Newton)", (m; kwargs...) -> optimize_optim(m; method=:newton, kwargs...)),
+        OptimizerDefinition("JSOSolvers (trunk)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:trunk, kwargs...)),
+        OptimizerDefinition("JSOSolvers (tron)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:tron, kwargs...)),
+        OptimizerDefinition("Ipopt", (m; kwargs...) -> optimize_ipopt(m; kwargs...)),
+        OptimizerDefinition("MadNLP", (m; kwargs...) -> optimize_madnlp(m; kwargs...)),
+        OptimizerDefinition("NonlinearSolve (LM)", (m; kwargs...) -> optimize_nonlinearsolve(m; method=:lm, kwargs...)),
+        OptimizerDefinition("NonlinearSolve (TrustRegion)", (m; kwargs...) -> optimize_nonlinearsolve(m; method=:trust_region, kwargs...))
     ]
 end
