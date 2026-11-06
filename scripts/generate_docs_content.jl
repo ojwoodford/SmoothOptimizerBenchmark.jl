@@ -55,13 +55,13 @@ For every benchmark problem, performance is evaluated across at least **10 disti
 
 | Problem | Category | Scaling Parameter | Sizes Tested | Tested Solvers |
 |:---|:---|:---|:---|:---|
-| [Sparse Rosenbrock](problems/rosenbrock_sparse.md) | Large Sparse Banded | Dimension \$n\$ | 10 sizes (\$n = 2 \\dots 2000\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt |
-| [Exponential Curve Fitting](problems/curve_fitting.md) | Small Dense Regression | Data points \$m\$ | 10 sizes (\$m = 10 \\dots 10000\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt |
-| [Dense Rosenbrock](problems/rosenbrock_dense.md) | Large Dense Coupled | Dimension \$n\$ | 10 sizes (\$n = 4 \\dots 60\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt |
-| [Dense Affine Alignment](problems/affine_alignment.md) | Large Dense Registration | Dimension \$n\$ | 10 sizes (\$n = 2 \\dots 12\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt |
-| [3D Pose Chain](problems/pose_chain.md) | Sparse Pose-Graph SLAM | Number of poses \$N\$ | 10 sizes (\$N = 5 \\dots 2500\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt |
-| [Sparse Bundle Adjustment](problems/bundle_adjustment.md) | Large Sparse Bipartite | Cameras \$N_{\\text{cam}}\$ | 10 sizes (\$N_{\\text{cam}} = 5 \\dots 200\$) | SOO, JSOSolvers, Ipopt |
-| [Robust Procrustes on SO(d)](problems/robust_procrustes.md) | Riemannian Manifold | Matrix dimension \$d\$ | 10 sizes (\$d = 2 \\dots 12\$) | SOO (ManifoldVar & Specialized), Manopt |
+| [Dense Rosenbrock](problems/rosenbrock_dense.md) | Small Static Dense | Dimension \$n\$ | 12 sizes (\$n = 1 \\dots 32\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt |
+| [Dense Affine Alignment](problems/affine_alignment.md) | Small Static Dense | Dimension \$n\$ | 12 sizes (\$n = 1 \\dots 32\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt |
+| [Robust Procrustes on SO(d)](problems/robust_procrustes.md) | Small Static Manifold | Matrix dimension \$d\$ | 11 sizes (\$d = 2 \\dots 32\$) | SOO (ManifoldVar & Specialized), Manopt |
+| [Exponential Curve Fitting](problems/curve_fitting.md) | Medium Dynamic Dense | Data points \$m\$ | 10 sizes (\$m = 2^6 \\dots 2^{15}\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt |
+| [Sparse Rosenbrock](problems/rosenbrock_sparse.md) | Large Sparse Banded | Dimension \$n\$ | 11 sizes (\$n = 2^{10} \\dots 2^{20}\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt |
+| [3D Pose Chain](problems/pose_chain.md) | Large Sparse SLAM | Number of poses \$N\$ | 11 sizes (\$N = 2^{10} \\dots 2^{20}\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt |
+| [Sparse Bundle Adjustment](problems/bundle_adjustment.md) | Large Sparse Bipartite | Cameras \$N_{\\text{cam}}\$ | 10 sizes (\$N_{\\text{cam}} = 4 \\dots 256\$) | SOO, JSOSolvers, Ipopt |
 
 ---
 

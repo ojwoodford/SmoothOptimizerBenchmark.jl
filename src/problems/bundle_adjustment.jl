@@ -47,7 +47,7 @@ function create_bundle_adjustment_problem()
     ProblemDefinition(
         "Sparse Bundle Adjustment",
         :large_sparse,
-        Any[5, 10, 15, 20, 30, 45, 65, 90, 130, 200],
+        Any[4, 6, 10, 16, 25, 40, 64, 100, 160, 256],
         sz -> begin
             if sz isa String
                 bam_model = BundleAdjustmentModel(sz)

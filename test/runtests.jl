@@ -9,7 +9,7 @@ using SmoothOptimizerBenchmark
     @testset "Problem Definition & >=10 Problem Sizes" begin
         for prob in problems
             @test !isempty(prob.name)
-            @test prob.category in (:small_dense, :large_dense, :large_sparse, :manifold)
+            @test prob.category in (:small_dense, :medium_dense, :large_dense, :large_sparse, :manifold)
             @test length(prob.default_sizes) >= 10
             @test !isempty(prob.compatible_optimizers)
 

@@ -31,14 +31,14 @@ Base.eltype(::AffineResidual) = Float64
 NLLSModel.ndeps(::AffineResidual) = static(1)
 NLLSModel.nres(res::AffineResidual) = length(res.D)
 NLLSModel.varindices(::AffineResidual) = 1
-NLLSModel.getvars(::AffineResidual, vars::Vector) = (vars[1],)
+NLLSModel.getvars(::AffineResidual, vars::AbstractVector) = (vars[1],)
 NLLSModel.computeresidual(res::AffineResidual, x) = affine_resfun(x, res.X, res.Y, res.D)
 
 function create_affine_alignment_problem()
     ProblemDefinition(
         "Dense Affine Alignment",
-        :large_dense,
-        Any[2, 3, 4, 5, 6, 7, 8, 9, 10, 12],
+        :small_dense,
+        Any[1, 2, 3, 4, 6, 8, 10, 14, 18, 22, 26, 32],
         n -> begin
             X, Y, D = generate_affine_data(n)
             start_vec = zeros(n * n + n)

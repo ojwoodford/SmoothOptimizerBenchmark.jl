@@ -9,7 +9,7 @@ end
 NLLSModel.ndeps(::ExpFitResidual) = static(1)
 NLLSModel.nres(::ExpFitResidual) = static(1)
 NLLSModel.varindices(::ExpFitResidual) = SVector(1)
-NLLSModel.getvars(::ExpFitResidual, vars::Vector) = (vars[1]::SVector{3, Float64},)
+NLLSModel.getvars(::ExpFitResidual, vars::AbstractVector) = (vars[1]::SVector{3, Float64},)
 NLLSModel.computeresidual(res::ExpFitResidual, p) = SVector(p[1] * exp(-p[2] * res.t) + p[3] - res.y)
 Base.eltype(::ExpFitResidual) = Float64
 
@@ -41,8 +41,8 @@ end
 function create_curve_fitting_problem()
     ProblemDefinition(
         "Exponential Curve Fitting",
-        :small_dense,
-        Any[10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000],
+        :medium_dense,
+        Any[64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768],
         n_points -> begin
             t_pts, y_data = generate_exp_data(n_points)
             p0_static = SVector(1.0, 1.0, 1.0)

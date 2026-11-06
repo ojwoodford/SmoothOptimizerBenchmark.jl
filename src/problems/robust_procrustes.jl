@@ -49,7 +49,7 @@ Base.eltype(::ProcrustesOVIResidual) = Float64
 NLLSModel.ndeps(::ProcrustesOVIResidual) = static(1)
 NLLSModel.nres(res::ProcrustesOVIResidual) = length(res.a)
 NLLSModel.varindices(::ProcrustesOVIResidual) = 1
-NLLSModel.getvars(::ProcrustesOVIResidual, vars::Vector) = (vars[1],)
+NLLSModel.getvars(::ProcrustesOVIResidual, vars::AbstractVector) = (vars[1],)
 NLLSModel.computeresidual(res::ProcrustesOVIResidual, v::ManifoldVar) = res.a - v.point * res.b
 const procrustes_huber_kernel = NLLSModel.Huber2oKernel(1e-5)
 NLLSModel.robustkernel(::ProcrustesOVIResidual) = procrustes_huber_kernel
@@ -94,7 +94,7 @@ end
 NLLSModel.ndeps(::SpecializedProcrustesResidual) = static(1)
 NLLSModel.nres(::SpecializedProcrustesResidual{N}) where N = static(N)
 NLLSModel.varindices(::SpecializedProcrustesResidual) = 1
-NLLSModel.getvars(res::SpecializedProcrustesResidual, vars::Vector) = (vars[1],)
+NLLSModel.getvars(res::SpecializedProcrustesResidual, vars::AbstractVector) = (vars[1],)
 NLLSModel.computeresidual(res::SpecializedProcrustesResidual, var::SpecializedRotation) = res.A - var.R * res.B
 NLLSModel.robustkernel(::SpecializedProcrustesResidual) = procrustes_huber_kernel
 Base.eltype(::SpecializedProcrustesResidual) = Float64
@@ -112,7 +112,7 @@ function create_robust_procrustes_problem()
     ProblemDefinition(
         "Robust Procrustes on SO(d)",
         :manifold,
-        Any[2, 3, 4, 5, 6, 7, 8, 9, 10, 12],
+        Any[2, 3, 4, 6, 8, 10, 14, 18, 22, 26, 32],
         d -> begin
             A, B, M, _ = generate_procrustes_experiment(d)
             n = size(A, 2)

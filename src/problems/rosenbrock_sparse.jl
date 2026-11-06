@@ -16,7 +16,7 @@ Base.eltype(::RosenDiagSparse) = Float64
 NLLSModel.ndeps(::RosenDiagSparse) = static(1)
 NLLSModel.nres(::RosenDiagSparse) = static(1)
 NLLSModel.varindices(res::RosenDiagSparse) = res.varind
-NLLSModel.getvars(res::RosenDiagSparse, vars::Vector) = (vars[res.varind]::Float64,)
+NLLSModel.getvars(res::RosenDiagSparse, vars::AbstractVector) = (vars[res.varind]::Float64,)
 NLLSModel.computeresidual(res::RosenDiagSparse, x) = res.weight * (x - 1.0)
 
 struct RosenOffDiagSparse <: NLLSModel.AbstractResidual
@@ -27,7 +27,7 @@ Base.eltype(::RosenOffDiagSparse) = Float64
 NLLSModel.ndeps(::RosenOffDiagSparse) = static(2)
 NLLSModel.nres(::RosenOffDiagSparse) = static(1)
 NLLSModel.varindices(res::RosenOffDiagSparse) = res.varind
-NLLSModel.getvars(res::RosenOffDiagSparse, vars::Vector) = (vars[res.varind[1]]::Float64, vars[res.varind[2]]::Float64)
+NLLSModel.getvars(res::RosenOffDiagSparse, vars::AbstractVector) = (vars[res.varind[1]]::Float64, vars[res.varind[2]]::Float64)
 NLLSModel.computeresidual(res::RosenOffDiagSparse, x, y) = res.weight * (y - x^2)
 
 function rosenbrock_sparse_res!(out, x)
@@ -79,7 +79,7 @@ function create_rosenbrock_sparse_problem()
     ProblemDefinition(
         "Sparse Multi-dimensional Rosenbrock",
         :large_sparse,
-        Any[2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000],
+        Any[1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576],
         n -> begin
             x0 = rosen_sparse_startpoint(n)
             len = 2 * n - 1
@@ -112,22 +112,26 @@ function create_rosenbrock_sparse_problem()
                 () -> copyto!(lsp.x, x0)
             )
 
-            # Model 3: NLPModels Sparse
-            nls = build_sparse_jso(n)
-            g_nlp = zeros(Float64, n)
-            m_nlp = ModelDefinition(
-                "NLPModels (MathOptNLSModel)",
-                nls,
-                () -> NLPModels.obj(nls, x0),
-                () -> begin
-                    c = NLPModels.obj(nls, x0)
-                    NLPModels.grad!(nls, x0, g_nlp)
-                    return (c, g_nlp)
-                end,
-                () -> copyto!(nls.meta.x0, x0)
-            )
+            # Model 3: NLPModels Sparse (up to 32k to avoid JuMP AST memory overhead)
+            models = ModelDefinition[m_nlls, m_lso]
+            if n <= 32768
+                nls = build_sparse_jso(n)
+                g_nlp = zeros(Float64, n)
+                m_nlp = ModelDefinition(
+                    "NLPModels (MathOptNLSModel)",
+                    nls,
+                    () -> NLPModels.obj(nls, x0),
+                    () -> begin
+                        c = NLPModels.obj(nls, x0)
+                        NLPModels.grad!(nls, x0, g_nlp)
+                        return (c, g_nlp)
+                    end,
+                    () -> copyto!(nls.meta.x0, x0)
+                )
+                push!(models, m_nlp)
+            end
 
-            return [m_nlls, m_lso, m_nlp]
+            return models
         end,
         get_tier1_optimizers(),
         "Variables n"

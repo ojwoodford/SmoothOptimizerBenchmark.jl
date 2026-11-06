@@ -9,7 +9,7 @@ end
 NLLSModel.ndeps(::BenchChainLink) = static(2)
 NLLSModel.nres(::BenchChainLink) = static(3)
 NLLSModel.varindices(r::BenchChainLink) = r.varind
-NLLSModel.getvars(r::BenchChainLink, vars::Vector) = (vars[r.varind[1]]::SVector{3, Float64}, vars[r.varind[2]]::SVector{3, Float64})
+NLLSModel.getvars(r::BenchChainLink, vars::AbstractVector) = (vars[r.varind[1]]::SVector{3, Float64}, vars[r.varind[2]]::SVector{3, Float64})
 NLLSModel.computeresidual(r::BenchChainLink, a, b) = b - a - r.offset + 0.1 * sin.(a)
 Base.eltype(::BenchChainLink) = Float64
 
@@ -17,7 +17,7 @@ struct BenchChainAnchor <: AbstractResidual end
 NLLSModel.ndeps(::BenchChainAnchor) = static(1)
 NLLSModel.nres(::BenchChainAnchor) = static(3)
 NLLSModel.varindices(::BenchChainAnchor) = SVector(1)
-NLLSModel.getvars(::BenchChainAnchor, vars::Vector) = (vars[1]::SVector{3, Float64},)
+NLLSModel.getvars(::BenchChainAnchor, vars::AbstractVector) = (vars[1]::SVector{3, Float64},)
 NLLSModel.computeresidual(::BenchChainAnchor, a) = a
 Base.eltype(::BenchChainAnchor) = Float64
 
@@ -103,7 +103,7 @@ function create_pose_chain_problem()
     ProblemDefinition(
         "Nonlinear 3D Pose Chain",
         :large_sparse,
-        Any[5, 10, 20, 40, 75, 150, 300, 500, 800, 1200],
+        Any[1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576],
         n_poses -> begin
             start_vars = generate_chain_start_vars(n_poses)
             x_flat = reduce(vcat, [collect(v) for v in start_vars])

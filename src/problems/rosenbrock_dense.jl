@@ -16,7 +16,7 @@ Base.eltype(::RosenDiagDense) = Float64
 NLLSModel.ndeps(::RosenDiagDense) = static(1)
 NLLSModel.nres(::RosenDiagDense) = static(1)
 NLLSModel.varindices(res::RosenDiagDense) = res.varind
-NLLSModel.getvars(res::RosenDiagDense, vars::Vector) = (vars[res.varind]::Float64,)
+NLLSModel.getvars(res::RosenDiagDense, vars::AbstractVector) = (vars[res.varind]::Float64,)
 NLLSModel.computeresidual(res::RosenDiagDense, x) = res.weight * (x - 1.0)
 
 struct RosenOffDiagDense <: NLLSModel.AbstractResidual
@@ -27,7 +27,7 @@ Base.eltype(::RosenOffDiagDense) = Float64
 NLLSModel.ndeps(::RosenOffDiagDense) = static(2)
 NLLSModel.nres(::RosenOffDiagDense) = static(1)
 NLLSModel.varindices(res::RosenOffDiagDense) = res.varind
-NLLSModel.getvars(res::RosenOffDiagDense, vars::Vector) = (vars[res.varind[1]]::Float64, vars[res.varind[2]]::Float64)
+NLLSModel.getvars(res::RosenOffDiagDense, vars::AbstractVector) = (vars[res.varind[1]]::Float64, vars[res.varind[2]]::Float64)
 NLLSModel.computeresidual(res::RosenOffDiagDense, x, y) = res.weight * (y - x^2)
 
 function rosenbrock_dense_res!(out, x)
@@ -70,8 +70,8 @@ end
 function create_rosenbrock_dense_problem()
     ProblemDefinition(
         "Dense Multi-dimensional Rosenbrock",
-        :large_dense,
-        Any[4, 6, 8, 10, 14, 18, 24, 32, 45, 60],
+        :small_dense,
+        Any[1, 2, 3, 4, 6, 8, 10, 14, 18, 22, 26, 32],
         n -> begin
             x0 = rosen_startpoint(n)
             m_len = n + ((n - 1) * n) >> 1
