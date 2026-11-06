@@ -307,6 +307,17 @@ function optimize_least_squares(target; method=:dogleg, maxiters=100, kwargs...)
     end
 
     lsp = deepcopy(m)
+    n_vars = length(lsp.x)
+    is_sparse = lsp.J isa SparseMatrixCSC
+    if is_sparse
+        # LeastSquaresOptim uses un-preconditioned iterative LSMR for sparse problems without timeout support.
+        # Dogleg attempts to solve the un-damped Gauss-Newton system (singular on gauge-free problems like pose graphs),
+        # causing LSMR to stall beyond ~5,000 variables.
+        if (method === :dogleg && n_vars > 5000) || n_vars > 25000
+            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+        end
+    end
+
     r0 = zeros(Float64, length(lsp.y))
     lsp.f!(r0, lsp.x)
     start_c = 0.5 * sum(abs2, r0)
@@ -327,11 +338,19 @@ Supported methods: `:newton_trust_region`, `:newton`.
 """
 function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_limit=2.0, kwargs...)
     m = target isa ModelDefinition ? target.model : target
-    optim_method = method === :newton ? Optim.Newton() : Optim.NewtonTrustRegion()
+    optim_method = method === :newton ? Optim.Newton(linesearch=Optim.LineSearches.BackTracking()) : Optim.NewtonTrustRegion()
 
     if m isa LeastSquaresProblem
         lsp = deepcopy(m)
         x0 = copy(lsp.x)
+        n = length(x0)
+        is_sparse = lsp.J isa SparseMatrixCSC
+
+        if method === :newton_trust_region && is_sparse && n > 1000
+            # NewtonTrustRegion requires dense Cholesky; unsupported for large sparse problems.
+            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+        end
+
         r_buf = zeros(Float64, length(lsp.y))
         J_buf = deepcopy(lsp.J)
         lsp.f!(r_buf, x0)
@@ -345,18 +364,37 @@ function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_
             lsp.f!(r_buf, x)
             lsp.g!(J_buf, x)
             mul!(g, J_buf', r_buf)
+            return g
         end
-        h!(H, x) = begin
-            lsp.g!(J_buf, x)
-            if J_buf isa SparseMatrixCSC
-                H .= Matrix(J_buf' * J_buf)
-            else
+
+        H0 = if is_sparse
+            sparse(lsp.J' * lsp.J)
+        else
+            Matrix{Float64}(undef, n, n)
+        end
+
+        h! = if is_sparse
+            (H, x) -> begin
+                lsp.g!(J_buf, x)
+                H_calc = J_buf' * J_buf
+                copyto!(H.nzval, H_calc.nzval)
+                return H
+            end
+        else
+            (H, x) -> begin
+                lsp.g!(J_buf, x)
                 mul!(H, J_buf', J_buf)
+                return H
             end
         end
 
+        g0 = zeros(Float64, n)
+        g!(g0, x0)
+        h!(H0, x0)
+        td = Optim.NLSolversBase.TwiceDifferentiable(f, g!, h!, copy(x0), start_c, g0, H0)
+
         t_start = time_ns()
-        timed = @timed Optim.optimize(f, g!, h!, x0, optim_method, Optim.Options(iterations=maxiters, time_limit=time_limit; kwargs...))
+        timed = @timed Optim.optimize(td, copy(x0), optim_method, Optim.Options(iterations=maxiters, time_limit=time_limit; kwargs...))
         t_total = time_ns() - t_start
         res = timed.value
         return OptimizerResult(Float64(t_total), timed.gcstats.allocd, timed.bytes, Optim.iterations(res), start_c, Optim.minimum(res), Optim.converged(res))
@@ -364,10 +402,27 @@ function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_
     elseif m isa NLLSModel.Model
         p = deepcopy(m)
         f, fdf!, x0, H_proto = NLLSModel.optimvars(p)
+        if !(x0 isa Vector{Float64})
+            # Optim requires a flat Vector{Float64}; incompatible with structured/manifold variables
+            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+        end
         n = length(x0)
+        is_sparse = H_proto isa SparseMatrixCSC
+
+        if method === :newton_trust_region && is_sparse && n > 1000
+            # NewtonTrustRegion requires dense Cholesky; unsupported for large sparse problems.
+            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+        end
+
+        H0, H_buf = if is_sparse
+            (deepcopy(H_proto), deepcopy(H_proto))
+        else
+            (Matrix{Float64}(undef, n, n), Matrix{Float64}(undef, n, n))
+        end
+
+        g0 = zeros(Float64, n)
+        start_c = fdf!(g0, H0, copy(x0))
         g_buf = zeros(Float64, n)
-        H_buf = Matrix{Float64}(undef, n, n)
-        start_c = f(x0)
 
         f_opt(x) = f(x)
         g_opt!(g, x) = begin
@@ -379,8 +434,10 @@ function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_
             return H
         end
 
+        td = Optim.NLSolversBase.TwiceDifferentiable(f_opt, g_opt!, h_opt!, copy(x0), start_c, g0, H0)
+
         t_start = time_ns()
-        timed = @timed Optim.optimize(f_opt, g_opt!, h_opt!, copy(x0), optim_method, Optim.Options(iterations=maxiters, time_limit=time_limit; kwargs...))
+        timed = @timed Optim.optimize(td, copy(x0), optim_method, Optim.Options(iterations=maxiters, time_limit=time_limit; kwargs...))
         t_total = time_ns() - t_start
         res = timed.value
         return OptimizerResult(Float64(t_total), timed.gcstats.allocd, timed.bytes, Optim.iterations(res), start_c, Optim.minimum(res), Optim.converged(res))
@@ -388,17 +445,48 @@ function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_
     elseif m isa AbstractNLPModel
         nlp = deepcopy(m)
         x0 = copy(nlp.meta.x0)
+        n = length(x0)
         start_c = NLPModels.obj(nlp, x0)
-        f_nlp(x) = NLPModels.obj(nlp, x)
-        g_nlp!(g, x) = NLPModels.grad!(nlp, x, g)
-        h_nlp!(H, x) = begin
-            H_x = NLPModels.hess(nlp, x)
-            copyto!(H, Symmetric(H_x, :L))
-            return H
+
+        rows, cols = NLPModels.hess_structure(nlp)
+        vals = zeros(Float64, length(rows))
+        NLPModels.hess_coord!(nlp, x0, vals)
+        is_sparse = length(rows) < (n * (n + 1) ÷ 2)
+
+        if method === :newton_trust_region && is_sparse && n > 1000
+            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
         end
 
+        f_nlp(x) = NLPModels.obj(nlp, x)
+        g_nlp!(g, x) = NLPModels.grad!(nlp, x, g)
+        g0 = zeros(Float64, n)
+        g_nlp!(g0, x0)
+
+        H0, h_nlp! = if is_sparse
+            H_tril = sparse(rows, cols, vals, n, n)
+            H_init = sparse(Symmetric(H_tril, :L))
+            (H_init, (H, x) -> begin
+                NLPModels.hess_coord!(nlp, x, vals)
+                copyto!(H_tril.nzval, vals)
+                H_sym = sparse(Symmetric(H_tril, :L))
+                copyto!(H.nzval, H_sym.nzval)
+                return H
+            end)
+        else
+            H_dense = Matrix{Float64}(undef, n, n)
+            h_dense_eval = (H, x) -> begin
+                H_x = NLPModels.hess(nlp, x)
+                copyto!(H, Symmetric(H_x, :L))
+                return H
+            end
+            h_dense_eval(H_dense, x0)
+            (H_dense, h_dense_eval)
+        end
+
+        td = Optim.NLSolversBase.TwiceDifferentiable(f_nlp, g_nlp!, h_nlp!, copy(x0), start_c, g0, H0)
+
         t_start = time_ns()
-        timed = @timed Optim.optimize(f_nlp, g_nlp!, h_nlp!, x0, optim_method, Optim.Options(iterations=maxiters, time_limit=time_limit; kwargs...))
+        timed = @timed Optim.optimize(td, copy(x0), optim_method, Optim.Options(iterations=maxiters, time_limit=time_limit; kwargs...))
         t_total = time_ns() - t_start
         res = timed.value
         return OptimizerResult(Float64(t_total), timed.gcstats.allocd, timed.bytes, Optim.iterations(res), start_c, Optim.minimum(res), Optim.converged(res))
