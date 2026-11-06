@@ -50,11 +50,11 @@ function build_nlls_dense(n::Int)
     costs = NLLSModel.CostStruct{Union{RosenDiagDense, RosenOffDiagDense}}()
     append!(get(costs, RosenDiagDense), [RosenDiagDense(rosen_diag_w_dense, k) for k in 1:n])
     append!(get(costs, RosenOffDiagDense), vcat(collect(Iterators.flatten([[RosenOffDiagDense(rosen_offdiag_w_dense, SVector(j, k)) for k in j+1:n] for j in 1:n-1]))))
-    return NLLSModel(rosen_startpoint(n), costs)
+    return NLLSModel.Model(rosen_startpoint(n), costs)
 end
 
 function build_jso_dense(n::Int)
-    model = Model()
+    model = JuMP.Model()
     x0 = rosen_startpoint(n)
     @variable(model, x[i = 1:n], start = x0[i])
     FA = Any[]
@@ -71,7 +71,7 @@ function create_rosenbrock_dense_problem()
     ProblemDefinition(
         "Dense Multi-dimensional Rosenbrock",
         :large_dense,
-        [2, 4, 8, 16],
+        Any[4, 6, 8, 10, 14, 18, 24, 32, 45, 60],
         n -> begin
             x0 = rosen_startpoint(n)
             m_len = n + ((n - 1) * n) >> 1
@@ -122,62 +122,7 @@ function create_rosenbrock_dense_problem()
 
             return [m_nlls, m_lso, m_nlp]
         end,
-        [
-            OptimizerDefinition("SecondOrderOptimization (LM)", model_def -> begin
-                p = deepcopy(model_def.model)
-                opt = OptimizationOptions(iterator=:levenbergmarquardt, maxiters=5000)
-                _, res = SecondOrderOptimization.optimize!(p, opt)
-                return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, res.bestcost < 1e-4)
-            end),
-            OptimizerDefinition("LeastSquaresOptim (LM)", model_def -> begin
-                n = length(rosen_startpoint(model_def.model isa NLLSModel ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
-                m_len = n + ((n - 1) * n) >> 1
-                lsp = LeastSquaresProblem(x=rosen_startpoint(n), f! = rosenbrock_dense_res!, output_length=m_len, autodiff=:forward)
-                start_c = 0.5 * sum(abs2, rosenbrock_dense_res!(zeros(m_len), lsp.x))
-                res = LeastSquaresOptim.optimize!(lsp, LeastSquaresOptim.LevenbergMarquardt(); iterations=5000)
-                return OptimizerResult(0.0, 0, 0, res.iterations, start_c, res.ssr * 0.5, res.converged)
-            end),
-            OptimizerDefinition("Ipopt", model_def -> begin
-                n = length(rosen_startpoint(model_def.model isa NLLSModel ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
-                model = Model(Ipopt.Optimizer)
-                x0 = rosen_startpoint(n)
-                @variable(model, x[i in 1:n], start = x0[i])
-                len = n + ((n - 1) * n) >> 1
-                @variable(model, residuals[1:len])
-                idx = 0
-                for j in 1:n-1
-                    for k in j+1:n
-                        idx += 1
-                        @constraint(model, residuals[idx] == rosen_offdiag_w_dense * (x[k] - x[j]^2))
-                    end
-                end
-                @constraint(model, [k in 1:n], residuals[idx+k] == rosen_diag_w_dense * (x[k] - 1.0))
-                @objective(model, Min, 0.5 * sum(residuals .^ 2))
-                set_silent(model)
-                JuMP.optimize!(model)
-                start_c = 0.5 * sum(abs2, rosenbrock_dense_res!(zeros(len), x0))
-                return OptimizerResult(0.0, 0, 0, MOI.get(model, MOI.BarrierIterations()), start_c, objective_value(model), true)
-            end),
-            OptimizerDefinition("JSOSolvers (trunk)", model_def -> begin
-                n = length(rosen_startpoint(model_def.model isa NLLSModel ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
-                nls = build_jso_dense(n)
-                res = JSOSolvers.trunk(nls)
-                start_c = NLPModels.obj(nls, rosen_startpoint(n))
-                return OptimizerResult(0.0, 0, 0, res.iter, start_c, res.objective, res.status == :first_order)
-            end),
-            OptimizerDefinition("JSOSolvers (tron)", model_def -> begin
-                n = length(rosen_startpoint(model_def.model isa NLLSModel ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
-                nls = build_jso_dense(n)
-                res = JSOSolvers.tron(nls)
-                start_c = NLPModels.obj(nls, rosen_startpoint(n))
-                return OptimizerResult(0.0, 0, 0, res.iter, start_c, res.objective, res.status == :first_order)
-            end),
-            OptimizerDefinition("SecondOrderOptimization (Dogleg)", model_def -> begin
-                p = deepcopy(model_def.model)
-                opt = OptimizationOptions(iterator=:dogleg, maxiters=5000)
-                _, res = SecondOrderOptimization.optimize!(p, opt)
-                return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
-            end)
-        ]
+        get_tier1_optimizers(),
+        "Dimension n"
     )
 end

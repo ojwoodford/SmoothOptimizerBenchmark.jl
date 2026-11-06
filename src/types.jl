@@ -1,6 +1,7 @@
 # Core types for SmoothOptimizerBenchmark
 
 export ModelEvaluationResult, ModelDefinition, OptimizerResult, OptimizerDefinition, ProblemDefinition
+export SingleSizeBenchmarkResult, ProblemScalingBenchmarkResult
 
 """
     ModelEvaluationResult
@@ -80,9 +81,10 @@ end
 Defines a parameterized benchmark problem:
 - `name`: Human-readable problem title
 - `category`: Problem category (:small_dense, :large_dense, :large_sparse, :manifold)
-- `default_sizes`: Collection of default benchmark sizes
+- `default_sizes`: Collection of default benchmark sizes (at least 10 sizes for scaling evaluation)
 - `generate_models`: Function `(size) -> Vector{ModelDefinition}` generating model formulations for given size
 - `compatible_optimizers`: Vector of `OptimizerDefinition` capable of optimizing this problem
+- `size_metric_name`: Human-readable label for the scaling parameter (e.g. "Dimension n", "Data Points m")
 """
 struct ProblemDefinition
     name::String
@@ -90,4 +92,69 @@ struct ProblemDefinition
     default_sizes::Vector{Any}
     generate_models::Function
     compatible_optimizers::Vector{OptimizerDefinition}
+    size_metric_name::String
+end
+
+# Backward-compatible constructor when size_metric_name is omitted
+function ProblemDefinition(
+    name::String,
+    category::Symbol,
+    default_sizes::Vector{Any},
+    generate_models::Function,
+    compatible_optimizers::Vector{OptimizerDefinition}
+)
+    return ProblemDefinition(name, category, default_sizes, generate_models, compatible_optimizers, "Size")
+end
+
+"""
+    SingleSizeBenchmarkResult
+
+Complete benchmark results for a single problem at a specific size:
+- `problem`: problem name
+- `category`: problem category
+- `size`: size value tested
+- `size_metric_name`: metric name for size
+- `model_results`: evaluation timings per model formulation
+- `best_model`: name of best performing model
+- `tier1_optimizer_results`: results of compatible solvers on best model
+- `tier2_optimizer_results`: results of all solvers on common model
+"""
+struct SingleSizeBenchmarkResult
+    problem::String
+    category::Symbol
+    size::Any
+    size_metric_name::String
+    model_results::Dict{String, ModelEvaluationResult}
+    best_model::String
+    tier1_optimizer_results::Dict{String, OptimizerResult}
+    tier2_optimizer_results::Dict{String, OptimizerResult}
+end
+
+# Backwards compatibility constructor
+function SingleSizeBenchmarkResult(
+    problem::String,
+    size::Any,
+    model_results::Dict{String, ModelEvaluationResult},
+    best_model::String,
+    optimizer_results::Dict{String, OptimizerResult}
+)
+    return SingleSizeBenchmarkResult(problem, :general, size, "Size", model_results, best_model, optimizer_results, Dict{String, OptimizerResult}())
+end
+
+"""
+    ProblemScalingBenchmarkResult
+
+Aggregated multi-size benchmark results across >= 10 problem sizes:
+- `problem`: problem name
+- `category`: category symbol
+- `size_metric_name`: scaling parameter name
+- `sizes`: vector of sizes tested
+- `size_results`: vector of `SingleSizeBenchmarkResult`
+"""
+struct ProblemScalingBenchmarkResult
+    problem::String
+    category::Symbol
+    size_metric_name::String
+    sizes::Vector{Any}
+    size_results::Vector{SingleSizeBenchmarkResult}
 end

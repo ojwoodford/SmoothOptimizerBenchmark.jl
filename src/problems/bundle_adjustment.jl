@@ -7,7 +7,7 @@ NLLSModel.generatemeasurement(pose::SVector{6, T}, X::SVector{3, U}) where {T, U
 
 function generate_synthetic_ba(ncameras::Int, nlandmarks::Int=ncameras * 5, propvisible::Float64=0.3)
     rng = MersenneTwister(42 + ncameras)
-    prob = NLLSModel(Union{SVector{6, Float64}, SVector{3, Float64}}, SimpleError2{2, Float64, SVector{6, Float64}, SVector{3, Float64}})
+    prob = NLLSModel.Model(Union{SVector{6, Float64}, SVector{3, Float64}}, SimpleError2{2, Float64, SVector{6, Float64}, SVector{3, Float64}})
 
     camoffset = SVector(1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
     for i in 1:ncameras
@@ -47,10 +47,9 @@ function create_bundle_adjustment_problem()
     ProblemDefinition(
         "Sparse Bundle Adjustment",
         :large_sparse,
-        [10, 20],
+        Any[5, 10, 15, 20, 30, 45, 65, 90, 130, 200],
         sz -> begin
             if sz isa String
-                # Dataset name from BAM
                 bam_model = BundleAdjustmentModel(sz)
                 x0_bam = copy(bam_model.meta.x0)
                 m_bam = ModelDefinition(
@@ -78,39 +77,11 @@ function create_bundle_adjustment_problem()
             end
         end,
         [
-            OptimizerDefinition("SecondOrderOptimization (Sparse LM)", model_def -> begin
-                prob = deepcopy(model_def.model isa NLLSModel ? model_def.model : generate_synthetic_ba(10, 50))
-                opt = OptimizationOptions(iterator = :levenbergmarquardt, linsolver = :ldl)
-                _, res = SecondOrderOptimization.optimize!(prob, opt)
-                return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
-            end),
-            OptimizerDefinition("SecondOrderOptimization (Sparse Dogleg)", model_def -> begin
-                prob = deepcopy(model_def.model isa NLLSModel ? model_def.model : generate_synthetic_ba(10, 50))
-                opt = OptimizationOptions(iterator = :dogleg, linsolver = :ldl)
-                _, res = SecondOrderOptimization.optimize!(prob, opt)
-                return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
-            end),
-            OptimizerDefinition("SecondOrderOptimization (Landmarks singles)", model_def -> begin
-                prob = deepcopy(model_def.model isa NLLSModel ? model_def.model : generate_synthetic_ba(10, 50))
-                opt = OptimizationOptions(iterator = :levenbergmarquardt)
-                start_c = NLLSModel.cost(prob)
-                for j in eachindex(prob.variables)
-                    if prob.variables[j] isa SVector{3, Float64}
-                        f_j, fdf_j!, x0_j, H_j = NLLSModel.optimvars(prob, j)
-                        x_opt, _ = SecondOrderOptimization.optimize!(f_j, fdf_j!, x0_j, opt; H=H_j)
-                        prob.variables[j] = x_opt
-                    end
-                end
-                end_c = NLLSModel.cost(prob)
-                return OptimizerResult(0.0, 0, 0, 1, start_c, end_c, true)
-            end),
-            OptimizerDefinition("CaNNOLeS", model_def -> begin
-                # Can run directly on BundleAdjustmentModel or fallback
-                bam = model_def.model isa BundleAdjustmentModel ? model_def.model : BundleAdjustmentModel("problem-49-7776")
-                start_c = NLPModels.obj(bam, bam.meta.x0)
-                stats = cannoles(bam, method=:Newton_noFHess, max_iter=5, max_time=10.0)
-                return OptimizerResult(0.0, 0, 0, stats.iter, start_c, stats.objective, stats.status == :first_order)
-            end)
-        ]
+            OptimizerDefinition("SecondOrderOptimization (Sparse LM)", m -> optimize_soo(m; method=:lm, linsolver=:ldl)),
+            OptimizerDefinition("SecondOrderOptimization (Sparse Dogleg)", m -> optimize_soo(m; method=:dogleg, linsolver=:ldl)),
+            OptimizerDefinition("JSOSolvers (trunk)", m -> optimize_jsosolvers(m; solver=:trunk)),
+            OptimizerDefinition("Ipopt", m -> optimize_ipopt(m))
+        ],
+        "Cameras Ncam"
     )
 end

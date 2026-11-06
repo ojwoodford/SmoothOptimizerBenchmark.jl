@@ -27,7 +27,7 @@ end
 
 function build_chain_nlls(n_poses::Int)
     start_vars = generate_chain_start_vars(n_poses)
-    chain_prob = NLLSModel(SVector{3, Float64}, Union{BenchChainLink, BenchChainAnchor})
+    chain_prob = NLLSModel.Model(SVector{3, Float64}, Union{BenchChainLink, BenchChainAnchor})
     for v in start_vars
         addvariable!(chain_prob, v)
     end
@@ -57,11 +57,53 @@ function chain_residuals!(out, x_flat, n_poses)
     return out
 end
 
+function chain_jac!(J::SparseMatrixCSC, x_flat, n_poses)
+    fill!(nonzeros(J), 0.0)
+    J[1, 1] = 1.0
+    J[2, 2] = 1.0
+    J[3, 3] = 1.0
+    for i in 1:n_poses-1
+        r_start = 4 + 3*(i-1)
+        c_a = 3*i - 2
+        c_b = 3*i + 1
+        for k in 0:2
+            a_val = x_flat[c_a + k]
+            J[r_start + k, c_a + k] = -1.0 + 0.1 * cos(a_val)
+            J[r_start + k, c_b + k] = 1.0
+        end
+    end
+    return J
+end
+
+function build_chain_sparse_jacobian(n_poses::Int)
+    m_res = 3 * n_poses
+    n_vars = 3 * n_poses
+    rows = Int[]
+    cols = Int[]
+    for j in 1:3
+        push!(rows, j)
+        push!(cols, j)
+    end
+    for i in 1:n_poses-1
+        r_start = 4 + 3*(i-1)
+        c_a = 3*i - 2
+        c_b = 3*i + 1
+        for k in 0:2
+            push!(rows, r_start + k)
+            push!(cols, c_a + k)
+            push!(rows, r_start + k)
+            push!(cols, c_b + k)
+        end
+    end
+    vals = zeros(Float64, length(rows))
+    return sparse(rows, cols, vals, m_res, n_vars)
+end
+
 function create_pose_chain_problem()
     ProblemDefinition(
         "Nonlinear 3D Pose Chain",
         :large_sparse,
-        [10, 20, 50],
+        Any[5, 10, 20, 40, 75, 150, 300, 500, 800, 1200],
         n_poses -> begin
             start_vars = generate_chain_start_vars(n_poses)
             x_flat = reduce(vcat, [collect(v) for v in start_vars])
@@ -77,13 +119,16 @@ function create_pose_chain_problem()
                 () -> copyto!(nlls_prob.variables, start_vars)
             )
 
-            # Model 2: LeastSquaresOptim
+            # Model 2: LeastSquaresOptim (Sparse)
             r_buf = zeros(Float64, m_res)
             x_lso = copy(x_flat)
+            J_sp = build_chain_sparse_jacobian(n_poses)
+            chain_jac!(J_sp, x_flat, n_poses)
             f!(r, x) = chain_residuals!(r, x, n_poses)
-            lsp = LeastSquaresProblem(x=x_lso, f! = f!, output_length=m_res, autodiff=:forward)
+            g!(J, x) = chain_jac!(J, x, n_poses)
+            lsp = LeastSquaresProblem(x=x_lso, y=r_buf, f! = f!, g! = g!, J=J_sp)
             m_lso = ModelDefinition(
-                "LeastSquaresOptim",
+                "LeastSquaresOptim (Sparse)",
                 lsp,
                 () -> begin
                     f!(r_buf, x_lso)
@@ -91,36 +136,18 @@ function create_pose_chain_problem()
                 end,
                 () -> begin
                     f!(r_buf, x_lso)
-                    return (0.5 * sum(abs2, r_buf), r_buf)
+                    g!(J_sp, x_lso)
+                    return (0.5 * sum(abs2, r_buf), J_sp)
                 end,
-                () -> copyto!(x_lso, x_flat)
+                () -> begin
+                    copyto!(x_lso, x_flat)
+                    chain_jac!(J_sp, x_flat, n_poses)
+                end
             )
 
             return [m_nlls, m_lso]
         end,
-        [
-            OptimizerDefinition("SecondOrderOptimization (Sparse LM)", model_def -> begin
-                p = deepcopy(model_def.model)
-                opt = OptimizationOptions(iterator = :levenbergmarquardt, linsolver = :ldl)
-                _, res = SecondOrderOptimization.optimize!(p, opt)
-                return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
-            end),
-            OptimizerDefinition("SecondOrderOptimization (Sparse Dogleg)", model_def -> begin
-                p = deepcopy(model_def.model)
-                opt = OptimizationOptions(iterator = :dogleg, linsolver = :ldl)
-                _, res = SecondOrderOptimization.optimize!(p, opt)
-                return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
-            end),
-            OptimizerDefinition("LeastSquaresOptim (LM)", model_def -> begin
-                n_poses = model_def.model isa NLLSModel ? length(model_def.model.variables) : (length(model_def.model.x) ÷ 3)
-                start_vars = generate_chain_start_vars(n_poses)
-                x_flat = reduce(vcat, [collect(v) for v in start_vars])
-                m_res = 3 * n_poses
-                lsp = LeastSquaresProblem(x=copy(x_flat), f! = (r, x) -> chain_residuals!(r, x, n_poses), output_length=m_res, autodiff=:forward)
-                start_c = 0.5 * sum(abs2, chain_residuals!(zeros(m_res), x_flat, n_poses))
-                res = LeastSquaresOptim.optimize!(lsp, LeastSquaresOptim.LevenbergMarquardt(); iterations=1000)
-                return OptimizerResult(0.0, 0, 0, res.iterations, start_c, res.ssr * 0.5, res.converged)
-            end)
-        ]
+        get_tier1_optimizers(),
+        "Poses N"
     )
 end

@@ -29,8 +29,8 @@ using CaNNOLeS
 include("types.jl")
 include("adapters.jl")
 include("harness.jl")
+include("plotting.jl")
 
-include("problems/rosenbrock_2d.jl")
 include("problems/curve_fitting.jl")
 include("problems/affine_alignment.jl")
 include("problems/rosenbrock_dense.jl")
@@ -40,7 +40,6 @@ include("problems/robust_procrustes.jl")
 include("problems/bundle_adjustment.jl")
 
 export get_all_problems
-export create_rosenbrock_2d_problem
 export create_curve_fitting_problem
 export create_affine_alignment_problem
 export create_rosenbrock_dense_problem
@@ -48,6 +47,10 @@ export create_rosenbrock_sparse_problem
 export create_pose_chain_problem
 export create_robust_procrustes_problem
 export create_bundle_adjustment_problem
+
+export run_problem_benchmark, run_scaling_benchmark, run_all_scaling_benchmarks
+export save_benchmark_results, load_benchmark_results
+export problem_slug, plot_model_scaling, plot_optimizer_scaling, generate_all_plots
 
 """
     get_all_problems() -> Vector{ProblemDefinition}
@@ -57,11 +60,10 @@ large dense, large sparse, and non-Euclidean manifold problems.
 """
 function get_all_problems()
     return ProblemDefinition[
-        create_rosenbrock_2d_problem(),
+        create_rosenbrock_sparse_problem(),
         create_curve_fitting_problem(),
         create_affine_alignment_problem(),
         create_rosenbrock_dense_problem(),
-        create_rosenbrock_sparse_problem(),
         create_pose_chain_problem(),
         create_robust_procrustes_problem(),
         create_bundle_adjustment_problem()

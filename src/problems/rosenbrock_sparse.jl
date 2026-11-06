@@ -63,11 +63,11 @@ function build_sparse_nlls(n::Int)
     costs = NLLSModel.CostStruct{Union{RosenDiagSparse, RosenOffDiagSparse}}()
     append!(get(costs, RosenDiagSparse), [RosenDiagSparse(rosen_diag_w_sparse, k) for k in 1:n])
     append!(get(costs, RosenOffDiagSparse), [RosenOffDiagSparse(rosen_offdiag_w_sparse, SVector(k, k+1)) for k in 1:n-1])
-    return NLLSModel(rosen_sparse_startpoint(n), costs)
+    return NLLSModel.Model(rosen_sparse_startpoint(n), costs)
 end
 
 function build_sparse_jso(n::Int)
-    model = Model()
+    model = JuMP.Model()
     x0 = rosen_sparse_startpoint(n)
     @variable(model, x[i = 1:n], start = x0[i])
     @NLexpression(model, FA[k = 1:(n - 1)], rosen_offdiag_w_sparse * (x[k + 1] - x[k]^2))
@@ -79,7 +79,7 @@ function create_rosenbrock_sparse_problem()
     ProblemDefinition(
         "Sparse Multi-dimensional Rosenbrock",
         :large_sparse,
-        [16, 64, 256],
+        Any[2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000],
         n -> begin
             x0 = rosen_sparse_startpoint(n)
             len = 2 * n - 1
@@ -129,50 +129,7 @@ function create_rosenbrock_sparse_problem()
 
             return [m_nlls, m_lso, m_nlp]
         end,
-        [
-            OptimizerDefinition("SecondOrderOptimization (Sparse LM)", model_def -> begin
-                p = deepcopy(model_def.model)
-                opt = OptimizationOptions(iterator = :levenbergmarquardt, linsolver = :ldl, maxiters=5000)
-                _, res = SecondOrderOptimization.optimize!(p, opt)
-                return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, res.bestcost < 1e-4)
-            end),
-            OptimizerDefinition("LeastSquaresOptim (Sparse LM)", model_def -> begin
-                n = length(rosen_sparse_startpoint(model_def.model isa NLLSModel ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
-                lsp = build_sparse_lso(n)
-                start_c = 0.5 * sum(abs2, rosenbrock_sparse_res!(zeros(2*n - 1), lsp.x))
-                res = LeastSquaresOptim.optimize!(lsp, LeastSquaresOptim.LevenbergMarquardt(); iterations=5000)
-                return OptimizerResult(0.0, 0, 0, res.iterations, start_c, res.ssr * 0.5, res.converged)
-            end),
-            OptimizerDefinition("Ipopt", model_def -> begin
-                n = length(rosen_sparse_startpoint(model_def.model isa NLLSModel ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
-                model = Model(Ipopt.Optimizer)
-                x0 = rosen_sparse_startpoint(n)
-                @variable(model, x[i in 1:n], start = x0[i])
-                @variable(model, residuals[1:2*n-1])
-                @constraints(model, begin
-                    [k in 1:(n - 1)], residuals[k] == rosen_offdiag_w_sparse * (x[k + 1] - x[k]^2) 
-                    [k in 1:n], residuals[n-1+k] == rosen_diag_w_sparse * (x[k] - 1.0)
-                end)
-                @objective(model, Min, 0.5 * sum(residuals .^ 2))
-                set_silent(model)
-                JuMP.optimize!(model)
-                start_c = 0.5 * sum(abs2, rosenbrock_sparse_res!(zeros(2*n - 1), x0))
-                return OptimizerResult(0.0, 0, 0, MOI.get(model, MOI.BarrierIterations()), start_c, objective_value(model), true)
-            end),
-            OptimizerDefinition("JSOSolvers (trunk)", model_def -> begin
-                n = length(rosen_sparse_startpoint(model_def.model isa NLLSModel ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
-                nls = build_sparse_jso(n)
-                res = JSOSolvers.trunk(nls)
-                start_c = NLPModels.obj(nls, rosen_sparse_startpoint(n))
-                return OptimizerResult(0.0, 0, 0, res.iter, start_c, res.objective, res.status == :first_order)
-            end),
-            OptimizerDefinition("JSOSolvers (tron)", model_def -> begin
-                n = length(rosen_sparse_startpoint(model_def.model isa NLLSModel ? length(model_def.model.variables) : (model_def.model isa LeastSquaresProblem ? length(model_def.model.x) : model_def.model.meta.nvar)))
-                nls = build_sparse_jso(n)
-                res = JSOSolvers.tron(nls)
-                start_c = NLPModels.obj(nls, rosen_sparse_startpoint(n))
-                return OptimizerResult(0.0, 0, 0, res.iter, start_c, res.objective, res.status == :first_order)
-            end)
-        ]
+        get_tier1_optimizers(),
+        "Variables n"
     )
 end

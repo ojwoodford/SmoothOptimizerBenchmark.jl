@@ -42,14 +42,14 @@ function create_curve_fitting_problem()
     ProblemDefinition(
         "Exponential Curve Fitting",
         :small_dense,
-        [20, 50, 100],
+        Any[10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000],
         n_points -> begin
             t_pts, y_data = generate_exp_data(n_points)
             p0_static = SVector(1.0, 1.0, 1.0)
             p0_vec = [1.0, 1.0, 1.0]
 
             # Model 1: NLLSModel
-            nlls_prob = NLLSModel(SVector{3, Float64}, ExpFitResidual)
+            nlls_prob = NLLSModel.Model(SVector{3, Float64}, ExpFitResidual)
             addvariable!(nlls_prob, p0_static)
             for i in 1:n_points
                 addcost!(nlls_prob, ExpFitResidual(t_pts[i], y_data[i]))
@@ -101,7 +101,7 @@ function create_curve_fitting_problem()
             end
             m_soo = ModelDefinition(
                 "SecondOrderOpt",
-                p_soo,
+                lsp, # Using lsp allows all adapters to run on m_soo if needed
                 () -> f_soo(p_soo),
                 () -> (fdf_soo!(g_buf, H_buf, p_soo), (g_buf, H_buf)),
                 () -> copyto!(p_soo, p0_vec)
@@ -109,83 +109,7 @@ function create_curve_fitting_problem()
 
             return [m_nlls, m_lso, m_soo]
         end,
-        [
-            OptimizerDefinition("SecondOrderOptimization (Dogleg)", model_def -> begin
-                opt = OptimizationOptions(iterator = :dogleg)
-                if model_def.model isa NLLSModel || model_def.model isa LeastSquaresProblem
-                    p = deepcopy(model_def.model)
-                    _, res = SecondOrderOptimization.optimize!(p, opt)
-                    return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
-                else
-                    p0 = copy(model_def.model)
-                    n_pts = 20
-                    t_pts, y_data = generate_exp_data(n_pts)
-                    r_buf = zeros(Float64, n_pts)
-                    J_buf = zeros(Float64, n_pts, 3)
-                    f(p) = (exp_residuals!(r_buf, p, t_pts, y_data); 0.5 * sum(abs2, r_buf))
-                    fdf!(g, H, p) = begin
-                        exp_residuals!(r_buf, p, t_pts, y_data)
-                        exp_jacobian!(J_buf, p, t_pts)
-                        mul!(g, J_buf', r_buf)
-                        mul!(H, J_buf', J_buf)
-                        return 0.5 * sum(abs2, r_buf)
-                    end
-                    _, res = SecondOrderOptimization.optimize(f, fdf!, p0, opt)
-                    return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
-                end
-            end),
-            OptimizerDefinition("SecondOrderOptimization (LM)", model_def -> begin
-                opt = OptimizationOptions(iterator = :levenbergmarquardt)
-                if model_def.model isa NLLSModel || model_def.model isa LeastSquaresProblem
-                    p = deepcopy(model_def.model)
-                    _, res = SecondOrderOptimization.optimize!(p, opt)
-                    return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
-                else
-                    p0 = copy(model_def.model)
-                    n_pts = 20
-                    t_pts, y_data = generate_exp_data(n_pts)
-                    r_buf = zeros(Float64, n_pts)
-                    J_buf = zeros(Float64, n_pts, 3)
-                    f(p) = (exp_residuals!(r_buf, p, t_pts, y_data); 0.5 * sum(abs2, r_buf))
-                    fdf!(g, H, p) = begin
-                        exp_residuals!(r_buf, p, t_pts, y_data)
-                        exp_jacobian!(J_buf, p, t_pts)
-                        mul!(g, J_buf', r_buf)
-                        mul!(H, J_buf', J_buf)
-                        return 0.5 * sum(abs2, r_buf)
-                    end
-                    _, res = SecondOrderOptimization.optimize(f, fdf!, p0, opt)
-                    return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
-                end
-            end),
-            OptimizerDefinition("LeastSquaresOptim (Dogleg)", model_def -> begin
-                lsp = if model_def.model isa LeastSquaresProblem
-                    deepcopy(model_def.model)
-                else
-                    n_pts = model_def.model isa NLLSModel ? length(model_def.model.costs[ExpFitResidual]) : 20
-                    t_pts, y_data = generate_exp_data(n_pts)
-                    LeastSquaresProblem(x=[1.0, 1.0, 1.0], f! = (r, p) -> exp_residuals!(r, p, t_pts, y_data), g! = (J, p) -> exp_jacobian!(J, p, t_pts), output_length=n_pts)
-                end
-                r0 = zeros(Float64, length(lsp.y))
-                lsp.f!(r0, lsp.x)
-                start_c = 0.5 * sum(abs2, r0)
-                res = LeastSquaresOptim.optimize!(lsp, LeastSquaresOptim.Dogleg())
-                return OptimizerResult(0.0, 0, 0, res.iterations, start_c, res.ssr * 0.5, res.converged)
-            end),
-            OptimizerDefinition("LeastSquaresOptim (LM)", model_def -> begin
-                lsp = if model_def.model isa LeastSquaresProblem
-                    deepcopy(model_def.model)
-                else
-                    n_pts = model_def.model isa NLLSModel ? length(model_def.model.costs[ExpFitResidual]) : 20
-                    t_pts, y_data = generate_exp_data(n_pts)
-                    LeastSquaresProblem(x=[1.0, 1.0, 1.0], f! = (r, p) -> exp_residuals!(r, p, t_pts, y_data), g! = (J, p) -> exp_jacobian!(J, p, t_pts), output_length=n_pts)
-                end
-                r0 = zeros(Float64, length(lsp.y))
-                lsp.f!(r0, lsp.x)
-                start_c = 0.5 * sum(abs2, r0)
-                res = LeastSquaresOptim.optimize!(lsp, LeastSquaresOptim.LevenbergMarquardt())
-                return OptimizerResult(0.0, 0, 0, res.iterations, start_c, res.ssr * 0.5, res.converged)
-            end)
-        ]
+        get_tier1_optimizers(),
+        "Data Points m"
     )
 end

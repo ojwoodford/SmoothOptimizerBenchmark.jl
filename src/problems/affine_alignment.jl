@@ -38,14 +38,14 @@ function create_affine_alignment_problem()
     ProblemDefinition(
         "Dense Affine Alignment",
         :large_dense,
-        [2, 4, 8],
+        Any[2, 3, 4, 5, 6, 7, 8, 9, 10, 12],
         n -> begin
             X, Y, D = generate_affine_data(n)
             start_vec = zeros(n * n + n)
             start_vec[1:n+1:end] .= 1.0
 
             # Model 1: NLLSModel Problem
-            nlls_prob = NLLSModel(Vector{Float64}, AffineResidual)
+            nlls_prob = NLLSModel.Model(Vector{Float64}, AffineResidual)
             addvariable!(nlls_prob, copy(start_vec))
             addcost!(nlls_prob, AffineResidual(X, Y, D))
             m_nlls = ModelDefinition(
@@ -84,31 +84,7 @@ function create_affine_alignment_problem()
 
             return [m_nlls, m_lso]
         end,
-        [
-            OptimizerDefinition("SecondOrderOptimization (LM)", model_def -> begin
-                opt = OptimizationOptions(iterator = :levenbergmarquardt, maxiters = 5000)
-                p = deepcopy(model_def.model)
-                _, res = SecondOrderOptimization.optimize!(p, opt)
-                return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, res.bestcost < 1e-4)
-            end),
-            OptimizerDefinition("LeastSquaresOptim (LM)", model_def -> begin
-                lsp = model_def.model isa LeastSquaresProblem ? deepcopy(model_def.model) : begin
-                    n = size(model_def.model.costs[AffineResidual][1].X, 1)
-                    X, Y, D = generate_affine_data(n)
-                    start_vec = zeros(n*n+n)
-                    start_vec[1:n+1:end] .= 1.0
-                    LeastSquaresProblem(x=copy(start_vec), f! = (out, x) -> (out .= affine_resfun(x, X, Y, D)), output_length=length(D), autodiff=:forward)
-                end
-                start_c = 0.5 * sum(abs2, lsp.y)
-                res = LeastSquaresOptim.optimize!(lsp, LeastSquaresOptim.LevenbergMarquardt(); iterations=5000)
-                return OptimizerResult(0.0, 0, 0, res.iterations, start_c, res.ssr * 0.5, res.converged)
-            end),
-            OptimizerDefinition("SecondOrderOptimization (Dogleg)", model_def -> begin
-                opt = OptimizationOptions(iterator = :dogleg, maxiters = 5000)
-                p = deepcopy(model_def.model)
-                _, res = SecondOrderOptimization.optimize!(p, opt)
-                return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, res.bestcost < 1e-4)
-            end)
-        ]
+        get_tier1_optimizers(),
+        "Dimension n"
     )
 end

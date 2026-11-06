@@ -100,7 +100,7 @@ NLLSModel.robustkernel(::SpecializedProcrustesResidual) = procrustes_huber_kerne
 Base.eltype(::SpecializedProcrustesResidual) = Float64
 
 function get_procrustes_dim(model)
-    if model isa NLLSModel
+    if model isa NLLSModel.Model
         v = model.variables[1]
         return hasfield(typeof(v), :point) ? size(v.point, 1) : size(v.R, 1)
     else
@@ -112,7 +112,7 @@ function create_robust_procrustes_problem()
     ProblemDefinition(
         "Robust Procrustes on SO(d)",
         :manifold,
-        [3, 4, 5],
+        Any[2, 3, 4, 5, 6, 7, 8, 9, 10, 12],
         d -> begin
             A, B, M, _ = generate_procrustes_experiment(d)
             n = size(A, 2)
@@ -120,7 +120,7 @@ function create_robust_procrustes_problem()
 
             # Model 1: NLLSModel with OptimizationVariableInterface.ManifoldVar
             var_ovi = ManifoldVar(copy(p0), M)
-            nlls_ovi = NLLSModel(typeof(var_ovi), ProcrustesOVIResidual)
+            nlls_ovi = NLLSModel.Model(typeof(var_ovi), ProcrustesOVIResidual)
             addvariable!(nlls_ovi, var_ovi)
             for i in 1:n
                 addcost!(nlls_ovi, ProcrustesOVIResidual(A[:, i], B[:, i]))
@@ -135,7 +135,7 @@ function create_robust_procrustes_problem()
 
             # Model 2: NLLSModel with Specialized SMatrix Rotation
             R0_static = SMatrix{d, d, Float64, d * d}(p0)
-            nlls_spec = NLLSModel([SpecializedRotation(R0_static)], SpecializedProcrustesResidual{d})
+            nlls_spec = NLLSModel.Model([SpecializedRotation(R0_static)], SpecializedProcrustesResidual{d})
             for i in 1:n
                 addcost!(nlls_spec, SpecializedProcrustesResidual{d}(SVector{d, Float64}(A[:, i]), SVector{d, Float64}(B[:, i])))
             end
@@ -177,7 +177,7 @@ function create_robust_procrustes_problem()
         end,
         [
             OptimizerDefinition("SecondOrderOptimization (LM)", model_def -> begin
-                prob = if model_def.model isa NLLSModel
+                prob = if model_def.model isa NLLSModel.Model
                     deepcopy(model_def.model)
                 else
                     d = get_procrustes_dim(model_def.model)
@@ -185,17 +185,17 @@ function create_robust_procrustes_problem()
                     n = size(A, 2)
                     p0 = Matrix{Float64}(I, d, d)
                     var_ovi = ManifoldVar(copy(p0), M)
-                    p = NLLSModel(typeof(var_ovi), ProcrustesOVIResidual)
+                    p = NLLSModel.Model(typeof(var_ovi), ProcrustesOVIResidual)
                     addvariable!(p, var_ovi)
                     for i in 1:n; addcost!(p, ProcrustesOVIResidual(A[:, i], B[:, i])); end
                     p
                 end
-                opt = OptimizationOptions(iterator = :levenbergmarquardt, maxiters=500)
+                opt = OptimizationOptions(iterator = :levenbergmarquardt, maxiters=100, maxtime=2.0)
                 _, res = SecondOrderOptimization.optimize!(prob, opt)
                 return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
             end),
             OptimizerDefinition("SecondOrderOptimization (Dogleg)", model_def -> begin
-                prob = if model_def.model isa NLLSModel
+                prob = if model_def.model isa NLLSModel.Model
                     deepcopy(model_def.model)
                 else
                     d = get_procrustes_dim(model_def.model)
@@ -203,12 +203,12 @@ function create_robust_procrustes_problem()
                     n = size(A, 2)
                     p0 = Matrix{Float64}(I, d, d)
                     var_ovi = ManifoldVar(copy(p0), M)
-                    p = NLLSModel(typeof(var_ovi), ProcrustesOVIResidual)
+                    p = NLLSModel.Model(typeof(var_ovi), ProcrustesOVIResidual)
                     addvariable!(p, var_ovi)
                     for i in 1:n; addcost!(p, ProcrustesOVIResidual(A[:, i], B[:, i])); end
                     p
                 end
-                opt = OptimizationOptions(iterator = :dogleg, maxiters=500)
+                opt = OptimizationOptions(iterator = :dogleg, maxiters=100, maxtime=2.0)
                 _, res = SecondOrderOptimization.optimize!(prob, opt)
                 return OptimizerResult(0.0, 0, 0, res.niterations, res.startcost, res.bestcost, true)
             end),
@@ -234,7 +234,7 @@ function create_robust_procrustes_problem()
                     return J
                 end
                 start_c = 0.5 * sum(abs2, f(M, p0))
-                state = Manopt.LevenbergMarquardt(M, f, jac_f, copy(p0), k_len; return_state=true, max_iterations=500)
+                state = Manopt.LevenbergMarquardt(M, f, jac_f, copy(p0), k_len; return_state=true, max_iterations=100)
                 inner = state isa Manopt.DebugSolverState ? state.state : state
                 p_sol = Manopt.get_solver_result(state)
                 final_c = 0.5 * sum(abs2, f(M, p_sol))
