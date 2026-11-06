@@ -47,16 +47,11 @@ end
 Selects the model with the fastest cost+linear system evaluation time.
 """
 function select_best_model(models::Vector{<:ModelDefinition}, results::Dict{String, ModelEvaluationResult})
-    best_name = first(keys(results))
-    best_time = results[best_name].linsys_time_ns
-    for (name, res) in results
-        if res.linsys_time_ns < best_time
-            best_time = res.linsys_time_ns
-            best_name = name
-        end
+    valid_models = filter(m -> haskey(results, m.name) && !isnan(results[m.name].linsys_time_ns) && !isinf(results[m.name].linsys_time_ns), models)
+    if isempty(valid_models)
+        return first(models)
     end
-    idx = findfirst(m -> m.name == best_name, models)
-    return models[idx]
+    return argmin(m -> results[m.name].linsys_time_ns, valid_models)
 end
 
 """
@@ -157,7 +152,7 @@ end
 For each optimizer, performs a warmup run on both the smallest and largest problem size
 with run time limited to 1s to trigger JIT compilation for both small and large code paths.
 """
-function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; verbose=true)
+function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model_name=nothing, verbose=true)
     isempty(sizes) && return
     warmup_sizes = unique([first(sizes), last(sizes)])
     if verbose
@@ -186,9 +181,14 @@ function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; verbose=true
         best_m = select_best_model(models, bench_res)
         common_m = find_common_model(models)
 
-        # Tier 1 warmup (1s limit)
+        # Tier 1 warmup (1s limit) on target model
+        target = if target_model_name !== nothing
+            idx = findfirst(m -> m.name == target_model_name, models)
+            idx !== nothing ? models[idx] : best_m
+        else
+            best_m
+        end
         for opt in prob.compatible_optimizers
-            target = (best_m.model isa NLLSModel.Model || common_m === nothing) ? best_m : common_m
             try
                 target.reset!()
                 opt.optimize(target; time_limit=1.0)
@@ -217,15 +217,15 @@ function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; verbose=true
 end
 
 """
-    run_problem_benchmark(prob::ProblemDefinition, size; samples=nothing, verbose=true) -> SingleSizeBenchmarkResult
+    run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=nothing, samples=nothing, verbose=true) -> SingleSizeBenchmarkResult
 
 Executes the two-phase benchmark for a single problem and size:
 1. Model evaluation comparison (cost vs linear system)
-2. Best model selection
+2. Best model selection (or target model determined by largest problem size)
 3. Tier 1 optimizer comparison on the best model
 4. Tier 2 optimizer comparison on the universal common model (when available)
 """
-function run_problem_benchmark(prob::ProblemDefinition, size; samples=nothing, verbose=true)
+function run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=nothing, samples=nothing, verbose=true)
     if verbose
         println("\n" * "="^85)
         println("PROBLEM: $(prob.name) [Category: $(prob.category), $(prob.size_metric_name): $size]")
@@ -235,7 +235,12 @@ function run_problem_benchmark(prob::ProblemDefinition, size; samples=nothing, v
     model_samples = samples !== nothing ? max(1, Int(samples)) : 5
     models = prob.generate_models(size)
     model_results = run_model_benchmarks(models; samples=model_samples)
-    best_model = select_best_model(models, model_results)
+    best_model = if target_model_name !== nothing
+        idx = findfirst(m -> m.name == target_model_name, models)
+        idx !== nothing ? models[idx] : select_best_model(models, model_results)
+    else
+        select_best_model(models, model_results)
+    end
     common_model = find_common_model(models)
 
     if verbose
@@ -246,7 +251,7 @@ function run_problem_benchmark(prob::ProblemDefinition, size; samples=nothing, v
             r = model_results[m.name]
             cost_str = @sprintf("%.2f μs (%d b)", r.cost_time_ns / 1e3, r.cost_bytes)
             linsys_str = @sprintf("%.2f μs (%d b)", r.linsys_time_ns / 1e3, r.linsys_bytes)
-            star = m.name == best_model.name ? " ★ (fastest)" : ""
+            star = m.name == best_model.name ? " ★ (target)" : ""
             println(@sprintf("%-32s | %-16s | %-16s%s", m.name, cost_str, linsys_str, star))
         end
     end
@@ -313,21 +318,119 @@ end
     run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes, samples=nothing, verbose=true) -> ProblemScalingBenchmarkResult
 
 Runs the benchmark across all specified problem sizes (collecting at least 10 problem sizes for scaling).
-Performs 1s warmup on both smallest and largest problem sizes before collecting benchmark data.
+Performs model evaluation across all sizes, determines the winning model from the largest problem size,
+warms up the optimizers, and then benchmarks the optimizers across all sizes on that winning model.
 """
 function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes, samples=nothing, verbose=true)
     if verbose
         println("\n>>> STARTING SCALING BENCHMARK FOR $(prob.name) [$(length(sizes)) SIZES] <<<")
     end
 
-    # Warmup both smallest and largest sizes for each optimizer (1s time limit)
-    warmup_problem_optimizers!(prob, sizes; verbose=verbose)
+    model_samples = samples !== nothing ? max(1, Int(samples)) : 5
 
-    size_results = SingleSizeBenchmarkResult[]
-    for sz in sizes
-        res = run_problem_benchmark(prob, sz; samples=samples, verbose=verbose)
-        push!(size_results, res)
+    # 1. Benchmark all models across all sizes first
+    all_models = Vector{Vector{ModelDefinition}}(undef, length(sizes))
+    all_model_results = Vector{Dict{String, ModelEvaluationResult}}(undef, length(sizes))
+    for (i, sz) in enumerate(sizes)
+        models = prob.generate_models(sz)
+        all_models[i] = models
+        all_model_results[i] = run_model_benchmarks(models; samples=model_samples)
     end
+
+    # 2. Determine fastest model on the largest problem size directly from Phase 1 results (no re-computation)
+    largest_idx = length(sizes)
+    fastest_on_largest = select_best_model(all_models[largest_idx], all_model_results[largest_idx])
+    winning_model_name = fastest_on_largest.name
+    if verbose
+        println(">>> Selected fastest model on largest size ($(last(sizes))): $(winning_model_name) <<<")
+    end
+
+    # 3. Warmup both smallest and largest sizes for each optimizer (1s time limit)
+    warmup_problem_optimizers!(prob, sizes; target_model_name=winning_model_name, verbose=verbose)
+
+    # 4. Benchmark optimizers across all sizes on the winning model
+    size_results = SingleSizeBenchmarkResult[]
+    for (i, sz) in enumerate(sizes)
+        models = all_models[i]
+        m_results = all_model_results[i]
+        target_idx = findfirst(m -> m.name == winning_model_name, models)
+        target_model = target_idx !== nothing ? models[target_idx] : select_best_model(models, m_results)
+        common_model = find_common_model(models)
+
+        if verbose
+            println("\n" * "="^85)
+            println("PROBLEM: $(prob.name) [Category: $(prob.category), $(prob.size_metric_name): $sz]")
+            println("="^85)
+            println("\n--- [Phase 1: Model Evaluation Benchmarks] ---")
+            println(@sprintf("%-32s | %-16s | %-16s", "Model Implementation", "Cost Eval", "Cost + Linear Sys"))
+            println("-"^85)
+            for m in models
+                r = m_results[m.name]
+                cost_str = @sprintf("%.2f μs (%d b)", r.cost_time_ns / 1e3, r.cost_bytes)
+                linsys_str = @sprintf("%.2f μs (%d b)", r.linsys_time_ns / 1e3, r.linsys_bytes)
+                star = m.name == target_model.name ? " ★ (target)" : ""
+                println(@sprintf("%-32s | %-16s | %-16s%s", m.name, cost_str, linsys_str, star))
+            end
+        end
+
+        # Phase 2A: Tier 1 Optimizers on Target Model
+        tier1_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; samples=samples)
+
+        if verbose
+            println("\n--- [Phase 2A: Compatible Optimizers on Best Model: $(target_model.name)] ---")
+            println(@sprintf("%-32s | %-14s | %-12s | %-8s | %-12s", "Optimizer", "Runtime", "Allocs", "Iters", "Final Cost"))
+            println("-"^85)
+            for opt in prob.compatible_optimizers
+                if haskey(tier1_results, opt.name)
+                    r = tier1_results[opt.name]
+                    time_str = isnan(r.time_ns) ? "FAILED" : @sprintf("%.2f μs", r.time_ns / 1e3)
+                    alloc_str = @sprintf("%d (%d b)", r.allocs, r.bytes)
+                    iter_str = string(r.iterations)
+                    cost_str = isnan(r.final_cost) ? "NaN" : @sprintf("%.4e", r.final_cost)
+                    println(@sprintf("%-32s | %-14s | %-12s | %-8s | %-12s", opt.name, time_str, alloc_str, iter_str, cost_str))
+                end
+            end
+        end
+
+        # Phase 2B: Tier 2 Optimizers on Common Model (if available and different from target_model)
+        tier2_results = Dict{String, OptimizerResult}()
+        if common_model !== nothing && prob.category != :manifold
+            t2_opts = get_tier2_optimizers()
+            tier2_results = run_optimizer_benchmarks(t2_opts, common_model; samples=samples)
+
+            if verbose
+                println("\n--- [Phase 2B: Universal Comparison on Common Model: $(common_model.name)] ---")
+                println(@sprintf("%-32s | %-14s | %-12s | %-8s | %-12s", "Optimizer", "Runtime", "Allocs", "Iters", "Final Cost"))
+                println("-"^85)
+                for opt in t2_opts
+                    if haskey(tier2_results, opt.name)
+                        r = tier2_results[opt.name]
+                        time_str = isnan(r.time_ns) ? "FAILED" : @sprintf("%.2f μs", r.time_ns / 1e3)
+                        alloc_str = @sprintf("%d (%d b)", r.allocs, r.bytes)
+                        iter_str = string(r.iterations)
+                        cost_str = isnan(r.final_cost) ? "NaN" : @sprintf("%.4e", r.final_cost)
+                        println(@sprintf("%-32s | %-14s | %-12s | %-8s | %-12s", opt.name, time_str, alloc_str, iter_str, cost_str))
+                    end
+                end
+            end
+        end
+
+        if verbose
+            println("="^85)
+        end
+
+        push!(size_results, SingleSizeBenchmarkResult(
+            prob.name,
+            prob.category,
+            sz,
+            prob.size_metric_name,
+            m_results,
+            target_model.name,
+            tier1_results,
+            tier2_results
+        ))
+    end
+
     return ProblemScalingBenchmarkResult(
         prob.name,
         prob.category,

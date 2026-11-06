@@ -46,6 +46,10 @@ using SmoothOptimizerBenchmark
             @test !isempty(res.best_model)
             @test !isempty(res.tier1_optimizer_results)
             @test haskey(res.model_results, res.best_model)
+
+            # Harness must run optimizers on the fastest model (minimum linsys_time_ns)
+            min_linsys = minimum(r.linsys_time_ns for (name, r) in res.model_results)
+            @test res.model_results[res.best_model].linsys_time_ns == min_linsys
         end
     end
 

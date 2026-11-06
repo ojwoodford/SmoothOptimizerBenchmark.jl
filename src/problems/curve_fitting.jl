@@ -54,11 +54,14 @@ function create_curve_fitting_problem()
             for i in 1:n_points
                 addcost!(nlls_prob, ExpFitResidual(t_pts[i], y_data[i]))
             end
+            f_nlls, fdf_nlls!, _, _ = NLLSModel.optimvars(nlls_prob)
+            g_nlls = zeros(Float64, 3)
+            H_nlls = zeros(Float64, 3, 3)
             m_nlls = ModelDefinition(
                 "NLLSModel (Static)",
                 nlls_prob,
                 () -> NLLSModel.cost(nlls_prob),
-                () -> (NLLSModel.cost(nlls_prob), nothing),
+                () -> (fdf_nlls!(g_nlls, H_nlls, nlls_prob.variables[1]), H_nlls),
                 () -> (nlls_prob.variables[1] = p0_static)
             )
 

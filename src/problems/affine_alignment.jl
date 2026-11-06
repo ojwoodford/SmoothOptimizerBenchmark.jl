@@ -48,11 +48,15 @@ function create_affine_alignment_problem()
             nlls_prob = NLLSModel.Model(Vector{Float64}, AffineResidual)
             addvariable!(nlls_prob, copy(start_vec))
             addcost!(nlls_prob, AffineResidual(X, Y, D))
+            f_nlls, fdf_nlls!, _, _ = NLLSModel.optimvars(nlls_prob)
+            n_vars = length(start_vec)
+            g_nlls = zeros(Float64, n_vars)
+            H_nlls = zeros(Float64, n_vars, n_vars)
             m_nlls = ModelDefinition(
                 "NLLSModel",
                 nlls_prob,
                 () -> NLLSModel.cost(nlls_prob),
-                () -> (NLLSModel.cost(nlls_prob), nothing),
+                () -> (fdf_nlls!(g_nlls, H_nlls, nlls_prob.variables[1]), H_nlls),
                 () -> begin
                     nlls_prob.variables[1] .= 0.0
                     nlls_prob.variables[1][1:n+1:end] .= 1.0

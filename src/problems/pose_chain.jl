@@ -111,11 +111,15 @@ function create_pose_chain_problem()
 
             # Model 1: NLLSModel Sparse Block Tridiagonal
             nlls_prob = build_chain_nlls(n_poses)
+            f_nlls, fdf_nlls!, x0_nlls, H_proto_chain = NLLSModel.optimvars(nlls_prob)
+            n_tot_vars = 3 * n_poses
+            g_nlls = zeros(Float64, n_tot_vars)
+            H_buf_chain = H_proto_chain === nothing ? zeros(Float64, n_tot_vars, n_tot_vars) : deepcopy(H_proto_chain)
             m_nlls = ModelDefinition(
                 "NLLSModel (Sparse)",
                 nlls_prob,
                 () -> NLLSModel.cost(nlls_prob),
-                () -> (NLLSModel.cost(nlls_prob), nothing),
+                () -> (fdf_nlls!(g_nlls, H_buf_chain, x0_nlls), H_buf_chain),
                 () -> copyto!(nlls_prob.variables, start_vars)
             )
 

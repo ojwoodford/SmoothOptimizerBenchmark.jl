@@ -54,6 +54,21 @@ NLLSModel.computeresidual(res::ProcrustesOVIResidual, v::ManifoldVar) = res.a - 
 const procrustes_huber_kernel = NLLSModel.Huber2oKernel(1e-5)
 NLLSModel.robustkernel(::ProcrustesOVIResidual) = procrustes_huber_kernel
 
+function NLLSModel.computeresjac(::StaticInt{1}, res::ProcrustesOVIResidual, v::ManifoldVar)
+    r = res.a - v.point * res.b
+    M = v.context.manifold
+    dim_M = manifold_dimension(M)
+    d = length(res.a)
+    J = zeros(Float64, d, dim_M)
+    B_basis = DefaultOrthonormalBasis()
+    for l in 1:dim_M
+        step_vec = [j == l ? 1.0 : 0.0 for j in 1:dim_M]
+        X_l = get_vector(M, v.point, step_vec, B_basis)
+        J[:, l] .= -v.point * X_l * res.b
+    end
+    return r, J
+end
+
 # 2. Specialized closed-form Rotation residual for NLLSModel
 function vec2skew(v, ind, N)
     M = MMatrix{N, N, eltype(v), N*N}(undef)
@@ -99,6 +114,22 @@ NLLSModel.computeresidual(res::SpecializedProcrustesResidual, var::SpecializedRo
 NLLSModel.robustkernel(::SpecializedProcrustesResidual) = procrustes_huber_kernel
 Base.eltype(::SpecializedProcrustesResidual) = Float64
 
+@generated function specialized_jac(res::SpecializedProcrustesResidual{N}, var::SpecializedRotation{N}) where N
+    NV = (N * (N - 1)) ÷ 2
+    exprs = []
+    for i in 1:N
+        for j in i+1:N
+            for row in 1:N
+                push!(exprs, :(res.B[$i] * var.R[$row, $j] - res.B[$j] * var.R[$row, $i]))
+            end
+        end
+    end
+    return :(SMatrix{$N, $NV, Float64, $(N * NV)}($(exprs...)))
+end
+
+NLLSModel.computeresjac(::StaticInt{1}, res::SpecializedProcrustesResidual{N}, var::SpecializedRotation{N}) where N =
+    (NLLSModel.computeresidual(res, var), specialized_jac(res, var))
+
 function get_procrustes_dim(model)
     if model isa NLLSModel.Model
         v = model.variables[1]
@@ -125,11 +156,15 @@ function create_robust_procrustes_problem()
             for i in 1:n
                 addcost!(nlls_ovi, ProcrustesOVIResidual(A[:, i], B[:, i]))
             end
+            f_ovi, fdf_ovi!, _, _ = NLLSModel.optimvars(nlls_ovi)
+            nv_ovi = (d * (d - 1)) ÷ 2
+            g_ovi = zeros(Float64, nv_ovi)
+            H_ovi = zeros(Float64, nv_ovi, nv_ovi)
             m_ovi = ModelDefinition(
                 "NLLSModel (ManifoldVar)",
                 nlls_ovi,
                 () -> NLLSModel.cost(nlls_ovi),
-                () -> (NLLSModel.cost(nlls_ovi), nothing),
+                () -> (fdf_ovi!(g_ovi, H_ovi, nlls_ovi.variables[1]), H_ovi),
                 () -> (nlls_ovi.variables[1] = ManifoldVar(copy(p0), M))
             )
 
@@ -139,11 +174,15 @@ function create_robust_procrustes_problem()
             for i in 1:n
                 addcost!(nlls_spec, SpecializedProcrustesResidual{d}(SVector{d, Float64}(A[:, i]), SVector{d, Float64}(B[:, i])))
             end
+            f_spec, fdf_spec!, _, _ = NLLSModel.optimvars(nlls_spec)
+            nv_spec = (d * (d - 1)) ÷ 2
+            g_spec = zeros(Float64, nv_spec)
+            H_spec = zeros(Float64, nv_spec, nv_spec)
             m_spec = ModelDefinition(
                 "NLLSModel (Specialized)",
                 nlls_spec,
                 () -> NLLSModel.cost(nlls_spec),
-                () -> (NLLSModel.cost(nlls_spec), nothing),
+                () -> (fdf_spec!(g_spec, H_spec, nlls_spec.variables[1]), H_spec),
                 () -> (nlls_spec.variables[1] = SpecializedRotation(R0_static))
             )
 
@@ -184,10 +223,9 @@ function create_robust_procrustes_problem()
                     A, B, M, _ = generate_procrustes_experiment(d)
                     n = size(A, 2)
                     p0 = Matrix{Float64}(I, d, d)
-                    var_ovi = ManifoldVar(copy(p0), M)
-                    p = NLLSModel.Model(typeof(var_ovi), ProcrustesOVIResidual)
-                    addvariable!(p, var_ovi)
-                    for i in 1:n; addcost!(p, ProcrustesOVIResidual(A[:, i], B[:, i])); end
+                    R0_static = SMatrix{d, d, Float64, d * d}(p0)
+                    p = NLLSModel.Model([SpecializedRotation(R0_static)], SpecializedProcrustesResidual{d})
+                    for i in 1:n; addcost!(p, SpecializedProcrustesResidual{d}(SVector{d, Float64}(A[:, i]), SVector{d, Float64}(B[:, i]))); end
                     p
                 end
                 maxtime = time_limit === nothing ? 1e6 : Float64(time_limit)
@@ -207,10 +245,9 @@ function create_robust_procrustes_problem()
                     A, B, M, _ = generate_procrustes_experiment(d)
                     n = size(A, 2)
                     p0 = Matrix{Float64}(I, d, d)
-                    var_ovi = ManifoldVar(copy(p0), M)
-                    p = NLLSModel.Model(typeof(var_ovi), ProcrustesOVIResidual)
-                    addvariable!(p, var_ovi)
-                    for i in 1:n; addcost!(p, ProcrustesOVIResidual(A[:, i], B[:, i])); end
+                    R0_static = SMatrix{d, d, Float64, d * d}(p0)
+                    p = NLLSModel.Model([SpecializedRotation(R0_static)], SpecializedProcrustesResidual{d})
+                    for i in 1:n; addcost!(p, SpecializedProcrustesResidual{d}(SVector{d, Float64}(A[:, i]), SVector{d, Float64}(B[:, i]))); end
                     p
                 end
                 maxtime = time_limit === nothing ? 1e6 : Float64(time_limit)
