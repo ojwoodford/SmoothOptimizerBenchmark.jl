@@ -12,7 +12,7 @@ using SmoothOptimizerBenchmark
             @test prob.category in (:small_dense, :medium_dense, :large_dense, :large_sparse, :manifold)
             @test length(prob.default_sizes) >= 10
             @test !isempty(prob.compatible_optimizers)
-            @test any(opt -> occursin("nllsmodel", lowercase(opt.name)) && occursin("secondorder", lowercase(opt.name)), prob.compatible_optimizers)
+            @test any(opt -> occursin("secondorder", lowercase(opt.name)), prob.compatible_optimizers)
             @test !isempty(prob.size_metric_name)
 
             # Test model generation on smallest size

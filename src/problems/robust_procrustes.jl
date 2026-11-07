@@ -1,5 +1,5 @@
 # Robust Procrustes Problem on SO(d) (Manifold, from Gist cad99d)
-using LinearAlgebra, Manopt, Manifolds, Random, Static, StaticArrays
+using LinearAlgebra, Manopt, Manifolds, Random, Static, StaticArrays, Dates
 using NLLSModel, SecondOrderOptimization, OptimizationVariableInterface
 
 # Generate deterministic data matrix A (d x n)
@@ -183,6 +183,50 @@ function get_procrustes_dim(model)
     end
 end
 
+function get_procrustes_manopt_inplace_components(model_def)
+    if hasproperty(model_def.model, :f!)
+        m = model_def.model
+        return m.M, m.f!, m.jac!, m.p0, m.k, m.f
+    else
+        d = get_procrustes_dim(model_def.model)
+        A, B, M, _ = generate_procrustes_experiment(d)
+        n = size(A, 2)
+        k_len = d * n
+        dim_M = manifold_dimension(M)
+        p0 = Matrix{Float64}(I, d, d)
+        function f_inplace!(M, r, p)
+            @inbounds for i in 1:n
+                for k in 1:d
+                    r[(i-1)*d + k] = A[k, i] - dot(view(p, k, :), view(B, :, i))
+                end
+            end
+            return r
+        end
+        B_basis = DefaultOrthonormalBasis()
+        step_vecs = [[j == l ? 1.0 : 0.0 for j in 1:dim_M] for l in 1:dim_M]
+        X_buf = zeros(d, d)
+        p_X_l = zeros(d, d)
+        function jac_inplace!(M, J, p)
+            @inbounds for l in 1:dim_M
+                get_vector!(M, X_buf, p, step_vecs[l], B_basis)
+                mul!(p_X_l, p, X_buf)
+                for i in 1:n
+                    for k in 1:d
+                        val = 0.0
+                        for m_dim in 1:d
+                            val += p_X_l[k, m_dim] * B[m_dim, i]
+                        end
+                        J[(i-1)*d + k, l] = -val
+                    end
+                end
+            end
+            return J
+        end
+        f_oop(M, p) = f_inplace!(M, zeros(Float64, k_len), p)
+        return M, f_inplace!, jac_inplace!, p0, k_len, f_oop
+    end
+end
+
 function get_procrustes_manopt_components(model_def)
     if hasproperty(model_def.model, :M)
         return model_def.model.M, model_def.model.f, model_def.model.jac, model_def.model.p0, model_def.model.k
@@ -262,33 +306,55 @@ function create_robust_procrustes_problem()
             # Model 3: Manifolds
             k_len = d * n
             dim_M = manifold_dimension(M)
-            f_manopt(M, p) = reduce(vcat, [A[:, i] - p * B[:, i] for i in 1:n])
-            function jac_manopt(M, p)
-                B_basis = DefaultOrthonormalBasis()
-                J = zeros(k_len, dim_M)
-                for l in 1:dim_M
-                    step_vec = [j == l ? 1.0 : 0.0 for j in 1:dim_M]
-                    X_l = get_vector(M, p, step_vec, B_basis)
+            function f_manopt!(M, r, p)
+                @inbounds for i in 1:n
+                    for k in 1:d
+                        r[(i-1)*d + k] = A[k, i] - dot(view(p, k, :), view(B, :, i))
+                    end
+                end
+                return r
+            end
+            B_basis = DefaultOrthonormalBasis()
+            step_vecs = [[j == l ? 1.0 : 0.0 for j in 1:dim_M] for l in 1:dim_M]
+            X_buf = zeros(d, d)
+            p_X_l = zeros(d, d)
+            function jac_manopt!(M, J, p)
+                @inbounds for l in 1:dim_M
+                    get_vector!(M, X_buf, p, step_vecs[l], B_basis)
+                    mul!(p_X_l, p, X_buf)
                     for i in 1:n
-                        dFi = -p * X_l * B[:, i]
-                        J[(i-1)*d+1 : i*d, l] .= dFi
+                        for k in 1:d
+                            val = 0.0
+                            for m_dim in 1:d
+                                val += p_X_l[k, m_dim] * B[m_dim, i]
+                            end
+                            J[(i-1)*d + k, l] = -val
+                        end
                     end
                 end
                 return J
             end
+            f_manopt(M, p) = f_manopt!(M, zeros(Float64, k_len), p)
+            jac_manopt(M, p) = jac_manopt!(M, zeros(Float64, k_len, dim_M), p)
+
             p_curr = copy(p0)
+            r_manopt = zeros(Float64, k_len)
+            J_manopt = zeros(Float64, k_len, dim_M)
             g_manopt = zeros(Float64, dim_M)
             H_manopt = zeros(Float64, dim_M, dim_M)
             m_manopt = ModelDefinition(
                 "Manifolds",
-                (M = M, f = f_manopt, jac = jac_manopt, p0 = p0, k = k_len),
-                () -> 0.5 * sum(abs2, f_manopt(M, p_curr)),
+                (M = M, f = f_manopt, jac = jac_manopt, f! = f_manopt!, jac! = jac_manopt!, p0 = p0, k = k_len),
                 () -> begin
-                    r = f_manopt(M, p_curr)
-                    J = jac_manopt(M, p_curr)
-                    mul!(g_manopt, transpose(J), r)
-                    mul!(H_manopt, transpose(J), J)
-                    return (0.5 * sum(abs2, r), H_manopt)
+                    f_manopt!(M, r_manopt, p_curr)
+                    0.5 * sum(abs2, r_manopt)
+                end,
+                () -> begin
+                    f_manopt!(M, r_manopt, p_curr)
+                    jac_manopt!(M, J_manopt, p_curr)
+                    mul!(g_manopt, transpose(J_manopt), r_manopt)
+                    mul!(H_manopt, transpose(J_manopt), J_manopt)
+                    return (0.5 * sum(abs2, r_manopt), H_manopt)
                 end,
                 () -> copyto!(p_curr, p0)
             )
@@ -343,20 +409,30 @@ function create_robust_procrustes_problem()
                 return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
             end),
             OptimizerDefinition("Manopt (LevenbergMarquardt)", (model_def; gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
-                M, f_res, jac_res, p0, k_len = get_procrustes_manopt_components(model_def)
-                start_c = 0.5 * sum(abs2, f_res(M, p0))
+                M, f_res!, jac_res!, p0, k_len, _ = get_procrustes_manopt_inplace_components(model_def)
+                r_scratch = zeros(Float64, k_len)
+                f_res!(M, r_scratch, p0)
+                start_c = 0.5 * sum(abs2, r_scratch)
                 actual_maxiters = (time_limit !== nothing && time_limit <= 1.0) ? min(maxiters, 5) : maxiters
-                stop_crit = (StopWhenGradientNormLess(gtol) | StopWhenChangeLess(M, xtol) | StopAfterIteration(actual_maxiters))
+                actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
+                stop_time = Manopt.StopAfter(Dates.Millisecond(max(1, round(Int, actual_maxtime * 1000))))
+                stop_crit = (StopWhenGradientNormLess(gtol) | StopWhenChangeLess(M, xtol) | StopAfterIteration(actual_maxiters) | stop_time)
                 t_start = time_ns()
-                timed = @timed Manopt.LevenbergMarquardt(M, f_res, jac_res, copy(p0), k_len; return_state=true, stopping_criterion=stop_crit, max_iterations=actual_maxiters)
+                timed = @timed Manopt.LevenbergMarquardt(M, f_res!, jac_res!, copy(p0), k_len;
+                    evaluation = InplaceEvaluation(),
+                    return_state = true,
+                    stopping_criterion = stop_crit,
+                    max_iterations = actual_maxiters
+                )
                 t_total = time_ns() - t_start
                 state = timed.value
                 inner = state isa Manopt.DebugSolverState ? state.state : state
                 p_sol = Manopt.get_solver_result(state)
-                final_c = 0.5 * sum(abs2, f_res(M, p_sol))
+                f_res!(M, r_scratch, p_sol)
+                final_c = 0.5 * sum(abs2, r_scratch)
                 alloc_cnt = Base.gc_alloc_count(timed.gcstats)
                 active = Manopt.get_active_stopping_criteria(stop_crit)
-                converged = !isempty(active) && !all(c -> c isa StopAfterIteration, active)
+                converged = !isempty(active) && !all(c -> c isa StopAfterIteration || c isa Manopt.StopAfter, active)
                 return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, Manopt.get_count(inner, :Iterations), start_c, final_c, converged)
             end)
         ],

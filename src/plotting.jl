@@ -154,6 +154,12 @@ function plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_P
         end
     end
 
+    # If a problem has <= 1 models (e.g. Phase 1 model comparison omitted), do not generate a model plot
+    if length(all_models) <= 1
+        isfile(filepath) && rm(filepath; force=true)
+        return ""
+    end
+
     # Rank models according to their mean rank per size (slowest at top, fastest at bottom)
     get_model_time(m_name, j) = begin
         s_res = res.size_results[j]

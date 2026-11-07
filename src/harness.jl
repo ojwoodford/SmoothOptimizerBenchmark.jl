@@ -159,11 +159,11 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
             opt_model.reset!()
         end
 
-        # 1. First (non-warmup) run with NO run time limits
+        # 1. First (non-warmup) run with standard run time limits
         init_res = nothing
         t1_wall_start = time_ns()
         try
-            init_res = opt.optimize(opt_model; time_limit=nothing)
+            init_res = opt.optimize(opt_model; time_limit=DEFAULT_MAXTIME)
         catch err
             opt_model.reset!()
             res = OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
@@ -211,7 +211,7 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
             end
             opt_model.reset!()
             t_wall_start = time_ns()
-            r_sample = opt.optimize(opt_model; time_limit=nothing)
+            r_sample = opt.optimize(opt_model; time_limit=DEFAULT_MAXTIME)
             dt_wall = Float64(time_ns() - t_wall_start)
             total_accumulated_wall_ns += dt_wall
             if !isnan(r_sample.time_ns)
@@ -387,8 +387,36 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
         println(">>> Standard target model for optimizers: $(winning_model_name) <<<")
     end
 
-    # Initialize markdown file with metadata and Model Evaluation table header
-    init_problem_markdown(data_file, prob.name, prob.category, prob.size_metric_name, winning_model_name)
+    has_phase1_models = length(sample_models) > 1
+
+    if has_phase1_models
+        # Initialize markdown file with metadata and Model Evaluation table header
+        init_problem_markdown(data_file, prob.name, prob.category, prob.size_metric_name, winning_model_name)
+    else
+        # Initialize markdown file with metadata, noting universal single model
+        mkpath(dirname(data_file))
+        open(data_file, "w") do io
+            println(io, "# Benchmark Results: $(prob.name)")
+            println(io)
+            println(io, "- **Category**: $(prob.category)")
+            println(io, "- **Scaling Metric**: $(prob.size_metric_name)")
+            println(io, "- **Optimizer Target Model**: $(winning_model_name)")
+            println(io, "- **Convergence Criteria**: gtol=$(DEFAULT_GTOL), xtol=$(DEFAULT_XTOL), ftol=$(DEFAULT_FTOL), maxiters=$(DEFAULT_MAXITERS), maxtime=$(DEFAULT_MAXTIME)s")
+            println(io, "- **Benchmark Date**: $(Dates.format(Dates.now(), "yyyy-mm-ddTHH:MM:SS"))")
+            println(io, "- **Host CPU**: $(Sys.CPU_NAME) ($(Sys.CPU_THREADS) cores)")
+            println(io, "- **OS**: $(Sys.KERNEL) ($(Sys.MACHINE))")
+            println(io, "- **Julia Version**: $(VERSION)")
+            println(io, "- **Git Commit**: $(SmoothOptimizerBenchmark.get_git_commit())")
+            println(io)
+            println(io, "---")
+            println(io)
+            println(io, "## Model Evaluation Scaling")
+            println(io)
+            println(io, "This problem uses `$(winning_model_name)` universally across all optimizers; Phase 1 comparative model evaluation is omitted.")
+            println(io)
+            flush(io)
+        end
+    end
 
     # 2. Benchmark all models across all sizes and stream each model row to file immediately
     all_models = Vector{Vector{ModelDefinition}}(undef, length(sizes))
@@ -397,21 +425,23 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
         models = prob.generate_models(sz)
         all_models[i] = models
         m_results = Dict{String, ModelEvaluationResult}()
-        for m in models
-            m.reset!()
-            c_res = benchmark_eval(m.eval_cost; samples=model_samples)
-            m.reset!()
-            ls_res = benchmark_eval(m.eval_cost_and_linear_system; samples=model_samples)
-            mr = ModelEvaluationResult(
-                c_res.time_ns, c_res.allocs, c_res.bytes,
-                ls_res.time_ns, ls_res.allocs, ls_res.bytes
-            )
-            m_results[m.name] = mr
-            # Write every model performance immediately to file!
-            append_model_evaluation(data_file, sz, m.name, mr)
-            if verbose
-                println(@sprintf("  [Model] %s %s | %s: Cost %.1fμs, Linsys %.1fμs",
-                    prob.size_metric_name, string(sz), m.name, mr.cost_time_ns / 1e3, mr.linsys_time_ns / 1e3))
+        if has_phase1_models
+            for m in models
+                m.reset!()
+                c_res = benchmark_eval(m.eval_cost; samples=model_samples)
+                m.reset!()
+                ls_res = benchmark_eval(m.eval_cost_and_linear_system; samples=model_samples)
+                mr = ModelEvaluationResult(
+                    c_res.time_ns, c_res.allocs, c_res.bytes,
+                    ls_res.time_ns, ls_res.allocs, ls_res.bytes
+                )
+                m_results[m.name] = mr
+                # Write every model performance immediately to file!
+                append_model_evaluation(data_file, sz, m.name, mr)
+                if verbose
+                    println(@sprintf("  [Model] %s %s | %s: Cost %.1fμs, Linsys %.1fμs",
+                        prob.size_metric_name, string(sz), m.name, mr.cost_time_ns / 1e3, mr.linsys_time_ns / 1e3))
+                end
             end
         end
         all_model_results[i] = m_results

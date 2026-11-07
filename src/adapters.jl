@@ -18,7 +18,11 @@ using BundleAdjustmentModels
 export optimize_soo, optimize_nlls_soo, optimize_least_squares, optimize_optim, optimize_jsosolvers, optimize_ipopt
 export optimize_madnlp, optimize_nonlinearsolve, optimize_cannoles
 export get_standard_optimizers, get_tier1_optimizers, get_tier2_optimizers, as_nlpmodel, LeastSquaresNLPModel
+export as_nlsmodel, LeastSquaresNLSModel
+export TimeoutException
 export DEFAULT_GTOL, DEFAULT_XTOL, DEFAULT_FTOL, DEFAULT_MAXITERS, DEFAULT_MAXTIME
+
+struct TimeoutException <: Exception end
 
 # -----------------------------------------------------------------------------
 # Universal Stopping Criteria Constants
@@ -197,8 +201,165 @@ function NLPModels.reset!(nlp::LeastSquaresNLPModel)
 end
 
 # -----------------------------------------------------------------------------
-# General Model to NLPModel Converter
+# LeastSquaresProblem <-> AbstractNLSModel Adapter
 # -----------------------------------------------------------------------------
+
+"""
+    LeastSquaresNLSModel <: AbstractNLSModel{Float64, Vector{Float64}}
+
+Adapts a `LeastSquaresOptim.LeastSquaresProblem` to the `NLPModels.AbstractNLSModel` interface,
+allowing solvers such as `JSOSolvers` (trunk/tron) and `CaNNOLeS` to optimize least squares problems
+via direct matrix-free Gauss-Newton products (`jprod_residual!` / `jtprod_residual!`).
+"""
+mutable struct LeastSquaresNLSModel{TLSP, TR, TJ} <: AbstractNLSModel{Float64, Vector{Float64}}
+    meta::NLPModelMeta{Float64, Vector{Float64}}
+    nls_meta::NLSMeta{Float64, Vector{Float64}}
+    counters::NLSCounters
+    lsp::TLSP
+    r_buf::TR
+    J_buf::TJ
+    last_x::Vector{Float64}
+    cache_valid::Base.RefValue{Bool}
+end
+
+function LeastSquaresNLSModel(lsp::LeastSquaresProblem)
+    n = length(lsp.x)
+    m = length(lsp.y)
+    r_buf = zeros(Float64, m)
+    J_buf = deepcopy(lsp.J)
+    nnzj = lsp.J isa SparseMatrixCSC ? nnz(lsp.J) : n * m
+    meta = NLPModelMeta(n, x0=copy(lsp.x), name="LeastSquaresNLSModel")
+    nls_meta = NLSMeta(m, n, x0=copy(lsp.x), nnzj=nnzj)
+    return LeastSquaresNLSModel(meta, nls_meta, NLSCounters(), lsp, r_buf, J_buf, fill(NaN, n), Ref(false))
+end
+
+function update_nls!(nls::LeastSquaresNLSModel, x::AbstractVector)
+    if !nls.cache_valid[] || x != nls.last_x
+        copyto!(nls.last_x, x)
+        nls.lsp.f!(nls.r_buf, x)
+        nls.lsp.g!(nls.J_buf, x)
+        nls.cache_valid[] = true
+    end
+end
+
+function NLPModels.residual!(nls::LeastSquaresNLSModel, x::AbstractVector, Fx::AbstractVector)
+    NLPModels.increment!(nls, :neval_residual)
+    if nls.cache_valid[] && x == nls.last_x
+        copyto!(Fx, nls.r_buf)
+    else
+        copyto!(nls.last_x, x)
+        nls.lsp.f!(nls.r_buf, x)
+        copyto!(Fx, nls.r_buf)
+        nls.cache_valid[] = false
+    end
+    return Fx
+end
+
+function NLPModels.jprod_residual!(nls::LeastSquaresNLSModel, x::AbstractVector, v::AbstractVector, Jv::AbstractVector)
+    NLPModels.increment!(nls, :neval_jprod_residual)
+    update_nls!(nls, x)
+    mul!(Jv, nls.J_buf, v)
+    return Jv
+end
+
+function NLPModels.jtprod_residual!(nls::LeastSquaresNLSModel, x::AbstractVector, v::AbstractVector, Jtv::AbstractVector)
+    NLPModels.increment!(nls, :neval_jtprod_residual)
+    update_nls!(nls, x)
+    mul!(Jtv, transpose(nls.J_buf), v)
+    return Jtv
+end
+
+function NLPModels.jac_structure_residual!(nls::LeastSquaresNLSModel, rows::AbstractVector{<:Integer}, cols::AbstractVector{<:Integer})
+    if nls.J_buf isa SparseMatrixCSC
+        idx = 1
+        for col in 1:size(nls.J_buf, 2)
+            for p in nzrange(nls.J_buf, col)
+                rows[idx] = nls.J_buf.rowval[p]
+                cols[idx] = col
+                idx += 1
+            end
+        end
+    else
+        m, n = size(nls.J_buf)
+        idx = 1
+        for j in 1:n
+            for i in 1:m
+                rows[idx] = i
+                cols[idx] = j
+                idx += 1
+            end
+        end
+    end
+    return rows, cols
+end
+
+function NLPModels.jac_coord_residual!(nls::LeastSquaresNLSModel, x::AbstractVector, vals::AbstractVector)
+    NLPModels.increment!(nls, :neval_jac_residual)
+    update_nls!(nls, x)
+    if nls.J_buf isa SparseMatrixCSC
+        copyto!(vals, nonzeros(nls.J_buf))
+    else
+        copyto!(vals, vec(nls.J_buf))
+    end
+    return vals
+end
+
+function NLPModels.obj(nls::LeastSquaresNLSModel, x::AbstractVector)
+    NLPModels.increment!(nls, :neval_obj)
+    if nls.cache_valid[] && x == nls.last_x
+        return 0.5 * sum(abs2, nls.r_buf)
+    end
+    nls.lsp.f!(nls.r_buf, x)
+    return 0.5 * sum(abs2, nls.r_buf)
+end
+
+function NLPModels.grad!(nls::LeastSquaresNLSModel, x::AbstractVector, g::AbstractVector)
+    NLPModels.increment!(nls, :neval_grad)
+    update_nls!(nls, x)
+    mul!(g, transpose(nls.J_buf), nls.r_buf)
+    return g
+end
+
+function NLPModels.objgrad!(nls::LeastSquaresNLSModel, x::AbstractVector, g::AbstractVector)
+    NLPModels.increment!(nls, :neval_obj)
+    NLPModels.increment!(nls, :neval_grad)
+    update_nls!(nls, x)
+    mul!(g, transpose(nls.J_buf), nls.r_buf)
+    return 0.5 * sum(abs2, nls.r_buf), g
+end
+
+function NLPModels.reset!(nls::LeastSquaresNLSModel)
+    NLPModels.reset!(nls.counters)
+    nls.cache_valid[] = false
+    fill!(nls.last_x, NaN)
+    return nls
+end
+
+# -----------------------------------------------------------------------------
+# General Model to NLPModel / NLSModel Converters
+# -----------------------------------------------------------------------------
+
+function NLPModels.jprod_residual!(bam::BundleAdjustmentModel, x::AbstractVector, v::AbstractVector, Jv::AbstractVector)
+    rows = Vector{Int}(undef, bam.nls_meta.nnzj)
+    cols = Vector{Int}(undef, bam.nls_meta.nnzj)
+    NLPModels.jac_structure_residual!(bam, rows, cols)
+    vals = Vector{Float64}(undef, bam.nls_meta.nnzj)
+    NLPModels.jac_coord_residual!(bam, x, vals)
+    J = sparse(rows, cols, vals, bam.nls_meta.nequ, bam.meta.nvar)
+    mul!(Jv, J, v)
+    return Jv
+end
+
+function NLPModels.jtprod_residual!(bam::BundleAdjustmentModel, x::AbstractVector, v::AbstractVector, Jtv::AbstractVector)
+    rows = Vector{Int}(undef, bam.nls_meta.nnzj)
+    cols = Vector{Int}(undef, bam.nls_meta.nnzj)
+    NLPModels.jac_structure_residual!(bam, rows, cols)
+    vals = Vector{Float64}(undef, bam.nls_meta.nnzj)
+    NLPModels.jac_coord_residual!(bam, x, vals)
+    J = sparse(rows, cols, vals, bam.nls_meta.nequ, bam.meta.nvar)
+    mul!(Jtv, transpose(J), v)
+    return Jtv
+end
 
 """
     as_least_squares_problem(bam::BundleAdjustmentModel) -> LeastSquaresProblem
@@ -239,6 +400,17 @@ as_nlpmodel(bam::BundleAdjustmentModel) = LeastSquaresNLPModel(as_least_squares_
 as_nlpmodel(m::ModelDefinition) = as_nlpmodel(m.model)
 as_nlpmodel(prob::NLLSModel.Model) = NLLSModel.NLPLSModel(prob)
 as_nlpmodel(lsp::LeastSquaresProblem) = LeastSquaresNLPModel(lsp)
+
+"""
+    as_nlsmodel(m) -> AbstractNLSModel
+
+Extracts or converts a problem/model into an `NLPModels.AbstractNLSModel`.
+"""
+as_nlsmodel(nls::AbstractNLSModel) = nls
+as_nlsmodel(bam::BundleAdjustmentModel) = bam
+as_nlsmodel(m::ModelDefinition) = as_nlsmodel(m.model)
+as_nlsmodel(prob::NLLSModel.Model) = NLLSModel.NLLSNLSModel(prob)
+as_nlsmodel(lsp::LeastSquaresProblem) = LeastSquaresNLSModel(lsp)
 
 # -----------------------------------------------------------------------------
 # SecondOrderOptimization In-Place Extensions
@@ -320,14 +492,14 @@ function SecondOrderOptimization.optimize(nlp::AbstractNLPModel, options::Optimi
     return SecondOrderOptimization.optimize(f, fdf!, x0, options; H=H_prototype, kwargs...)
 end
 
-function SecondOrderOptimization.optimize!(prob::NLLSModel.Model, options::OptimizationOptions=OptimizationOptions(); unfixed=nothing, kwargs...)
-    f, fdf!, x0, H = NLLSModel.optimvars(prob, unfixed, options.numthreads)
+function SecondOrderOptimization.optimize!(prob::NLLSModel.Model, options::OptimizationOptions=OptimizationOptions(); unfixed=nothing, numthreads=StaticInt(Threads.nthreads()), kwargs...)
+    f, fdf!, x0, H = NLLSModel.optimvars(prob, unfixed, numthreads)
     return SecondOrderOptimization.optimize!(f, fdf!, x0, options; H=H, kwargs...)
 end
 
-function SecondOrderOptimization.optimize(prob::NLLSModel.Model, options::OptimizationOptions=OptimizationOptions(); unfixed=nothing, kwargs...)
+function SecondOrderOptimization.optimize(prob::NLLSModel.Model, options::OptimizationOptions=OptimizationOptions(); unfixed=nothing, numthreads=StaticInt(Threads.nthreads()), kwargs...)
     p = deepcopy(prob)
-    return SecondOrderOptimization.optimize!(p, options; unfixed=unfixed, kwargs...)
+    return SecondOrderOptimization.optimize!(p, options; unfixed=unfixed, numthreads=numthreads, kwargs...)
 end
 
 # -----------------------------------------------------------------------------
@@ -404,7 +576,6 @@ function optimize_nlls_soo(target; method=:dogleg, linsolver=:auto, gtol=DEFAULT
     opt = OptimizationOptions(
         iterator=actual_method,
         linsolver=linsolver,
-        numthreads=StaticInt(1),
         gtol=gtol,
         dstep=xtol,
         reldcost=ftol,
@@ -440,6 +611,12 @@ function optimize_least_squares(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=
     m = target isa ModelDefinition ? target.model : target
     lso_method = (method === :lm || method === :levenbergmarquardt) ? LeastSquaresOptim.LevenbergMarquardt() : LeastSquaresOptim.Dogleg()
 
+    if m isa NLLSModel.Model
+        cb = NLLSModel.nls_callbacks(m)
+        lsp = LeastSquaresProblem(x=copy(cb.x0), y=cb.r0, f! = cb.res!, g! = cb.jac!, J=copy(cb.J0))
+        return optimize_least_squares(lsp; method=method, gtol=gtol, xtol=xtol, ftol=ftol, maxiters=maxiters, maxtime=maxtime, time_limit=time_limit, kwargs...)
+    end
+
     if !(m isa LeastSquaresProblem)
         return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
     end
@@ -460,14 +637,55 @@ function optimize_least_squares(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=
     lsp.f!(r0, lsp.x)
     start_c = 0.5 * sum(abs2, r0)
 
+    actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
     actual_maxiters = (time_limit !== nothing && time_limit <= 1.0) ? min(maxiters, 10) : maxiters
 
+    deadline = time_ns() + UInt64(round(actual_maxtime * 1e9))
+    timed_out = Ref(false)
+    last_r = copy(r0)
+    iters_count = Ref(0)
+
+    orig_f! = lsp.f!
+    orig_g! = lsp.g!
+
+    timeout_f!(r, x) = begin
+        if time_ns() > deadline
+            timed_out[] = true
+            throw(TimeoutException())
+        end
+        orig_f!(r, x)
+        copyto!(last_r, r)
+    end
+
+    timeout_g!(J, x) = begin
+        if time_ns() > deadline
+            timed_out[] = true
+            throw(TimeoutException())
+        end
+        orig_g!(J, x)
+        iters_count[] += 1
+    end
+
+    lsp_wrapped = LeastSquaresProblem(x=copy(lsp.x), y=lsp.y, f! = timeout_f!, g! = timeout_g!, J=lsp.J)
+
     t_start = time_ns()
-    timed = @timed LeastSquaresOptim.optimize!(lsp, lso_method; g_tol=gtol, x_tol=xtol, f_tol=ftol, iterations=actual_maxiters, kwargs...)
+    timed = try
+        @timed LeastSquaresOptim.optimize!(lsp_wrapped, lso_method; g_tol=gtol, x_tol=xtol, f_tol=ftol, iterations=actual_maxiters, kwargs...)
+    catch err
+        if err isa TimeoutException || timed_out[]
+            t_total = time_ns() - t_start
+            final_c = 0.5 * sum(abs2, last_r)
+            return OptimizerResult(Float64(t_total), 0, 0, iters_count[], start_c, final_c, false)
+        else
+            rethrow(err)
+        end
+    end
     t_total = time_ns() - t_start
     res = timed.value
 
-    return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.iterations, start_c, res.ssr * 0.5, res.converged)
+    final_c = timed_out[] ? 0.5 * sum(abs2, last_r) : res.ssr * 0.5
+    converged = timed_out[] ? false : res.converged
+    return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.iterations, start_c, final_c, converged)
 end
 
 """
@@ -497,52 +715,64 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         lsp.f!(r_buf, x0)
         start_c = 0.5 * sum(abs2, r_buf)
 
-        f(x) = begin
-            lsp.f!(r_buf, x)
-            return 0.5 * sum(abs2, r_buf)
-        end
-        g!(g, x) = begin
-            lsp.f!(r_buf, x)
-            lsp.g!(J_buf, x)
-            mul!(g, J_buf', r_buf)
-            return g
-        end
-
         H0 = if is_sparse
             _symbolic_jtj(lsp.J)
         else
             zeros(Float64, n, n)
         end
+        g0 = zeros(Float64, n)
 
-        h! = if is_sparse
-            (H, x) -> begin
+        last_eval_x = fill(NaN, n)
+        eval_valid = Ref(false)
+
+        function eval_at!(x)
+            if !eval_valid[] || x != last_eval_x
+                copyto!(last_eval_x, x)
+                lsp.f!(r_buf, x)
                 lsp.g!(J_buf, x)
-                H_calc = J_buf' * J_buf
-                if length(H.nzval) == length(H_calc.nzval)
-                    copyto!(H.nzval, H_calc.nzval)
-                else
-                    fill!(H.nzval, 0.0)
-                    rows_c, cols_c, vals_c = findnz(H_calc)
-                    @inbounds for (r, c, v) in zip(rows_c, cols_c, vals_c)
-                        H[r, c] = v
-                    end
-                end
-                return H
-            end
-        else
-            (H, x) -> begin
-                lsp.g!(J_buf, x)
-                mul!(H, J_buf', J_buf)
-                return H
+                eval_valid[] = true
             end
         end
 
-        g0 = zeros(Float64, n)
-        td = TwiceDifferentiable(f, g!, h!, x0, start_c, g0, H0)
+        fgh!(F, G, H, x) = begin
+            if F !== nothing && G === nothing && H === nothing
+                if eval_valid[] && x == last_eval_x
+                    return 0.5 * sum(abs2, r_buf)
+                end
+                lsp.f!(r_buf, x)
+                return 0.5 * sum(abs2, r_buf)
+            end
+
+            eval_at!(x)
+            cost = 0.5 * sum(abs2, r_buf)
+
+            if G !== nothing
+                mul!(G, transpose(J_buf), r_buf)
+            end
+            if H !== nothing
+                if is_sparse
+                    H_calc = J_buf' * J_buf
+                    if length(H.nzval) == length(H_calc.nzval)
+                        copyto!(H.nzval, H_calc.nzval)
+                    else
+                        fill!(H.nzval, 0.0)
+                        rows_c, cols_c, vals_c = findnz(H_calc)
+                        @inbounds for (r, c, v) in zip(rows_c, cols_c, vals_c)
+                            H[r, c] = v
+                        end
+                    end
+                else
+                    mul!(H, transpose(J_buf), J_buf)
+                end
+            end
+            return cost
+        end
+
+        td = Optim.NLSolversBase.TwiceDifferentiable(Optim.NLSolversBase.only_fgh!(fgh!), copy(x0), start_c, g0, H0)
         opts = Optim.Options(g_abstol=gtol, x_abstol=xtol, f_reltol=ftol, iterations=maxiters, time_limit=actual_maxtime; kwargs...)
 
         t_start = time_ns()
-        timed = @timed Optim.optimize(td, x0, optim_method, opts)
+        timed = @timed Optim.optimize(td, copy(x0), optim_method, opts)
         t_total = time_ns() - t_start
         res = timed.value
 
@@ -552,8 +782,72 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         p = deepcopy(m)
         f, fdf!, x0, H_proto = NLLSModel.optimvars(p)
         if !(x0 isa Vector{Float64})
-            # Optim requires a flat Vector{Float64}; incompatible with structured/manifold variables
-            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+            cb = NLLSModel.nls_callbacks(p)
+            m_len = cb.nequ
+            n_len = cb.nvar
+            x0_cb = copy(cb.x0)
+            is_sparse = cb.J0 isa SparseMatrixCSC
+
+            if method === :newton_trust_region && is_sparse
+                return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+            end
+
+            H0 = if is_sparse
+                cb.J0' * cb.J0
+            else
+                zeros(Float64, n_len, n_len)
+            end
+            H_buf = deepcopy(H0)
+            g0 = zeros(Float64, n_len)
+            r_buf = zeros(Float64, m_len)
+            J_buf = copy(cb.J0)
+            cb.res!(r_buf, x0_cb)
+            start_c = 0.5 * sum(abs2, r_buf)
+            g_buf = zeros(Float64, n_len)
+            last_nlls_x = fill(NaN, n_len)
+            cost_cached = Ref(start_c)
+            fdf_valid = Ref(false)
+
+            function eval_cb_nlls!(x)
+                if !fdf_valid[] || x != last_nlls_x
+                    copyto!(last_nlls_x, x)
+                    cb.res!(r_buf, x)
+                    cost_cached[] = 0.5 * sum(abs2, r_buf)
+                    cb.jac!(J_buf, x)
+                    mul!(g_buf, transpose(J_buf), r_buf)
+                    if is_sparse
+                        H_calc = J_buf' * J_buf
+                        if length(H_buf.nzval) == length(H_calc.nzval)
+                            copyto!(H_buf.nzval, H_calc.nzval)
+                        else
+                            H_buf = H_calc
+                        end
+                    else
+                        mul!(H_buf, transpose(J_buf), J_buf)
+                    end
+                    fdf_valid[] = true
+                end
+            end
+
+            fgh_cb_nlls!(F, G, H, x) = begin
+                eval_cb_nlls!(x)
+                if G !== nothing
+                    copyto!(G, g_buf)
+                end
+                if H !== nothing
+                    copyto!(H, H_buf)
+                end
+                return cost_cached[]
+            end
+
+            td = Optim.NLSolversBase.TwiceDifferentiable(Optim.NLSolversBase.only_fgh!(fgh_cb_nlls!), copy(x0_cb), start_c, g0, H0)
+            opts = Optim.Options(g_abstol=gtol, x_abstol=xtol, f_reltol=ftol, iterations=maxiters, time_limit=actual_maxtime; kwargs...)
+
+            t_start = time_ns()
+            timed = @timed Optim.optimize(td, copy(x0_cb), optim_method, opts)
+            t_total = time_ns() - t_start
+            res = timed.value
+            return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, Optim.iterations(res), start_c, Optim.minimum(res), Optim.converged(res))
         end
         n = length(x0)
         is_sparse = H_proto isa SparseMatrixCSC
@@ -572,18 +866,36 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         g0 = zeros(Float64, n)
         start_c = f(copy(x0))
         g_buf = zeros(Float64, n)
+        last_nlls_x = fill(NaN, n)
+        cost_cached = Ref(start_c)
+        fdf_valid = Ref(false)
 
-        f_opt(x) = f(x)
-        g_opt!(g, x) = begin
-            fdf!(g, H_buf, x)
-            return g
-        end
-        h_opt!(H, x) = begin
-            fdf!(g_buf, H, x)
-            return H
+        function eval_nlls!(x)
+            if !fdf_valid[] || x != last_nlls_x
+                copyto!(last_nlls_x, x)
+                cost_cached[] = fdf!(g_buf, H_buf, x)
+                fdf_valid[] = true
+            end
         end
 
-        td = Optim.NLSolversBase.TwiceDifferentiable(f_opt, g_opt!, h_opt!, copy(x0), start_c, g0, H0)
+        fgh_nlls!(F, G, H, x) = begin
+            if F !== nothing && G === nothing && H === nothing
+                if fdf_valid[] && x == last_nlls_x
+                    return cost_cached[]
+                end
+                return f(x)
+            end
+            eval_nlls!(x)
+            if G !== nothing
+                copyto!(G, g_buf)
+            end
+            if H !== nothing
+                copyto!(H, H_buf)
+            end
+            return cost_cached[]
+        end
+
+        td = Optim.NLSolversBase.TwiceDifferentiable(Optim.NLSolversBase.only_fgh!(fgh_nlls!), copy(x0), start_c, g0, H0)
         opts = Optim.Options(g_abstol=gtol, x_abstol=xtol, f_reltol=ftol, iterations=maxiters, time_limit=actual_maxtime; kwargs...)
 
         t_start = time_ns()
@@ -651,7 +963,12 @@ Optimizes a model using `JSOSolvers.jl`.
 Supported solvers: `:trunk`, `:tron`.
 """
 function optimize_jsosolvers(target; solver=:trunk, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
-    nlp = as_nlpmodel(target)
+    m = target isa ModelDefinition ? target.model : target
+    nlp = try
+        as_nlsmodel(m)
+    catch
+        as_nlpmodel(m)
+    end
     NLPModels.reset!(nlp)
     start_c = NLPModels.obj(nlp, nlp.meta.x0)
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
@@ -741,6 +1058,54 @@ Supported methods: `:lm`, `:trust_region`, `:gauss_newton`.
 function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
 
+    if m isa NLLSModel.Model
+        cb = NLLSModel.nls_callbacks(m)
+        m_len = cb.nequ
+        n_len = cb.nvar
+        if cb.J0 isa SparseMatrixCSC && n_len > 25000
+            # Avoid excessive sparse QR solve time on massive sparse regimes
+            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+        end
+        x0 = copy(cb.x0)
+        actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
+        r_init = zeros(Float64, m_len)
+        cb.res!(r_init, x0)
+        start_c = 0.5 * sum(abs2, r_init)
+
+        f_cb_nls!(du, u, p) = cb.res!(du, u)
+        jac_cb_nls!(J, u, p) = cb.jac!(J, u)
+
+        nl_func = NonlinearFunction(f_cb_nls!; jac=jac_cb_nls!, resid_prototype=zeros(Float64, m_len), jac_prototype=copy(cb.J0))
+        prob = NonlinearLeastSquaresProblem(nl_func, x0)
+
+        solver = if method === :trust_region || method === :dogleg
+            (n_len <= 16 && !(cb.J0 isa SparseMatrixCSC)) ? NonlinearSolve.SimpleTrustRegion() : NonlinearSolve.TrustRegion()
+        elseif method === :gauss_newton
+            (n_len <= 16 && !(cb.J0 isa SparseMatrixCSC)) ? NonlinearSolve.SimpleGaussNewton() : NonlinearSolve.GaussNewton()
+        else
+            NonlinearSolve.LevenbergMarquardt()
+        end
+
+        t_start = time_ns()
+        timed = @timed solve(prob, solver; abstol=gtol, reltol=ftol, maxiters=maxiters, maxtime=actual_maxtime, kwargs...)
+        t_total = time_ns() - t_start
+        sol = timed.value
+
+        final_c = 0.5 * sum(abs2, sol.resid)
+        converged = NonlinearSolve.SciMLBase.successful_retcode(sol.retcode)
+        iters = sol.stats.nsteps
+
+        return OptimizerResult(
+            Float64(t_total),
+            Base.gc_alloc_count(timed.gcstats),
+            timed.bytes,
+            iters,
+            start_c,
+            final_c,
+            converged
+        )
+    end
+
     if !(m isa LeastSquaresProblem)
         return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
     end
@@ -760,16 +1125,16 @@ function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEF
     lsp.f!(r_init, x0)
     start_c = 0.5 * sum(abs2, r_init)
 
-    f_nls!(du, u, p) = lsp.f!(du, u)
-    jac_nls!(J, u, p) = lsp.g!(J, u)
+    f_lsp_nls!(du, u, p) = lsp.f!(du, u)
+    jac_lsp_nls!(J, u, p) = lsp.g!(J, u)
 
-    nl_func = NonlinearFunction(f_nls!; jac=jac_nls!, resid_prototype=zeros(Float64, m_len), jac_prototype=deepcopy(lsp.J))
+    nl_func = NonlinearFunction(f_lsp_nls!; jac=jac_lsp_nls!, resid_prototype=zeros(Float64, m_len), jac_prototype=deepcopy(lsp.J))
     prob = NonlinearLeastSquaresProblem(nl_func, x0)
 
     solver = if method === :trust_region || method === :dogleg
-        NonlinearSolve.TrustRegion()
+        (n_len <= 16 && !(lsp.J isa SparseMatrixCSC)) ? NonlinearSolve.SimpleTrustRegion() : NonlinearSolve.TrustRegion()
     elseif method === :gauss_newton
-        NonlinearSolve.GaussNewton()
+        (n_len <= 16 && !(lsp.J isa SparseMatrixCSC)) ? NonlinearSolve.SimpleGaussNewton() : NonlinearSolve.GaussNewton()
     else
         NonlinearSolve.LevenbergMarquardt()
     end
@@ -801,11 +1166,11 @@ Optimizes a model using `CaNNOLeS.jl`.
 """
 function optimize_cannoles(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, linsolve=:ldlfactorizations, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
-    nls = m isa BundleAdjustmentModel ? m : as_nlpmodel(m)
+    nls = as_nlsmodel(m)
     NLPModels.reset!(nls)
     start_c = NLPModels.obj(nls, nls.meta.x0)
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
-    cannoles_method = m isa BundleAdjustmentModel ? :Newton_noFHess : :Newton
+    cannoles_method = :Newton_noFHess
 
     t_start = time_ns()
     timed = @timed CaNNOLeS.cannoles(nls; method=cannoles_method, linsolve=linsolve, atol=gtol, rtol=0.0, max_iter=maxiters, max_time=actual_maxtime, kwargs...)
@@ -848,7 +1213,8 @@ function get_standard_optimizers()
         OptimizerDefinition("Ipopt", (m; kwargs...) -> optimize_ipopt(m; kwargs...)),
         OptimizerDefinition("MadNLP", (m; kwargs...) -> optimize_madnlp(m; kwargs...)),
         OptimizerDefinition("NonlinearSolve (LM)", (m; kwargs...) -> optimize_nonlinearsolve(m; method=:lm, kwargs...)),
-        OptimizerDefinition("NonlinearSolve (TrustRegion)", (m; kwargs...) -> optimize_nonlinearsolve(m; method=:trust_region, kwargs...))
+        OptimizerDefinition("NonlinearSolve (TrustRegion)", (m; kwargs...) -> optimize_nonlinearsolve(m; method=:trust_region, kwargs...)),
+        OptimizerDefinition("CaNNOLeS", (m; kwargs...) -> optimize_cannoles(m; kwargs...))
     ]
 end
 

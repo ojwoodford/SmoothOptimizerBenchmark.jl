@@ -159,10 +159,24 @@ function load_problem_markdown(filepath::String)::ProblemScalingBenchmarkResult
 
     tables = [e for e in doc.content if e isa Markdown.Table]
     models_by_size = Dict{Any, Dict{String, ModelEvaluationResult}}()
+    opts_by_size = Dict{Any, Dict{String, OptimizerResult}}()
     ordered_sizes = Any[]
 
-    if length(tables) >= 1
-        model_table = tables[1]
+    model_table = nothing
+    opt_table = nothing
+
+    for t in tables
+        if !isempty(t.rows)
+            hdr = [lowercase(strip(extract_text(c))) for c in t.rows[1]]
+            if any(h -> occursin("optimizer", h), hdr)
+                opt_table = t
+            elseif any(h -> occursin("model", h), hdr)
+                model_table = t
+            end
+        end
+    end
+
+    if model_table !== nothing
         for row in model_table.rows[2:end]
             cells = [strip(extract_text(c)) for c in row]
             length(cells) < 8 && continue
@@ -183,9 +197,7 @@ function load_problem_markdown(filepath::String)::ProblemScalingBenchmarkResult
         end
     end
 
-    opts_by_size = Dict{Any, Dict{String, OptimizerResult}}()
-    if length(tables) >= 2
-        opt_table = tables[2]
+    if opt_table !== nothing
         for row in opt_table.rows[2:end]
             cells = [strip(extract_text(c)) for c in row]
             length(cells) < 8 && continue

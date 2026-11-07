@@ -181,6 +181,26 @@ function generate_problem_markdown(res::ProblemScalingBenchmarkResult, slug::Str
         end
     end
 
+    has_phase1 = !isempty(res.size_results) && any(sr -> length(sr.model_results) > 1, res.size_results)
+
+    phase1_section = if has_phase1
+        """
+## 1. Model Evaluation Scaling
+
+The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dotted lines) and **Cost + Linear System Assembly** (solid/dash-dot lines) across problem sizes.
+
+![$(res.problem) Model Evaluation Scaling](../assets/plots/$(slug)_models.png)
+"""
+    else
+        """
+## 1. Model Evaluation Scaling
+
+This problem uses `$(target_model_name)` universally across all solvers via its built-in adapters; Phase 1 comparative model evaluation is omitted.
+"""
+    end
+
+    model_summary_line = has_phase1 ? "- **Model Efficiency**: $(model_summary_str)" : "- **Model Architecture**: Handled universally via `$(target_model_name)` with built-in zero-allocation adapters."
+
     md = """
 # $(res.problem)
 
@@ -191,12 +211,7 @@ function generate_problem_markdown(res::ProblemScalingBenchmarkResult, slug::Str
 
 ---
 
-## 1. Model Evaluation Scaling
-
-The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dotted lines) and **Cost + Linear System Assembly** (solid/dash-dot lines) across problem sizes.
-
-![$(res.problem) Model Evaluation Scaling](../assets/plots/$(slug)_models.png)
-
+$(phase1_section)
 ---
 
 ## 2. Optimizer Evaluation Scaling
@@ -217,7 +232,7 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 4. Analysis & Key Takeaways
 
-- **Model Efficiency**: $(model_summary_str)
+$(model_summary_line)
 - **Top Converged Optimizer**: $(opt_summary_str)
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = $(DEFAULT_GTOL)`, `xtol = $(DEFAULT_XTOL)`, `ftol = $(DEFAULT_FTOL)`) within `$(DEFAULT_MAXITERS)` iterations and `$(DEFAULT_MAXTIME)s` are plotted.
 """

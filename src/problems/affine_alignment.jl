@@ -102,6 +102,24 @@ end
     return 0.5 * sum(abs2, res.r_buf), res.g_buf, res.H_buf
 end
 
+function get_affine_alignment_optimizers()
+    return OptimizerDefinition[
+        OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),
+        OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)),
+        OptimizerDefinition("LeastSquaresOptim (Dogleg)", (m; kwargs...) -> optimize_least_squares(m; method=:dogleg, kwargs...)),
+        OptimizerDefinition("LeastSquaresOptim (LM)", (m; kwargs...) -> optimize_least_squares(m; method=:lm, kwargs...)),
+        OptimizerDefinition("Optim (NewtonTrustRegion)", (m; kwargs...) -> optimize_optim(m; method=:newton_trust_region, kwargs...)),
+        OptimizerDefinition("Optim (Newton)", (m; kwargs...) -> optimize_optim(m; method=:newton, kwargs...)),
+        OptimizerDefinition("JSOSolvers (trunk)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:trunk, kwargs...)),
+        OptimizerDefinition("JSOSolvers (tron)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:tron, kwargs...)),
+        OptimizerDefinition("Ipopt", (m; kwargs...) -> optimize_ipopt(m; kwargs...)),
+        OptimizerDefinition("MadNLP", (m; kwargs...) -> optimize_madnlp(m; kwargs...)),
+        OptimizerDefinition("NonlinearSolve (LM)", (m; kwargs...) -> optimize_nonlinearsolve(m; method=:lm, kwargs...)),
+        OptimizerDefinition("NonlinearSolve (TrustRegion)", (m; kwargs...) -> optimize_nonlinearsolve(m; method=:trust_region, kwargs...)),
+        OptimizerDefinition("CaNNOLeS", (m; kwargs...) -> optimize_cannoles(m; kwargs...))
+    ]
+end
+
 function create_affine_alignment_problem()
     ProblemDefinition(
         "Dense Affine Alignment",
@@ -112,27 +130,7 @@ function create_affine_alignment_problem()
             start_vec = zeros(n * n + n)
             start_vec[1:n+1:end] .= 1.0
 
-            # Model 1: NLLSModel Problem
-            aff_res = AffineResidual(X, Y, D)
-            nlls_prob = NLLSModel.Model(Vector{Float64}, typeof(aff_res))
-            addvariable!(nlls_prob, copy(start_vec))
-            addcost!(nlls_prob, aff_res)
-            f_nlls, fdf_nlls!, _, _ = NLLSModel.optimvars(nlls_prob, nothing, StaticInt(1))
-            n_vars = length(start_vec)
-            g_nlls = zeros(Float64, n_vars)
-            H_nlls = zeros(Float64, n_vars, n_vars)
-            m_nlls = ModelDefinition(
-                "NLLSModel",
-                nlls_prob,
-                () -> NLLSModel.cost(nlls_prob, StaticInt(1)),
-                () -> (fdf_nlls!(g_nlls, H_nlls, nlls_prob.variables[1]), H_nlls),
-                () -> begin
-                    nlls_prob.variables[1] .= 0.0
-                    nlls_prob.variables[1][1:n+1:end] .= 1.0
-                end
-            )
-
-            # Model 2: Standalone
+            # Universal Baseline Model: Standalone (LeastSquaresProblem)
             x_lso = copy(start_vec)
             r_len = length(D)
             r_buf = zeros(Float64, r_len)
@@ -161,9 +159,9 @@ function create_affine_alignment_problem()
                 end
             )
 
-            return [m_nlls, m_lso]
+            return [m_lso]
         end,
-        get_standard_optimizers(),
+        get_affine_alignment_optimizers(),
         "Dimension n"
     )
 end
