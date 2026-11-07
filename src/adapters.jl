@@ -399,9 +399,9 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         n = length(x0)
         is_sparse = lsp.J isa SparseMatrixCSC
 
-        if method === :newton_trust_region && is_sparse && n > 1000
-            # NewtonTrustRegion requires dense Cholesky; unsupported for large sparse problems.
-            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+        if method === :newton_trust_region && is_sparse
+            # NewtonTrustRegion requires dense eigen/factorization in Optim; unsupported for sparse problems.
+            return OptimizerResult(NaN, 0, 0, 0, start_c, NaN, false)
         end
 
         r_buf = zeros(Float64, length(lsp.y))
@@ -465,9 +465,9 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         n = length(x0)
         is_sparse = H_proto isa SparseMatrixCSC
 
-        if method === :newton_trust_region && is_sparse && n > 1000
-            # NewtonTrustRegion requires dense Cholesky; unsupported for large sparse problems.
-            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+        if method === :newton_trust_region && is_sparse
+            # NewtonTrustRegion requires dense eigen/factorization in Optim; unsupported for sparse problems.
+            return OptimizerResult(NaN, 0, 0, 0, start_c, NaN, false)
         end
 
         H0, H_buf = if is_sparse
@@ -510,8 +510,8 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         NLPModels.hess_coord!(nlp, x0, vals)
         is_sparse = length(rows) < (n * (n + 1) ÷ 2)
 
-        if method === :newton_trust_region && is_sparse && n > 1000
-            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+        if method === :newton_trust_region && is_sparse
+            return OptimizerResult(NaN, 0, 0, 0, start_c, NaN, false)
         end
 
         f_nlp(x) = NLPModels.obj(nlp, x)
