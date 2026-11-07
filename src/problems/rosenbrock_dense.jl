@@ -71,7 +71,7 @@ function create_rosenbrock_dense_problem()
     ProblemDefinition(
         "Dense Multi-dimensional Rosenbrock",
         :small_dense,
-        Any[1, 2, 3, 4, 6, 8, 10, 14, 18, 22, 26, 32],
+        Any[2, 3, 4, 5, 6, 8, 10, 14, 18, 22, 26, 32],
         n -> begin
             x0 = rosen_startpoint(n)
             m_len = n + ((n - 1) * n) >> 1
@@ -125,7 +125,7 @@ function create_rosenbrock_dense_problem()
 
             return [m_nlls, m_lso, m_nlp]
         end,
-        get_tier1_optimizers(),
+        get_standard_optimizers(),
         "Dimension n"
     )
 end

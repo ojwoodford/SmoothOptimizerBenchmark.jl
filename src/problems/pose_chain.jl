@@ -1,4 +1,4 @@
-# 3D Pose Chain Problem (Large Sparse Block Tridiagonal)
+# 3D Pose Chain Problem (Large Sparse Block Tridiagonal with Loop Closures)
 using Static, StaticArrays, LinearAlgebra, SparseArrays
 using NLLSModel, SecondOrderOptimization, LeastSquaresOptim
 
@@ -25,6 +25,19 @@ function generate_chain_start_vars(n_poses::Int)
     return [SVector(0.1 * i, sin(i + 1), cos(i)) for i in 1:n_poses]
 end
 
+function get_chain_loop_closures(n_poses::Int, K::Int=10)
+    lcs = Tuple{Int, Int, SVector{3, Float64}}[]
+    for i in (K + 1):n_poses
+        if (i - 1) % K == 0
+            u = i - K
+            v = i
+            off = sum(SVector(1.0, 0.5 * sin(j), 0.2) for j in u:(v-1))
+            push!(lcs, (u, v, off))
+        end
+    end
+    return lcs
+end
+
 function build_chain_nlls(n_poses::Int)
     start_vars = generate_chain_start_vars(n_poses)
     chain_prob = NLLSModel.Model(SVector{3, Float64}, Union{BenchChainLink, BenchChainAnchor})
@@ -34,6 +47,9 @@ function build_chain_nlls(n_poses::Int)
     addcost!(chain_prob, BenchChainAnchor())
     for i in 1:n_poses-1
         addcost!(chain_prob, BenchChainLink(SVector(1.0, 0.5 * sin(i), 0.2), SVector(i, i + 1)))
+    end
+    for (u, v, off) in get_chain_loop_closures(n_poses)
+        addcost!(chain_prob, BenchChainLink(off, SVector(u, v)))
     end
     return chain_prob
 end
@@ -49,6 +65,15 @@ function chain_residuals!(out, x_flat, n_poses)
         b = SVector(x_flat[3*i+1], x_flat[3*i+2], x_flat[3*i+3])
         offset = SVector(1.0, 0.5 * sin(i), 0.2)
         r = b - a - offset + 0.1 * sin.(a)
+        out[out_idx] = r[1]
+        out[out_idx+1] = r[2]
+        out[out_idx+2] = r[3]
+        out_idx += 3
+    end
+    for (u, v, off) in get_chain_loop_closures(n_poses)
+        a = SVector(x_flat[3*u-2], x_flat[3*u-1], x_flat[3*u])
+        b = SVector(x_flat[3*v-2], x_flat[3*v-1], x_flat[3*v])
+        r = b - a - off + 0.1 * sin.(a)
         out[out_idx] = r[1]
         out[out_idx+1] = r[2]
         out[out_idx+2] = r[3]
@@ -72,11 +97,23 @@ function chain_jac!(J::SparseMatrixCSC, x_flat, n_poses)
             J[r_start + k, c_b + k] = 1.0
         end
     end
+    r_start = 3 * n_poses + 1
+    for (u, v, _) in get_chain_loop_closures(n_poses)
+        c_a = 3*u - 2
+        c_b = 3*v - 2
+        for k in 0:2
+            a_val = x_flat[c_a + k]
+            J[r_start + k, c_a + k] = -1.0 + 0.1 * cos(a_val)
+            J[r_start + k, c_b + k] = 1.0
+        end
+        r_start += 3
+    end
     return J
 end
 
 function build_chain_sparse_jacobian(n_poses::Int)
-    m_res = 3 * n_poses
+    lcs = get_chain_loop_closures(n_poses)
+    m_res = 3 * (n_poses + length(lcs))
     n_vars = 3 * n_poses
     rows = Int[]
     cols = Int[]
@@ -95,6 +132,18 @@ function build_chain_sparse_jacobian(n_poses::Int)
             push!(cols, c_b + k)
         end
     end
+    r_start = 3 * n_poses + 1
+    for (u, v, _) in lcs
+        c_a = 3*u - 2
+        c_b = 3*v - 2
+        for k in 0:2
+            push!(rows, r_start + k)
+            push!(cols, c_a + k)
+            push!(rows, r_start + k)
+            push!(cols, c_b + k)
+        end
+        r_start += 3
+    end
     vals = zeros(Float64, length(rows))
     return sparse(rows, cols, vals, m_res, n_vars)
 end
@@ -103,13 +152,14 @@ function create_pose_chain_problem()
     ProblemDefinition(
         "Nonlinear 3D Pose Chain",
         :large_sparse,
-        Any[1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576],
+        Any[50, 100, 200, 400, 800, 1200, 2000, 3500, 5000, 7500, 10000],
         n_poses -> begin
             start_vars = generate_chain_start_vars(n_poses)
             x_flat = reduce(vcat, [collect(v) for v in start_vars])
-            m_res = 3 * n_poses
+            lcs = get_chain_loop_closures(n_poses)
+            m_res = 3 * (n_poses + length(lcs))
 
-            # Model 1: NLLSModel Sparse Block Tridiagonal
+            # Model 1: NLLSModel Sparse Block Tridiagonal with Loop Closures
             nlls_prob = build_chain_nlls(n_poses)
             f_nlls, fdf_nlls!, x0_nlls, H_proto_chain = NLLSModel.optimvars(nlls_prob)
             n_tot_vars = 3 * n_poses
@@ -151,7 +201,7 @@ function create_pose_chain_problem()
 
             return [m_nlls, m_lso]
         end,
-        get_tier1_optimizers(),
+        get_standard_optimizers(),
         "Poses N"
     )
 end

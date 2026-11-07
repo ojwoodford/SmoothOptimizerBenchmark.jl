@@ -43,36 +43,32 @@ using SmoothOptimizerBenchmark
             @test res.problem == prob.name
             @test res.size == sz
             @test !isempty(res.model_results)
-            @test !isempty(res.best_model)
-            @test !isempty(res.tier1_optimizer_results)
-            @test haskey(res.model_results, res.best_model)
-
-            # Harness must run optimizers on the fastest model (minimum linsys_time_ns)
-            min_linsys = minimum(r.linsys_time_ns for (name, r) in res.model_results)
-            @test res.model_results[res.best_model].linsys_time_ns == min_linsys
+            @test !isempty(res.target_model)
+            @test !isempty(res.optimizer_results)
+            @test haskey(res.model_results, res.target_model)
         end
     end
 
-    @testset "Scaling Benchmark, JSON Serialization & Plotting" begin
+    @testset "Scaling Benchmark, Markdown Serialization & Plotting" begin
         prob = create_rosenbrock_sparse_problem()
         test_sizes = Any[2, 5]
-        scaling_res = run_scaling_benchmark(prob; sizes=test_sizes, samples=1, verbose=false)
+        tmp_data_dir = joinpath(tempdir(), "test_bench_data")
+        scaling_res = run_scaling_benchmark(prob; sizes=test_sizes, samples=1, data_dir=tmp_data_dir, verbose=false)
 
         @test scaling_res.problem == prob.name
         @test length(scaling_res.size_results) == 2
         @test scaling_res.sizes == test_sizes
 
-        # Test JSON serialization roundtrip
-        tmp_json = joinpath(tempdir(), "test_bench_results.json")
-        save_benchmark_results([scaling_res], tmp_json)
-        @test isfile(tmp_json)
-
-        loaded = load_benchmark_results(tmp_json)
-        @test length(loaded) == 1
-        @test loaded[1].problem == prob.name
-        @test loaded[1].sizes == test_sizes
-        @test length(loaded[1].size_results) == 2
-        rm(tmp_json; force=true)
+        # Verify streaming markdown file exists and matches
+        streamed_md = joinpath(tmp_data_dir, "rosenbrock_sparse.md")
+        @test isfile(streamed_md)
+        loaded = load_problem_markdown(streamed_md)
+        @test loaded.problem == prob.name
+        @test loaded.sizes == test_sizes
+        @test length(loaded.size_results) == 2
+        @test loaded.category == scaling_res.category
+        @test loaded.size_metric_name == scaling_res.size_metric_name
+        rm(tmp_data_dir; recursive=true, force=true)
 
         # Test Plotting Pipeline
         tmp_plot_dir = joinpath(tempdir(), "test_plots")

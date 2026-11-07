@@ -58,15 +58,34 @@ function make_synthetic_bam(ncams::Int, npnts::Int=ncams * 5, propvisible::Float
         end
     end
 
-    x0 = randn(rng, 3 * npnts + 9 * ncams)
+    x_true = zeros(Float64, 3 * npnts + 9 * ncams)
+    for p in 1:npnts
+        x_true[3*(p-1)+1] = rand(rng) * 2.0 - 1.0
+        x_true[3*(p-1)+2] = rand(rng) * 2.0 - 1.0
+        x_true[3*(p-1)+3] = 5.0 + rand(rng) * 5.0
+    end
     for c in 1:ncams
         offset = 3 * npnts + 9 * (c - 1)
-        x0[offset + 7] = 0.0 # k1
-        x0[offset + 8] = 0.0 # k2
-        x0[offset + 9] = 500.0 # f
+        x_true[offset + 1] = randn(rng) * 0.05
+        x_true[offset + 2] = randn(rng) * 0.05
+        x_true[offset + 3] = randn(rng) * 0.05
+        x_true[offset + 4] = (c - ncams / 2) * 0.5
+        x_true[offset + 5] = randn(rng) * 0.1
+        x_true[offset + 6] = 0.0
+        x_true[offset + 7] = 0.0 # k1
+        x_true[offset + 8] = 0.0 # k2
+        x_true[offset + 9] = 500.0 # f
     end
 
-    pt2d = randn(rng, 2 * nobs)
+    pt2d = zeros(Float64, 2 * nobs)
+    BundleAdjustmentModels.residuals!(x_true, pt2d, cams_indices, pnts_indices, nobs, npnts, zeros(Float64, 2 * nobs))
+
+    x0 = copy(x_true)
+    for i in 1:length(x0)
+        if i <= 3 * npnts || (i - 3 * npnts - 1) % 9 < 6
+            x0[i] += randn(rng) * 0.01
+        end
+    end
 
     nvar = 9 * ncams + 3 * npnts
     nequ = 2 * nobs
@@ -101,7 +120,7 @@ function create_bundle_adjustment_problem()
     ProblemDefinition(
         "Sparse Bundle Adjustment",
         :large_sparse,
-        Any[4, 6, 10, 16, 25, 40, 64, 100, 160, 256],
+        Any[4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256],
         sz -> begin
             if sz isa String
                 bam_model = BundleAdjustmentModel(sz)
@@ -165,7 +184,9 @@ function create_bundle_adjustment_problem()
         [
             OptimizerDefinition("SecondOrderOptimization (Sparse LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, linsolver=:ldl, kwargs...)),
             OptimizerDefinition("SecondOrderOptimization (Sparse Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, linsolver=:ldl, kwargs...)),
+            OptimizerDefinition("CaNNOLeS", (m; kwargs...) -> optimize_cannoles(m; kwargs...)),
             OptimizerDefinition("JSOSolvers (trunk)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:trunk, kwargs...)),
+            OptimizerDefinition("JSOSolvers (tron)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:tron, kwargs...)),
             OptimizerDefinition("Ipopt", (m; kwargs...) -> optimize_ipopt(m; kwargs...)),
             OptimizerDefinition("MadNLP", (m; kwargs...) -> optimize_madnlp(m; kwargs...))
         ],

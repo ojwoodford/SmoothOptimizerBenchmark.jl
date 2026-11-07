@@ -11,10 +11,22 @@ using NLLSModel
 using Optim
 using MadNLP
 using NonlinearSolve
+using CaNNOLeS
+using BundleAdjustmentModels
 
 export optimize_soo, optimize_least_squares, optimize_optim, optimize_jsosolvers, optimize_ipopt
-export optimize_madnlp, optimize_nonlinearsolve
-export get_tier1_optimizers, get_tier2_optimizers, as_nlpmodel, LeastSquaresNLPModel
+export optimize_madnlp, optimize_nonlinearsolve, optimize_cannoles
+export get_standard_optimizers, get_tier1_optimizers, get_tier2_optimizers, as_nlpmodel, LeastSquaresNLPModel
+export DEFAULT_GTOL, DEFAULT_XTOL, DEFAULT_FTOL, DEFAULT_MAXITERS, DEFAULT_MAXTIME
+
+# -----------------------------------------------------------------------------
+# Universal Stopping Criteria Constants
+# -----------------------------------------------------------------------------
+const DEFAULT_GTOL = 1e-8
+const DEFAULT_XTOL = 1e-8
+const DEFAULT_FTOL = 1e-8
+const DEFAULT_MAXITERS = 500
+const DEFAULT_MAXTIME = 30.0
 
 # -----------------------------------------------------------------------------
 # LeastSquaresProblem <-> NLPModels Adapter
@@ -167,11 +179,33 @@ end
 # -----------------------------------------------------------------------------
 
 """
+    as_least_squares_problem(bam::BundleAdjustmentModel) -> LeastSquaresProblem
+"""
+function as_least_squares_problem(bam::BundleAdjustmentModel)
+    rows = Vector{Int}(undef, bam.nls_meta.nnzj)
+    cols = Vector{Int}(undef, bam.nls_meta.nnzj)
+    NLPModels.jac_structure_residual!(bam, rows, cols)
+    vals = Vector{Float64}(undef, bam.nls_meta.nnzj)
+    NLPModels.jac_coord_residual!(bam, bam.meta.x0, vals)
+    J_proto = sparse(rows, cols, vals, bam.nls_meta.nequ, bam.meta.nvar)
+
+    f_res!(r, x) = NLPModels.residual!(bam, x, r)
+    g_jac!(J, x) = begin
+        NLPModels.jac_coord_residual!(bam, x, vals)
+        J_new = sparse(rows, cols, vals, bam.nls_meta.nequ, bam.meta.nvar)
+        copyto!(J.nzval, J_new.nzval)
+        return J
+    end
+    return LeastSquaresProblem(x=copy(bam.meta.x0), (f!) = f_res!, (g!) = g_jac!, y=zeros(Float64, bam.nls_meta.nequ), J=deepcopy(J_proto))
+end
+
+"""
     as_nlpmodel(m) -> AbstractNLPModel
 
 Extracts or converts a problem/model into an `NLPModels.AbstractNLPModel`.
 """
 as_nlpmodel(nlp::AbstractNLPModel) = nlp
+as_nlpmodel(bam::BundleAdjustmentModel) = LeastSquaresNLPModel(as_least_squares_problem(bam))
 as_nlpmodel(m::ModelDefinition) = as_nlpmodel(m.model)
 as_nlpmodel(prob::NLLSModel.Model) = NLLSModel.NLPLSModel(prob)
 as_nlpmodel(lsp::LeastSquaresProblem) = LeastSquaresNLPModel(lsp)
@@ -263,14 +297,17 @@ end
 # -----------------------------------------------------------------------------
 
 """
-    optimize_soo(model; method=:dogleg, maxiters=100, time_limit=nothing, maxtime=time_limit === nothing ? 1e6 : Float64(time_limit), kwargs...) -> OptimizerResult
+    optimize_soo(model; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `SecondOrderOptimization.jl`.
 Supported methods: `:dogleg`, `:lm` / `:levenbergmarquardt`.
 """
-function optimize_soo(target; method=:dogleg, maxiters=100, time_limit=nothing, maxtime=time_limit === nothing ? 1e6 : Float64(time_limit), kwargs...)
+const SOO_CONVERGENCE_MASK = (1 << 2) | (1 << 3) | (1 << 6) | (1 << 12)
+
+function optimize_soo(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+    actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
     actual_method = method === :lm ? :levenbergmarquardt : method
-    opt = OptimizationOptions(iterator=actual_method, maxiters=maxiters, maxtime=maxtime; kwargs...)
+    opt = OptimizationOptions(iterator=actual_method, gtol=gtol, dstep=xtol, reldcost=ftol, maxiters=maxiters, maxtime=actual_maxtime; kwargs...)
     m = target isa ModelDefinition ? target.model : target
 
     if m isa NLLSModel.Model
@@ -279,33 +316,39 @@ function optimize_soo(target; method=:dogleg, maxiters=100, time_limit=nothing, 
         timed = @timed SecondOrderOptimization.optimize!(p, opt)
         t_total = time_ns() - t_start
         _, res = timed.value
-        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, res.termination != 0)
+        converged = (res.termination & SOO_CONVERGENCE_MASK) != 0
+        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
+    elseif m isa BundleAdjustmentModel
+        lsp = as_least_squares_problem(m)
+        return optimize_soo(lsp; method=method, gtol=gtol, xtol=xtol, ftol=ftol, maxiters=maxiters, maxtime=maxtime, time_limit=time_limit, kwargs...)
     elseif m isa LeastSquaresProblem
         p = deepcopy(m)
         t_start = time_ns()
         timed = @timed SecondOrderOptimization.optimize!(p, opt)
         t_total = time_ns() - t_start
         _, res = timed.value
-        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, res.termination != 0)
+        converged = (res.termination & SOO_CONVERGENCE_MASK) != 0
+        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
     elseif m isa AbstractNLPModel
         p = deepcopy(m)
         t_start = time_ns()
         timed = @timed SecondOrderOptimization.optimize!(p, opt)
         t_total = time_ns() - t_start
         _, res = timed.value
-        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, res.termination != 0)
+        converged = (res.termination & SOO_CONVERGENCE_MASK) != 0
+        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
     else
         error("Unsupported model type for optimize_soo: $(typeof(m))")
     end
 end
 
 """
-    optimize_least_squares(model; method=:dogleg, maxiters=100, time_limit=nothing, kwargs...) -> OptimizerResult
+    optimize_least_squares(model; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `LeastSquaresOptim.jl`.
 Supported methods: `:dogleg`, `:lm` / `:levenbergmarquardt`.
 """
-function optimize_least_squares(target; method=:dogleg, maxiters=100, time_limit=nothing, kwargs...)
+function optimize_least_squares(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
     lso_method = (method === :lm || method === :levenbergmarquardt) ? LeastSquaresOptim.LevenbergMarquardt() : LeastSquaresOptim.Dogleg()
 
@@ -332,7 +375,7 @@ function optimize_least_squares(target; method=:dogleg, maxiters=100, time_limit
     actual_maxiters = (time_limit !== nothing && time_limit <= 1.0) ? min(maxiters, 10) : maxiters
 
     t_start = time_ns()
-    timed = @timed LeastSquaresOptim.optimize!(lsp, lso_method; iterations=actual_maxiters, kwargs...)
+    timed = @timed LeastSquaresOptim.optimize!(lsp, lso_method; g_tol=gtol, x_tol=xtol, f_tol=ftol, iterations=actual_maxiters, kwargs...)
     t_total = time_ns() - t_start
     res = timed.value
 
@@ -340,15 +383,15 @@ function optimize_least_squares(target; method=:dogleg, maxiters=100, time_limit
 end
 
 """
-    optimize_optim(model; method=:newton_trust_region, maxiters=100, time_limit=nothing, kwargs...) -> OptimizerResult
+    optimize_optim(model; method=:newton_trust_region, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `Optim.jl`.
 Supported methods: `:newton_trust_region`, `:newton`.
 """
-function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_limit=nothing, kwargs...)
+function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
     optim_method = method === :newton ? Optim.Newton(linesearch=Optim.LineSearches.BackTracking()) : Optim.NewtonTrustRegion()
-    t_lim = time_limit === nothing ? NaN : Float64(time_limit)
+    actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
 
     if m isa LeastSquaresProblem
         lsp = deepcopy(m)
@@ -403,7 +446,7 @@ function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_
         h!(H0, x0)
 
         td = TwiceDifferentiable(f, g!, h!, x0, start_c, g0, H0)
-        opts = Optim.Options(iterations=maxiters, time_limit=t_lim; kwargs...)
+        opts = Optim.Options(g_abstol=gtol, x_abstol=xtol, f_reltol=ftol, iterations=maxiters, time_limit=actual_maxtime; kwargs...)
 
         t_start = time_ns()
         timed = @timed Optim.optimize(td, x0, optim_method, opts)
@@ -448,7 +491,7 @@ function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_
         end
 
         td = Optim.NLSolversBase.TwiceDifferentiable(f_opt, g_opt!, h_opt!, copy(x0), start_c, g0, H0)
-        opts = Optim.Options(iterations=maxiters, time_limit=t_lim; kwargs...)
+        opts = Optim.Options(g_abstol=gtol, x_abstol=xtol, f_reltol=ftol, iterations=maxiters, time_limit=actual_maxtime; kwargs...)
 
         t_start = time_ns()
         timed = @timed Optim.optimize(td, copy(x0), optim_method, opts)
@@ -498,7 +541,7 @@ function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_
         end
 
         td = Optim.NLSolversBase.TwiceDifferentiable(f_nlp, g_nlp!, h_nlp!, copy(x0), start_c, g0, H0)
-        opts = Optim.Options(iterations=maxiters, time_limit=t_lim; kwargs...)
+        opts = Optim.Options(g_abstol=gtol, x_abstol=xtol, f_reltol=ftol, iterations=maxiters, time_limit=actual_maxtime; kwargs...)
 
         t_start = time_ns()
         timed = @timed Optim.optimize(td, copy(x0), optim_method, opts)
@@ -512,21 +555,22 @@ function optimize_optim(target; method=:newton_trust_region, maxiters=100, time_
 end
 
 """
-    optimize_jsosolvers(model; solver=:trunk, maxiters=100, time_limit=nothing, max_time=time_limit === nothing ? 3600.0 : Float64(time_limit), kwargs...) -> OptimizerResult
+    optimize_jsosolvers(model; solver=:trunk, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `JSOSolvers.jl`.
 Supported solvers: `:trunk`, `:tron`.
 """
-function optimize_jsosolvers(target; solver=:trunk, maxiters=100, time_limit=nothing, max_time=time_limit === nothing ? 3600.0 : Float64(time_limit), kwargs...)
+function optimize_jsosolvers(target; solver=:trunk, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     nlp = as_nlpmodel(target)
     NLPModels.reset!(nlp)
     start_c = NLPModels.obj(nlp, nlp.meta.x0)
+    actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
 
     t_start = time_ns()
     timed = if solver === :tron
-        @timed JSOSolvers.tron(nlp; max_iter=maxiters, max_time=max_time, kwargs...)
+        @timed JSOSolvers.tron(nlp; atol=gtol, rtol=gtol, max_iter=maxiters, max_time=actual_maxtime, kwargs...)
     else
-        @timed JSOSolvers.trunk(nlp; max_iter=maxiters, max_time=max_time, kwargs...)
+        @timed JSOSolvers.trunk(nlp; atol=gtol, rtol=gtol, max_iter=maxiters, max_time=actual_maxtime, kwargs...)
     end
     t_total = time_ns() - t_start
     res = timed.value
@@ -543,17 +587,18 @@ function optimize_jsosolvers(target; solver=:trunk, maxiters=100, time_limit=not
 end
 
 """
-    optimize_ipopt(model; maxiters=100, print_level=0, time_limit=nothing, max_cpu_time=time_limit === nothing ? 1e6 : Float64(time_limit), kwargs...) -> OptimizerResult
+    optimize_ipopt(model; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, print_level=0, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `Ipopt` via `NLPModelsIpopt`.
 """
-function optimize_ipopt(target; maxiters=100, print_level=0, time_limit=nothing, max_cpu_time=time_limit === nothing ? 1e6 : Float64(time_limit), kwargs...)
+function optimize_ipopt(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, print_level=0, time_limit=nothing, kwargs...)
     nlp = as_nlpmodel(target)
     NLPModels.reset!(nlp)
     start_c = NLPModels.obj(nlp, nlp.meta.x0)
+    actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
 
     t_start = time_ns()
-    timed = @timed NLPModelsIpopt.ipopt(nlp; max_iter=maxiters, max_cpu_time=max_cpu_time, print_level=print_level, kwargs...)
+    timed = @timed NLPModelsIpopt.ipopt(nlp; tol=gtol, dual_inf_tol=gtol, max_iter=maxiters, max_cpu_time=actual_maxtime, print_level=print_level, kwargs...)
     t_total = time_ns() - t_start
     res = timed.value
 
@@ -570,17 +615,18 @@ function optimize_ipopt(target; maxiters=100, print_level=0, time_limit=nothing,
 end
 
 """
-    optimize_madnlp(model; maxiters=100, time_limit=nothing, max_wall_time=time_limit === nothing ? 1e6 : Float64(time_limit), kwargs...) -> OptimizerResult
+    optimize_madnlp(model; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `MadNLP.jl`.
 """
-function optimize_madnlp(target; maxiters=100, time_limit=nothing, max_wall_time=time_limit === nothing ? 1e6 : Float64(time_limit), kwargs...)
+function optimize_madnlp(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     nlp = as_nlpmodel(target)
     NLPModels.reset!(nlp)
     start_c = NLPModels.obj(nlp, nlp.meta.x0)
+    actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
 
     t_start = time_ns()
-    timed = @timed MadNLP.madnlp(nlp; max_iter=maxiters, max_wall_time=max_wall_time, print_level=MadNLP.ERROR, kwargs...)
+    timed = @timed MadNLP.madnlp(nlp; tol=gtol, max_iter=maxiters, max_wall_time=actual_maxtime, print_level=MadNLP.ERROR, kwargs...)
     t_total = time_ns() - t_start
     res = timed.value
 
@@ -597,12 +643,12 @@ function optimize_madnlp(target; maxiters=100, time_limit=nothing, max_wall_time
 end
 
 """
-    optimize_nonlinearsolve(model; method=:lm, maxiters=100, time_limit=nothing, maxtime=time_limit === nothing ? Inf : Float64(time_limit), kwargs...) -> OptimizerResult
+    optimize_nonlinearsolve(model; method=:lm, gtol=DEFAULT_GTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `NonlinearSolve.jl`.
 Supported methods: `:lm`, `:trust_region`, `:gauss_newton`.
 """
-function optimize_nonlinearsolve(target; method=:lm, maxiters=100, time_limit=nothing, maxtime=time_limit === nothing ? Inf : Float64(time_limit), kwargs...)
+function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
 
     if !(m isa LeastSquaresProblem)
@@ -613,6 +659,7 @@ function optimize_nonlinearsolve(target; method=:lm, maxiters=100, time_limit=no
     m_len = length(lsp.y)
     n_len = length(lsp.x)
     x0 = copy(lsp.x)
+    actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
 
     if lsp.J isa SparseMatrixCSC && n_len > 25000
         # Avoid excessive sparse QR solve time on massive sparse regimes
@@ -638,7 +685,7 @@ function optimize_nonlinearsolve(target; method=:lm, maxiters=100, time_limit=no
     end
 
     t_start = time_ns()
-    timed = @timed solve(prob, solver; maxiters=maxiters, maxtime=maxtime, kwargs...)
+    timed = @timed solve(prob, solver; abstol=gtol, reltol=ftol, maxiters=maxiters, maxtime=actual_maxtime, kwargs...)
     t_total = time_ns() - t_start
     sol = timed.value
 
@@ -657,36 +704,46 @@ function optimize_nonlinearsolve(target; method=:lm, maxiters=100, time_limit=no
     )
 end
 
-# -----------------------------------------------------------------------------
-# Default Tier 1 & Tier 2 Optimizer Sets
-# -----------------------------------------------------------------------------
-
 """
-    get_tier1_optimizers() -> Vector{OptimizerDefinition}
+    optimize_cannoles(model; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
-Returns optimizer definitions capable of running directly on peak-performance models (e.g. `NLLSModel.Model`).
-Includes SecondOrderOptimization, Optim, JSOSolvers, Ipopt, and MadNLP.
+Optimizes a model using `CaNNOLeS.jl`.
 """
-function get_tier1_optimizers()
-    return OptimizerDefinition[
-        OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),
-        OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)),
-        OptimizerDefinition("Optim (NewtonTrustRegion)", (m; kwargs...) -> optimize_optim(m; method=:newton_trust_region, kwargs...)),
-        OptimizerDefinition("Optim (Newton)", (m; kwargs...) -> optimize_optim(m; method=:newton, kwargs...)),
-        OptimizerDefinition("JSOSolvers (trunk)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:trunk, kwargs...)),
-        OptimizerDefinition("JSOSolvers (tron)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:tron, kwargs...)),
-        OptimizerDefinition("Ipopt", (m; kwargs...) -> optimize_ipopt(m; kwargs...)),
-        OptimizerDefinition("MadNLP", (m; kwargs...) -> optimize_madnlp(m; kwargs...))
-    ]
+function optimize_cannoles(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+    m = target isa ModelDefinition ? target.model : target
+    nls = m isa BundleAdjustmentModel ? m : as_nlpmodel(m)
+    NLPModels.reset!(nls)
+    start_c = NLPModels.obj(nls, nls.meta.x0)
+    actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
+    cannoles_method = m isa BundleAdjustmentModel ? :Newton_noFHess : :Newton
+
+    t_start = time_ns()
+    timed = @timed CaNNOLeS.cannoles(nls; method=cannoles_method, atol=gtol, rtol=gtol, max_iter=maxiters, max_time=actual_maxtime, kwargs...)
+    t_total = time_ns() - t_start
+    stats = timed.value
+
+    return OptimizerResult(
+        Float64(t_total),
+        Base.gc_alloc_count(timed.gcstats),
+        timed.bytes,
+        stats.iter,
+        start_c,
+        stats.objective,
+        stats.status in (:first_order, :acceptable_level)
+    )
 end
 
-"""
-    get_tier2_optimizers() -> Vector{OptimizerDefinition}
+# -----------------------------------------------------------------------------
+# Standard Optimizer Sets
+# -----------------------------------------------------------------------------
 
-Returns optimizer definitions for universal apples-to-apples comparison on Common Models (e.g. `LeastSquaresProblem`).
-Includes all solver families: SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, and NonlinearSolve.
 """
-function get_tier2_optimizers()
+    get_standard_optimizers() -> Vector{OptimizerDefinition}
+
+Returns standard unified optimizer definitions for Euclidean problems on the standardized baseline model (e.g. `LeastSquaresProblem`).
+Includes all solver families configured with universal stopping criteria.
+"""
+function get_standard_optimizers()
     return OptimizerDefinition[
         OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),
         OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)),
@@ -702,3 +759,7 @@ function get_tier2_optimizers()
         OptimizerDefinition("NonlinearSolve (TrustRegion)", (m; kwargs...) -> optimize_nonlinearsolve(m; method=:trust_region, kwargs...))
     ]
 end
+
+# Backwards-compatibility aliases
+get_tier1_optimizers() = get_standard_optimizers()
+get_tier2_optimizers() = get_standard_optimizers()

@@ -19,6 +19,7 @@ end
 function generate_docs_markdown(results::Vector{ProblemScalingBenchmarkResult}; docs_dir=joinpath(@__DIR__, "..", "docs", "src"))
     mkpath(joinpath(docs_dir, "problems"))
     mkpath(joinpath(docs_dir, "assets", "plots"))
+    mkpath(joinpath(docs_dir, "data"))
 
     # 1. Generate index.md
     index_md = """
@@ -97,27 +98,16 @@ For every benchmark problem, performance is evaluated across at least **10 disti
 end
 
 function generate_problem_markdown(res::ProblemScalingBenchmarkResult, slug::String)
-    # Collect unique model names and optimizer names
-    model_names = String[]
-    opt_names = String[]
-    for s in res.size_results
-        for m in keys(s.model_results)
-            !(m in model_names) && push!(model_names, m)
-        end
-        for o in keys(s.tier2_optimizer_results)
-            !(o in opt_names) && push!(opt_names, o)
-        end
-        for o in keys(s.tier1_optimizer_results)
-            !(o in opt_names) && push!(opt_names, o)
-        end
-    end
+    target_model_name = isempty(res.size_results) ? "Standard" : first(res.size_results).target_model
+    num_sizes = length(res.sizes)
 
     md = """
 # $(res.problem)
 
 - **Category**: `$(res.category)`
 - **Scaling Metric**: $(res.size_metric_name)
-- **Problem Sizes Evaluated**: $(join(res.sizes, ", ")) ($(length(res.sizes)) sizes)
+- **Problem Sizes Evaluated**: $(join(res.sizes, ", ")) ($(num_sizes) sizes)
+- **Standard Baseline Model for Solvers**: `$(target_model_name)`
 
 ---
 
@@ -127,60 +117,28 @@ The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed lin
 
 ![$(res.problem) Model Evaluation Scaling](../assets/plots/$(slug)_models.png)
 
-### Model Evaluation Timings
-
-| $(res.size_metric_name) | Model | Cost Time | Cost Allocs | Linsys Time | Linsys Allocs | Linsys Memory |
-|:---|:---|:---|:---|:---|:---|:---|
-"""
-    for s in res.size_results
-        for m_name in model_names
-            if haskey(s.model_results, m_name)
-                mr = s.model_results[m_name]
-                c_time = format_time(mr.cost_time_ns)
-                ls_time = format_time(mr.linsys_time_ns)
-                mem_str = format_bytes(mr.linsys_bytes)
-                star = m_name == s.best_model ? " ★" : ""
-                md *= "| $(s.size) | $(m_name)$(star) | $(c_time) | $(mr.cost_allocs) | $(ls_time) | $(mr.linsys_allocs) | $(mem_str) |\n"
-            end
-        end
-    end
-
-    md *= """
-
 ---
 
 ## 2. Optimizer Evaluation Scaling
 
-The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all compatible optimizer families.
+The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers on the standardized baseline model (`$(target_model_name)`).
 
 ![$(res.problem) Optimizer Scaling](../assets/plots/$(slug)_optimizers.png)
 
-### Optimizer Results Summary
+---
 
-| $(res.size_metric_name) | Optimizer | Runtime | Allocs | Memory | Iterations | Final Cost | Converged |
-|:---|:---|:---|:---|:---|:---|:---|:---|
-"""
-    for s in res.size_results
-        for o_name in opt_names
-            r = get(s.tier2_optimizer_results, o_name, get(s.tier1_optimizer_results, o_name, nothing))
-            if r !== nothing
-                t_str = format_time(r.time_ns)
-                mem_str = format_bytes(r.bytes)
-                cost_str = isnan(r.final_cost) ? "NaN" : @sprintf("%.4e", r.final_cost)
-                conv_str = r.converged ? "✓ Yes" : "✗ No"
-                md *= "| $(s.size) | $(o_name) | $(t_str) | $(r.allocs) | $(mem_str) | $(r.iterations) | $(cost_str) | $(conv_str) |\n"
-            end
-        end
-    end
+## 3. Raw Data
 
-    md *= """
+The full numeric benchmark measurements (cost, linear system assembly times, outer iterations, memory, and convergence status across all sizes) are persisted in the streaming Markdown data file:
+
+- [View Full Raw Benchmark Results Data (Markdown Table)](../data/$(slug).md)
 
 ---
 
-## 3. Analysis & Key Takeaways
+## 4. Analysis & Key Takeaways
 
-- **Asymptotic Complexity**: Log-log scaling indicates the empirical runtime growth rate as $(res.size_metric_name) expands.
-- **Fastest Model**: The fastest linear system assembly was consistently achieved by `$(first(res.size_results).best_model)`.
+- **Asymptotic Complexity**: Log-log scaling indicates empirical runtime growth rate as $(res.size_metric_name) expands.
+- **Model Efficiency**: Block-sparse representations and static representations avoid heap allocations during linear system construction.
 - **Top Optimizer**: Solvers leveraging specialized structure (e.g. sparse block factorization in SecondOrderOptimization) demonstrate superior scaling exponents on large problem regimes.
 """
 

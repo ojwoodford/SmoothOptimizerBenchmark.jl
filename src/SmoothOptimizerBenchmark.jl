@@ -30,6 +30,7 @@ using NonlinearSolve
 
 include("types.jl")
 include("adapters.jl")
+include("markdown_storage.jl")
 include("harness.jl")
 include("plotting.jl")
 
@@ -51,7 +52,9 @@ export create_robust_procrustes_problem
 export create_bundle_adjustment_problem
 
 export run_problem_benchmark, run_scaling_benchmark, run_all_scaling_benchmarks
-export save_benchmark_results, load_benchmark_results
+export load_problem_markdown, load_all_problem_markdown, update_problem_plots
+export init_problem_markdown, append_model_evaluation, init_optimizer_section, append_optimizer_evaluation
+export load_benchmark_results
 export problem_slug, plot_model_scaling, plot_optimizer_scaling, generate_all_plots
 
 """

@@ -7,20 +7,17 @@ println("=======================================================================
 println("Running SmoothOptimizerBenchmark Scaling Suite across >=10 sizes per problem...")
 println("================================================================================")
 
-data_file = joinpath(@__DIR__, "..", "data", "benchmark_results.json")
-plots_dir = joinpath(@__DIR__, "..", "docs", "src", "assets", "plots")
-mkpath(dirname(data_file))
+data_dir = DEFAULT_DATA_DIR
+plots_dir = DEFAULT_PLOTS_DIR
+mkpath(data_dir)
 mkpath(plots_dir)
 
-# Run scaling benchmarks
+# Run scaling benchmarks (streams live markdown directly to docs/src/data/<slug>.md)
 t_start = time()
-results = run_all_scaling_benchmarks(verbose=true)
+results = run_all_scaling_benchmarks(data_dir=data_dir, verbose=true)
 t_elapsed = time() - t_start
 println(@sprintf("\n✓ All scaling benchmarks completed in %.1f seconds.", t_elapsed))
-
-# Save results to JSON
-save_benchmark_results(results, data_file)
-println("✓ Benchmark data saved to: $data_file")
+println("✓ Benchmark streaming Markdown files saved to: $data_dir")
 
 # Generate log-log scaling plots
 println("\nGenerating log-log scaling plots...")
@@ -34,14 +31,15 @@ docs_src_dir = joinpath(@__DIR__, "..", "docs", "src")
 generate_docs_markdown(results; docs_dir=docs_src_dir)
 println("✓ Generated Documenter pages in: $docs_src_dir")
 
-# Optional: re-build HTML docs if Documenter is available
+# Re-build HTML docs using the docs project environment
+println("\nBuilding HTML documentation with Documenter...")
 try
-    import Documenter
-    println("\nBuilding HTML documentation with Documenter...")
-    include(joinpath(@__DIR__, "..", "docs", "make.jl"))
+    docs_dir = joinpath(@__DIR__, "..", "docs")
+    docs_make = joinpath(docs_dir, "make.jl")
+    run(`$(Base.julia_cmd()) --startup-file=no --project=$docs_dir $docs_make`)
     println("✓ HTML documentation successfully built into docs/build/")
-catch
-    println("Note: Documenter is in the 'docs' environment. Run 'julia --project=docs docs/make.jl' to build HTML.")
+catch err
+    @warn "Failed to build HTML documentation" exception=err
 end
 
 println("\n✓ Benchmark and documentation asset pipeline finished.")

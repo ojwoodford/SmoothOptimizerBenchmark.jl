@@ -2,6 +2,11 @@
 
 export ModelEvaluationResult, ModelDefinition, OptimizerResult, OptimizerDefinition, ProblemDefinition
 export SingleSizeBenchmarkResult, ProblemScalingBenchmarkResult
+export DEFAULT_DOCS_DIR, DEFAULT_DATA_DIR, DEFAULT_PLOTS_DIR
+
+const DEFAULT_DOCS_DIR = normpath(joinpath(@__DIR__, "..", "docs", "src"))
+const DEFAULT_DATA_DIR = joinpath(DEFAULT_DOCS_DIR, "data")
+const DEFAULT_PLOTS_DIR = joinpath(DEFAULT_DOCS_DIR, "assets", "plots")
 
 """
     ModelEvaluationResult
@@ -114,10 +119,9 @@ Complete benchmark results for a single problem at a specific size:
 - `category`: problem category
 - `size`: size value tested
 - `size_metric_name`: metric name for size
-- `model_results`: evaluation timings per model formulation
-- `best_model`: name of best performing model
-- `tier1_optimizer_results`: results of compatible solvers on best model
-- `tier2_optimizer_results`: results of all solvers on common model
+- `model_results`: evaluation timings per model formulation (Dict{String, ModelEvaluationResult})
+- `target_model`: name of the standardized model used for optimizer benchmarks (e.g. "Standalone")
+- `optimizer_results`: results of all tested solvers on the target model (Dict{String, OptimizerResult})
 """
 struct SingleSizeBenchmarkResult
     problem::String
@@ -125,20 +129,42 @@ struct SingleSizeBenchmarkResult
     size::Any
     size_metric_name::String
     model_results::Dict{String, ModelEvaluationResult}
-    best_model::String
-    tier1_optimizer_results::Dict{String, OptimizerResult}
-    tier2_optimizer_results::Dict{String, OptimizerResult}
+    target_model::String
+    optimizer_results::Dict{String, OptimizerResult}
 end
 
-# Backwards compatibility constructor
+# Backwards compatibility constructors
+function SingleSizeBenchmarkResult(
+    problem::String,
+    category::Symbol,
+    size::Any,
+    size_metric_name::String,
+    model_results::Dict{String, ModelEvaluationResult},
+    target_model::String,
+    tier1_optimizer_results::Dict{String, OptimizerResult},
+    tier2_optimizer_results::Dict{String, OptimizerResult}
+)
+    merged = merge(tier1_optimizer_results, tier2_optimizer_results)
+    return SingleSizeBenchmarkResult(problem, category, size, size_metric_name, model_results, target_model, merged)
+end
+
 function SingleSizeBenchmarkResult(
     problem::String,
     size::Any,
     model_results::Dict{String, ModelEvaluationResult},
-    best_model::String,
+    target_model::String,
     optimizer_results::Dict{String, OptimizerResult}
 )
-    return SingleSizeBenchmarkResult(problem, :general, size, "Size", model_results, best_model, optimizer_results, Dict{String, OptimizerResult}())
+    return SingleSizeBenchmarkResult(problem, :general, size, "Size", model_results, target_model, optimizer_results)
+end
+
+function Base.getproperty(res::SingleSizeBenchmarkResult, sym::Symbol)
+    if sym === :best_model
+        return getfield(res, :target_model)
+    elseif sym === :tier1_optimizer_results || sym === :tier2_optimizer_results
+        return getfield(res, :optimizer_results)
+    end
+    return getfield(res, sym)
 end
 
 """

@@ -6,7 +6,7 @@ const MOI = JuMP.MOI
 const rosen_diag_w_sparse = 1.0
 const rosen_offdiag_w_sparse = 10.0
 
-rosen_sparse_startpoint(n::Int) = Float64[i % 2 == 0 ? 1.0 : -1.2 for i in 1:n]
+rosen_sparse_startpoint(n::Int) = fill(0.5, n)
 
 struct RosenDiagSparse <: NLLSModel.AbstractResidual
     weight::Float64
@@ -79,7 +79,7 @@ function create_rosenbrock_sparse_problem()
     ProblemDefinition(
         "Sparse Multi-dimensional Rosenbrock",
         :large_sparse,
-        Any[1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576],
+        Any[100, 250, 500, 1000, 2500, 5000, 10000, 20000, 35000, 50000, 75000],
         n -> begin
             x0 = rosen_sparse_startpoint(n)
             len = 2 * n - 1
@@ -136,7 +136,7 @@ function create_rosenbrock_sparse_problem()
 
             return models
         end,
-        get_tier1_optimizers(),
+        get_standard_optimizers(),
         "Variables n"
     )
 end

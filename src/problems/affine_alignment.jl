@@ -38,7 +38,7 @@ function create_affine_alignment_problem()
     ProblemDefinition(
         "Dense Affine Alignment",
         :small_dense,
-        Any[1, 2, 3, 4, 6, 8, 10, 14, 18, 22, 26, 32],
+        Any[1, 2, 3, 4, 6, 8, 12, 16, 20, 24, 28, 32],
         n -> begin
             X, Y, D = generate_affine_data(n)
             start_vec = zeros(n * n + n)
@@ -69,6 +69,9 @@ function create_affine_alignment_problem()
             r_buf = zeros(Float64, r_len)
             costfun!(out, x) = (out .= affine_resfun(x, X, Y, D))
             lsp = LeastSquaresProblem(x=x_lso, f! = costfun!, output_length=r_len, autodiff=:forward)
+            J_buf = deepcopy(lsp.J)
+            g_buf = zeros(Float64, length(start_vec))
+            H_buf = zeros(Float64, length(start_vec), length(start_vec))
             m_lso = ModelDefinition(
                 "Standalone",
                 lsp,
@@ -78,7 +81,10 @@ function create_affine_alignment_problem()
                 end,
                 () -> begin
                     costfun!(r_buf, x_lso)
-                    return (0.5 * sum(abs2, r_buf), r_buf)
+                    lsp.g!(J_buf, x_lso)
+                    mul!(g_buf, J_buf', r_buf)
+                    mul!(H_buf, J_buf', J_buf)
+                    return (0.5 * sum(abs2, r_buf), H_buf)
                 end,
                 () -> begin
                     x_lso .= 0.0
@@ -88,7 +94,7 @@ function create_affine_alignment_problem()
 
             return [m_nlls, m_lso]
         end,
-        get_tier1_optimizers(),
+        get_standard_optimizers(),
         "Dimension n"
     )
 end

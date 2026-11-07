@@ -28,15 +28,7 @@ function generate_procrustes_experiment(d::Int)
     Random.seed!(42 + d)
     e = Matrix{Float64}(I, d, d)
     p_star = exp(M, e, rand(M; vector_at=e, σ = 0.5/d))
-    B = copy(A)
-    # Generate outliers if n is sufficient
-    if n >= 6 && d >= 3
-        B[2, 4] += 0.1
-        B[3, 1] += 0.1
-        B[3, 2] += 0.1
-        B[1, 6] += 0.1
-    end
-    B = p_star' * B
+    B = transpose(p_star) * A # Clean data, no outliers
     return A, B, M, p_star
 end
 
@@ -51,8 +43,6 @@ NLLSModel.nres(res::ProcrustesOVIResidual) = length(res.a)
 NLLSModel.varindices(::ProcrustesOVIResidual) = 1
 NLLSModel.getvars(::ProcrustesOVIResidual, vars::AbstractVector) = (vars[1],)
 NLLSModel.computeresidual(res::ProcrustesOVIResidual, v::ManifoldVar) = res.a - v.point * res.b
-const procrustes_huber_kernel = NLLSModel.Huber2oKernel(1e-5)
-NLLSModel.robustkernel(::ProcrustesOVIResidual) = procrustes_huber_kernel
 
 function NLLSModel.computeresjac(::StaticInt{1}, res::ProcrustesOVIResidual, v::ManifoldVar)
     r = res.a - v.point * res.b
@@ -111,20 +101,21 @@ NLLSModel.nres(::SpecializedProcrustesResidual{N}) where N = static(N)
 NLLSModel.varindices(::SpecializedProcrustesResidual) = 1
 NLLSModel.getvars(res::SpecializedProcrustesResidual, vars::AbstractVector) = (vars[1],)
 NLLSModel.computeresidual(res::SpecializedProcrustesResidual, var::SpecializedRotation) = res.A - var.R * res.B
-NLLSModel.robustkernel(::SpecializedProcrustesResidual) = procrustes_huber_kernel
 Base.eltype(::SpecializedProcrustesResidual) = Float64
 
-@generated function specialized_jac(res::SpecializedProcrustesResidual{N}, var::SpecializedRotation{N}) where N
+function specialized_jac(res::SpecializedProcrustesResidual{N}, var::SpecializedRotation{N}) where N
     NV = (N * (N - 1)) ÷ 2
-    exprs = []
-    for i in 1:N
+    J = Matrix{Float64}(undef, N, NV)
+    col = 1
+    @inbounds for i in 1:N
         for j in i+1:N
             for row in 1:N
-                push!(exprs, :(res.B[$i] * var.R[$row, $j] - res.B[$j] * var.R[$row, $i]))
+                J[row, col] = res.B[i] * var.R[row, j] - res.B[j] * var.R[row, i]
             end
+            col += 1
         end
     end
-    return :(SMatrix{$N, $NV, Float64, $(N * NV)}($(exprs...)))
+    return J
 end
 
 NLLSModel.computeresjac(::StaticInt{1}, res::SpecializedProcrustesResidual{N}, var::SpecializedRotation{N}) where N =
@@ -139,11 +130,39 @@ function get_procrustes_dim(model)
     end
 end
 
+function get_procrustes_manopt_components(model_def)
+    if hasproperty(model_def.model, :M)
+        return model_def.model.M, model_def.model.f, model_def.model.jac, model_def.model.p0, model_def.model.k
+    else
+        d = get_procrustes_dim(model_def.model)
+        A, B, M, _ = generate_procrustes_experiment(d)
+        n = size(A, 2)
+        k_len = d * n
+        dim_M = manifold_dimension(M)
+        p0 = Matrix{Float64}(I, d, d)
+        f_manopt(M, p) = reduce(vcat, [A[:, i] - p * B[:, i] for i in 1:n])
+        function jac_manopt(M, p)
+            B_basis = DefaultOrthonormalBasis()
+            J = zeros(k_len, dim_M)
+            for l in 1:dim_M
+                step_vec = [j == l ? 1.0 : 0.0 for j in 1:dim_M]
+                X_l = get_vector(M, p, step_vec, B_basis)
+                for i in 1:n
+                    dFi = -p * X_l * B[:, i]
+                    J[(i-1)*d+1 : i*d, l] .= dFi
+                end
+            end
+            return J
+        end
+        return M, f_manopt, jac_manopt, p0, k_len
+    end
+end
+
 function create_robust_procrustes_problem()
     ProblemDefinition(
-        "Robust Procrustes on SO(d)",
+        "Procrustes on SO(d)",
         :manifold,
-        Any[2, 3, 4, 6, 8, 10, 14, 18, 22, 26, 32],
+        Any[2, 3, 4, 5, 6, 8, 10, 12, 15, 18, 21, 24],
         d -> begin
             A, B, M, _ = generate_procrustes_experiment(d)
             n = size(A, 2)
@@ -215,82 +234,66 @@ function create_robust_procrustes_problem()
             return [m_ovi, m_spec, m_manopt]
         end,
         [
-            OptimizerDefinition("SecondOrderOptimization (LM)", (model_def; time_limit=nothing, kwargs...) -> begin
-                prob = if model_def.model isa NLLSModel.Model
-                    deepcopy(model_def.model)
-                else
-                    d = get_procrustes_dim(model_def.model)
-                    A, B, M, _ = generate_procrustes_experiment(d)
-                    n = size(A, 2)
-                    p0 = Matrix{Float64}(I, d, d)
-                    R0_static = SMatrix{d, d, Float64, d * d}(p0)
-                    p = NLLSModel.Model([SpecializedRotation(R0_static)], SpecializedProcrustesResidual{d})
-                    for i in 1:n; addcost!(p, SpecializedProcrustesResidual{d}(SVector{d, Float64}(A[:, i]), SVector{d, Float64}(B[:, i]))); end
-                    p
+            OptimizerDefinition("SecondOrderOptimization (LM)", (model_def; gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
+                M, f_res, jac_res, p0, _ = get_procrustes_manopt_components(model_def)
+                var0 = ManifoldVar(copy(p0), M)
+                f_soo(v::ManifoldVar) = 0.5 * sum(abs2, f_res(M, v.point))
+                function fdf_soo!(g, H, v::ManifoldVar)
+                    r = f_res(M, v.point)
+                    J = jac_res(M, v.point)
+                    mul!(g, transpose(J), r)
+                    mul!(H, transpose(J), J)
+                    return 0.5 * sum(abs2, r)
                 end
-                maxtime = time_limit === nothing ? 1e6 : Float64(time_limit)
-                opt = OptimizationOptions(iterator = :levenbergmarquardt, maxiters=100, maxtime=maxtime)
+
+                actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
+                opt = OptimizationOptions(iterator = :levenbergmarquardt, gtol=gtol, dstep=xtol, reldcost=ftol, maxiters=maxiters, maxtime=actual_maxtime; kwargs...)
                 t_start = time_ns()
-                timed = @timed SecondOrderOptimization.optimize!(prob, opt)
+                timed = @timed SecondOrderOptimization.optimize(f_soo, fdf_soo!, var0, opt)
                 t_total = time_ns() - t_start
                 _, res = timed.value
                 alloc_cnt = Base.gc_alloc_count(timed.gcstats)
-                return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, res.niterations, res.startcost, res.bestcost, true)
+                converged = (res.termination & ((1 << 2) | (1 << 3) | (1 << 6) | (1 << 12))) != 0
+                return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
             end),
-            OptimizerDefinition("SecondOrderOptimization (Dogleg)", (model_def; time_limit=nothing, kwargs...) -> begin
-                prob = if model_def.model isa NLLSModel.Model
-                    deepcopy(model_def.model)
-                else
-                    d = get_procrustes_dim(model_def.model)
-                    A, B, M, _ = generate_procrustes_experiment(d)
-                    n = size(A, 2)
-                    p0 = Matrix{Float64}(I, d, d)
-                    R0_static = SMatrix{d, d, Float64, d * d}(p0)
-                    p = NLLSModel.Model([SpecializedRotation(R0_static)], SpecializedProcrustesResidual{d})
-                    for i in 1:n; addcost!(p, SpecializedProcrustesResidual{d}(SVector{d, Float64}(A[:, i]), SVector{d, Float64}(B[:, i]))); end
-                    p
+            OptimizerDefinition("SecondOrderOptimization (Dogleg)", (model_def; gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
+                M, f_res, jac_res, p0, _ = get_procrustes_manopt_components(model_def)
+                var0 = ManifoldVar(copy(p0), M)
+                f_soo(v::ManifoldVar) = 0.5 * sum(abs2, f_res(M, v.point))
+                function fdf_soo!(g, H, v::ManifoldVar)
+                    r = f_res(M, v.point)
+                    J = jac_res(M, v.point)
+                    mul!(g, transpose(J), r)
+                    mul!(H, transpose(J), J)
+                    return 0.5 * sum(abs2, r)
                 end
-                maxtime = time_limit === nothing ? 1e6 : Float64(time_limit)
-                opt = OptimizationOptions(iterator = :dogleg, maxiters=100, maxtime=maxtime)
+
+                actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
+                opt = OptimizationOptions(iterator = :dogleg, gtol=gtol, dstep=xtol, reldcost=ftol, maxiters=maxiters, maxtime=actual_maxtime; kwargs...)
                 t_start = time_ns()
-                timed = @timed SecondOrderOptimization.optimize!(prob, opt)
+                timed = @timed SecondOrderOptimization.optimize(f_soo, fdf_soo!, var0, opt)
                 t_total = time_ns() - t_start
                 _, res = timed.value
                 alloc_cnt = Base.gc_alloc_count(timed.gcstats)
-                return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, res.niterations, res.startcost, res.bestcost, true)
+                converged = (res.termination & ((1 << 2) | (1 << 3) | (1 << 6) | (1 << 12))) != 0
+                return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
             end),
-            OptimizerDefinition("Manopt (LevenbergMarquardt)", (model_def; time_limit=nothing, kwargs...) -> begin
-                d = get_procrustes_dim(model_def.model)
-                A, B, M, _ = generate_procrustes_experiment(d)
-                n = size(A, 2)
-                k_len = d * n
-                dim_M = manifold_dimension(M)
-                p0 = Matrix{Float64}(I, d, d)
-                f(M, p) = reduce(vcat, [A[:, i] - p * B[:, i] for i in 1:n])
-                function jac_f(M, p)
-                    B_basis = DefaultOrthonormalBasis()
-                    J = zeros(k_len, dim_M)
-                    for l in 1:dim_M
-                        step_vec = [j == l ? 1.0 : 0.0 for j in 1:dim_M]
-                        X_l = get_vector(M, p, step_vec, B_basis)
-                        for i in 1:n
-                            dFi = -p * X_l * B[:, i]
-                            J[(i-1)*d+1 : i*d, l] .= dFi
-                        end
-                    end
-                    return J
-                end
-                start_c = 0.5 * sum(abs2, f(M, p0))
-                max_iter = (time_limit !== nothing && time_limit <= 1.0) ? 5 : 100
+            OptimizerDefinition("Manopt (LevenbergMarquardt)", (model_def; gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
+                M, f_res, jac_res, p0, k_len = get_procrustes_manopt_components(model_def)
+                start_c = 0.5 * sum(abs2, f_res(M, p0))
+                actual_maxiters = (time_limit !== nothing && time_limit <= 1.0) ? 5 : maxiters
+                stop_crit = (StopWhenGradientNormLess(gtol) | StopWhenChangeLess(M, xtol) | StopWhenCostLess(ftol) | StopAfterIteration(actual_maxiters))
                 t_start = time_ns()
-                timed = @timed Manopt.LevenbergMarquardt(M, f, jac_f, copy(p0), k_len; return_state=true, max_iterations=max_iter)
+                timed = @timed Manopt.LevenbergMarquardt(M, f_res, jac_res, copy(p0), k_len; return_state=true, stopping_criterion=stop_crit, max_iterations=actual_maxiters)
                 t_total = time_ns() - t_start
                 state = timed.value
                 inner = state isa Manopt.DebugSolverState ? state.state : state
                 p_sol = Manopt.get_solver_result(state)
-                final_c = 0.5 * sum(abs2, f(M, p_sol))
+                final_c = 0.5 * sum(abs2, f_res(M, p_sol))
                 alloc_cnt = Base.gc_alloc_count(timed.gcstats)
-                return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, Manopt.get_count(inner, :Iterations), start_c, final_c, true)
+                active = Manopt.get_active_stopping_criteria(stop_crit)
+                converged = !isempty(active) && !all(c -> c isa StopAfterIteration, active)
+                return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, Manopt.get_count(inner, :Iterations), start_c, final_c, converged)
             end)
         ]
     )

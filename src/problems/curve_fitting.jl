@@ -42,7 +42,7 @@ function create_curve_fitting_problem()
     ProblemDefinition(
         "Exponential Curve Fitting",
         :medium_dense,
-        Any[64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768],
+        Any[64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536],
         n_points -> begin
             t_pts, y_data = generate_exp_data(n_points)
             p0_static = SVector(1.0, 1.0, 1.0)
@@ -93,7 +93,7 @@ function create_curve_fitting_problem()
 
             return [m_nlls, m_standalone]
         end,
-        get_tier1_optimizers(),
+        get_standard_optimizers(),
         "Data Points m"
     )
 end

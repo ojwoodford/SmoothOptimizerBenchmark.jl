@@ -60,7 +60,7 @@ function model_style(m_name::String)
     elseif occursin("bundleadjustment", name_lower) || occursin("bam", name_lower)
         :teal
     elseif occursin("manifold", name_lower) || occursin("manopt", name_lower)
-        :brown
+        :darkgoldenrod
     else
         :black
     end
@@ -132,12 +132,12 @@ function compute_mean_ranks(item_names::Vector{String}, sizes, get_time::Functio
 end
 
 """
-    plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir="docs/src/assets/plots") -> String
+    plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR) -> String
 
 Generates a log-log scaling plot of model evaluation time vs problem size.
 Saves the plot as a PNG image in `outdir` and returns the file path.
 """
-function plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir="docs/src/assets/plots")
+function plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR)
     mkpath(outdir)
     slug = problem_slug(res.problem)
     filepath = joinpath(outdir, "$(slug)_models.png")
@@ -280,7 +280,7 @@ function optimizer_style(opt_name::String)
     elseif occursin("madnlp", name_lower)
         :teal
     elseif occursin("manopt", name_lower)
-        :brown
+        :darkgoldenrod
     else
         :black
     end
@@ -301,27 +301,22 @@ function optimizer_style(opt_name::String)
 end
 
 """
-    plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir="docs/src/assets/plots") -> String
+    plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR) -> String
 
 Generates a log-log scaling plot of optimizer execution time vs problem size.
 Saves the plot as a PNG image in `outdir` and returns the file path.
 """
-function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir="docs/src/assets/plots")
+function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR)
     mkpath(outdir)
     slug = problem_slug(res.problem)
     filepath = joinpath(outdir, "$(slug)_optimizers.png")
 
     sizes = [Float64(s) for s in res.sizes]
 
-    # Collect distinct optimizer names across Tier 1 and Tier 2
+    # Collect distinct optimizer names from optimizer_results
     all_optimizers = String[]
     for s_res in res.size_results
-        for opt_name in keys(s_res.tier2_optimizer_results)
-            if !(opt_name in all_optimizers)
-                push!(all_optimizers, opt_name)
-            end
-        end
-        for opt_name in keys(s_res.tier1_optimizer_results)
+        for opt_name in keys(s_res.optimizer_results)
             if !(opt_name in all_optimizers)
                 push!(all_optimizers, opt_name)
             end
@@ -331,7 +326,7 @@ function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir="docs
     # Rank optimizers according to their mean rank per size (slowest at top, fastest at bottom)
     get_opt_time(opt_name, j) = begin
         s_res = res.size_results[j]
-        opt_r = get(s_res.tier2_optimizer_results, opt_name, get(s_res.tier1_optimizer_results, opt_name, nothing))
+        opt_r = get(s_res.optimizer_results, opt_name, nothing)
         if opt_r !== nothing && opt_r.converged && !isnan(opt_r.time_ns) && opt_r.time_ns > 0
             return opt_r.time_ns
         else
@@ -365,24 +360,27 @@ function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir="docs
         plot_kwargs...
     )
 
+    plotted_count = 0
     for opt_name in all_optimizers
         run_times = Float64[]
-        valid_sizes = Float64[]
 
         for (j, s_res) in enumerate(res.size_results)
-            # Prefer tier2 if present, otherwise tier1
-            opt_r = get(s_res.tier2_optimizer_results, opt_name, get(s_res.tier1_optimizer_results, opt_name, nothing))
-            if opt_r !== nothing && !isnan(opt_r.time_ns) && opt_r.time_ns > 0
-                push!(valid_sizes, sizes[j])
+            opt_r = get(s_res.optimizer_results, opt_name, nothing)
+            # Only show times for optimizers that actually converged based on convergence criteria;
+            # points that did not converge are missing (set to NaN).
+            if opt_r !== nothing && opt_r.converged && !isnan(opt_r.time_ns) && opt_r.time_ns > 0
                 # convert ns to milliseconds
                 push!(run_times, opt_r.time_ns / 1e6)
+            else
+                push!(run_times, NaN)
             end
         end
 
-        if !isempty(valid_sizes)
+        if any(!isnan, run_times)
+            plotted_count += 1
             c_color, l_style, m_shape = optimizer_style(opt_name)
             plot!(
-                p, valid_sizes, run_times,
+                p, sizes, run_times,
                 label = opt_name,
                 color = c_color,
                 linestyle = l_style,
@@ -394,16 +392,20 @@ function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir="docs
         end
     end
 
+    if plotted_count == 0
+        plot!(p, [sizes[1]], [NaN], label="(no converged solvers)", ylims=(0.01, 1000.0))
+    end
+
     savefig(p, filepath)
     return filepath
 end
 
 """
-    generate_all_plots(results::Vector{ProblemScalingBenchmarkResult}; outdir="docs/src/assets/plots") -> Dict{String, Tuple{String, String}}
+    generate_all_plots(results::Vector{ProblemScalingBenchmarkResult}; outdir=DEFAULT_PLOTS_DIR) -> Dict{String, Tuple{String, String}}
 
 Generates both model and optimizer log-log scaling plots for all benchmarked problems.
 """
-function generate_all_plots(results::Vector{ProblemScalingBenchmarkResult}; outdir="docs/src/assets/plots")
+function generate_all_plots(results::Vector{ProblemScalingBenchmarkResult}; outdir=DEFAULT_PLOTS_DIR)
     paths = Dict{String, Tuple{String, String}}()
     for res in results
         m_path = plot_model_scaling(res; outdir=outdir)
