@@ -45,6 +45,10 @@ using SmoothOptimizerBenchmark
         @test SmoothOptimizerBenchmark.optimizer_style("CaNNOLeS")[1] == :chocolate
         @test SmoothOptimizerBenchmark.optimizer_style("MadNLP")[1] == :teal
         @test SmoothOptimizerBenchmark.optimizer_style("NonlinearSolve (LM)")[1] == :deeppink
+        @test SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (LM)") == (:red, :solid, :circle)
+        @test SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (Dogleg)") == (:red, :dash, :square)
+        @test SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (Sparse LM)") == (:red, :solid, :circle)
+        @test SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (Sparse Dogleg)") == (:red, :dash, :square)
         @test SmoothOptimizerBenchmark.optimizer_style("NLLSModel + SecondOrderOptimization (LM)") == (:red, :dot, :star5)
         @test SmoothOptimizerBenchmark.optimizer_style("NLLSModel + SecondOrderOptimization (Dogleg)") == (:red, :dashdot, :star5)
         @test SmoothOptimizerBenchmark.optimizer_style("NLLSModel + SecondOrderOptimization (Sparse LM)") == (:red, :dot, :star5)

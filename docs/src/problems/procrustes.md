@@ -17,7 +17,7 @@ The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dot
 
 ## 2. Optimizer Evaluation Scaling
 
-The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers on the standardized baseline model (`Manifolds`), together with full-stack zero-allocation **`NLLSModel + SecondOrderOptimization`** runs (star markers). Non-converged runs are omitted.
+The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, where each solver is evaluated on its optimal problem representation (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` for JSO/interior-point solvers, and `Manifolds` for `Manopt`). Non-converged runs are omitted.
 
 ![Procrustes on SO(d) Optimizer Scaling](../assets/plots/procrustes_optimizers.png)
 
@@ -33,6 +33,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 4. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Matrix Dimension d = `24`, **`NLLSModel (Specialized)`** achieves the fastest Cost + Linear System evaluation at **34.86 ms** (0 B allocated).
-- **Top Converged Optimizer**: At Matrix Dimension d = `24` (5/5 solvers converged), **`NLLSModel + SecondOrderOptimization (LM)`** is fastest at **141.78 ms** (3 iterations, final cost `4.64e-20`).
+- **Model Efficiency**: At Matrix Dimension d = `24`, **`Manifolds`** achieves the fastest Cost + Linear System evaluation at **31.39 ms** (0 B allocated).
+- **Top Converged Optimizer**: At Matrix Dimension d = `24` (3/3 solvers converged), **`SecondOrderOptimization (LM)`** is fastest at **140.01 ms** (3 iterations, final cost `4.64e-20`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

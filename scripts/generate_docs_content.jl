@@ -38,7 +38,6 @@ function summarize_solvers(res::ProblemScalingBenchmarkResult)
     pkgs = String[]
     seen = Set{String}()
     order = [
-        ("nllsmodel", "NLLSModel + SecondOrderOptimization"),
         ("secondorder", "SecondOrderOptimization"),
         ("leastsquares", "LeastSquaresOptim"),
         ("optim (", "Optim"),
@@ -105,9 +104,9 @@ To separate modeling overhead from solver algorithm efficiency, every problem is
 
 1. **Phase 1 — Model Evaluation Scaling**:
    Benchmarks pure **Cost Evaluation** (\$f(x) = \\frac{1}{2}\\|r(x)\\|_2^2\$) and **Cost + Linear System Assembly** (\$g = J^T r\$ and \$H = J^T J\$ or exact Hessian) across competing model representations (`NLLSModel`, `Standalone` `LeastSquaresProblem`, `NLPModels` / `JuMP`, `BundleAdjustmentModels`, and `Manifolds`).
-2. **Phase 2 — Unified Apples-to-Apples Optimizer Scaling**:
-   All compatible optimizers are benchmarked on a single **standardized baseline model** per category (`Standalone` for Euclidean problems, `BundleAdjustmentModels` for Bundle Adjustment, and `Manifolds` for Riemannian optimization) under identical stopping tolerances (`gtol = $(DEFAULT_GTOL)`, `xtol = $(DEFAULT_XTOL)`, `ftol = $(DEFAULT_FTOL)`, `maxiters = $(DEFAULT_MAXITERS)`, `maxtime = $(DEFAULT_MAXTIME)s`).
-   - Alongside the shared-baseline solver curves, **full-stack `NLLSModel + SecondOrderOptimization`** combinations evaluated from a cold start are included on every benchmark with **star (`★`) point markers**.
+2. **Phase 2 — Peak Solver Throughput Scaling (Each Optimizer on Optimal Model)**:
+   Every optimizer is benchmarked on its natural, optimal model representation (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` / `BundleAdjustmentModels` for JSO and interior-point solvers, and `Manifolds` for `Manopt`) under identical universal stopping criteria (`gtol = $(DEFAULT_GTOL)`, `xtol = $(DEFAULT_XTOL)`, `ftol = $(DEFAULT_FTOL)`, `maxiters = $(DEFAULT_MAXITERS)`, `maxtime = $(DEFAULT_MAXTIME)s`).
+   - Every optimizer appears as **exactly one curve**, comparing solvers at their peak practical throughput from a fair cold start without wrapper penalties or duplicate entries.
    - Every concrete `(optimizer, model-type)` specialization is pre-warmed prior to timing so LLVM JIT compilation is excluded.
    - Solvers that fail to satisfy convergence criteria (e.g., hitting iteration/time limits or stalling) are recorded as `converged = false` in the raw data tables and omitted (`NaN`) from convergence runtime plots.
    - Results stream line-by-line directly to Markdown tables in `docs/src/data/` as each model and optimizer measurement completes.
@@ -216,7 +215,7 @@ $(phase1_section)
 
 ## 2. Optimizer Evaluation Scaling
 
-The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers on the standardized baseline model (`$(target_model_name)`), together with full-stack zero-allocation **`NLLSModel + SecondOrderOptimization`** runs (star markers). Non-converged runs are omitted.
+The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, where each solver is evaluated on its optimal problem representation (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` for JSO/interior-point solvers, and `Manifolds` for `Manopt`). Non-converged runs are omitted.
 
 ![$(res.problem) Optimizer Scaling](../assets/plots/$(slug)_optimizers.png)
 

@@ -21,9 +21,9 @@ To separate modeling overhead from solver algorithm efficiency, every problem is
 
 1. **Phase 1 — Model Evaluation Scaling**:
    Benchmarks pure **Cost Evaluation** ($f(x) = \frac{1}{2}\|r(x)\|_2^2$) and **Cost + Linear System Assembly** ($g = J^T r$ and $H = J^T J$ or exact Hessian) across competing model representations (`NLLSModel`, `Standalone` `LeastSquaresProblem`, `NLPModels` / `JuMP`, `BundleAdjustmentModels`, and `Manifolds`).
-2. **Phase 2 — Unified Apples-to-Apples Optimizer Scaling**:
-   All compatible optimizers are benchmarked on a single **standardized baseline model** per category (`Standalone` for Euclidean problems, `BundleAdjustmentModels` for Bundle Adjustment, and `Manifolds` for Riemannian optimization) under identical stopping tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`, `maxiters = 500`, `maxtime = 30.0s`).
-   - Alongside the shared-baseline solver curves, **full-stack `NLLSModel + SecondOrderOptimization`** combinations evaluated from a cold start are included on every benchmark with **star (`★`) point markers**.
+2. **Phase 2 — Peak Solver Throughput Scaling (Each Optimizer on Optimal Model)**:
+   Every optimizer is benchmarked on its natural, optimal model representation (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` / `BundleAdjustmentModels` for JSO and interior-point solvers, and `Manifolds` for `Manopt`) under identical universal stopping criteria (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`, `maxiters = 500`, `maxtime = 30.0s`).
+   - Every optimizer appears as **exactly one curve**, comparing solvers at their peak practical throughput from a fair cold start without wrapper penalties or duplicate entries.
    - Every concrete `(optimizer, model-type)` specialization is pre-warmed prior to timing so LLVM JIT compilation is excluded.
    - Solvers that fail to satisfy convergence criteria (e.g., hitting iteration/time limits or stalling) are recorded as `converged = false` in the raw data tables and omitted (`NaN`) from convergence runtime plots.
    - Results stream line-by-line directly to Markdown tables in `docs/src/data/` as each model and optimizer measurement completes.
@@ -34,13 +34,13 @@ To separate modeling overhead from solver algorithm efficiency, every problem is
 
 | Problem | Category | Scaling Metric | Sizes Tested | Baseline Model | Tested Solver Packages |
 |:---|:---|:---|:---|:---|:---|
-| [Sparse Multi-dimensional Rosenbrock](problems/rosenbrock_sparse.md) | `large_sparse` | Variables n | 11 sizes (100 … 75000) | `Standalone (Sparse)` | NLLSModel + SecondOrderOptimization, SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
-| [Exponential Curve Fitting](problems/curve_fitting.md) | `medium_dense` | Data Points m | 11 sizes (64 … 65536) | `Standalone` | NLLSModel + SecondOrderOptimization, SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
-| [Dense Multi-dimensional Rosenbrock](problems/rosenbrock_dense.md) | `small_dense` | Dimension n | 12 sizes (2 … 32) | `Standalone` | NLLSModel + SecondOrderOptimization, SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
+| [Sparse Multi-dimensional Rosenbrock](problems/rosenbrock_sparse.md) | `large_sparse` | Variables n | 11 sizes (100 … 75000) | `Standalone (Sparse)` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
+| [Exponential Curve Fitting](problems/curve_fitting.md) | `medium_dense` | Data Points m | 11 sizes (64 … 65536) | `Standalone` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
+| [Dense Multi-dimensional Rosenbrock](problems/rosenbrock_dense.md) | `small_dense` | Dimension n | 12 sizes (2 … 32) | `Standalone` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
 | [Dense Affine Alignment](problems/affine_alignment.md) | `small_dense` | Dimension n | 12 sizes (1 … 32) | `Standalone` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
-| [Nonlinear 3D Pose Chain](problems/pose_chain.md) | `large_sparse` | Poses N | 11 sizes (50 … 10000) | `NLLSModel (Sparse)` | NLLSModel + SecondOrderOptimization, SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
-| [Sparse Bundle Adjustment](problems/bundle_adjustment.md) | `large_sparse` | Cameras Ncam | 12 sizes (4 … 256) | `BundleAdjustmentModels` | NLLSModel + SecondOrderOptimization, SecondOrderOptimization, JSOSolvers, Ipopt, MadNLP, CaNNOLeS |
-| [Procrustes on SO(d)](problems/procrustes.md) | `manifold` | Matrix Dimension d | 12 sizes (2 … 24) | `Manifolds` | NLLSModel + SecondOrderOptimization, SecondOrderOptimization, Manopt |
+| [Nonlinear 3D Pose Chain](problems/pose_chain.md) | `large_sparse` | Poses N | 11 sizes (50 … 10000) | `NLLSModel (Sparse)` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
+| [Sparse Bundle Adjustment](problems/bundle_adjustment.md) | `large_sparse` | Cameras Ncam | 12 sizes (4 … 256) | `BundleAdjustmentModels` | SecondOrderOptimization, JSOSolvers, Ipopt, MadNLP, CaNNOLeS |
+| [Procrustes on SO(d)](problems/procrustes.md) | `manifold` | Matrix Dimension d | 12 sizes (2 … 24) | `Manifolds` | SecondOrderOptimization, Manopt |
 
 ---
 

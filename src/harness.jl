@@ -112,17 +112,47 @@ end
     resolve_optimizer_model(opt::OptimizerDefinition, target_model::ModelDefinition, all_models::Vector{<:ModelDefinition}) -> ModelDefinition
 
 Selects the model passed to `opt.optimize`:
-- Full-stack `NLLSModel + SecondOrderOptimization` optimizers receive the `NLLSModel` formulation
-  (preferring `"NLLSModel (Specialized)"` when present, e.g. on manifold problems).
-- All other optimizers receive the shared `target_model` baseline.
+Each optimizer is paired with its optimal model formulation to maximize performance:
+- `SecondOrderOptimization`: uses `NLLSModel` (preferring specialized / static / sparse when present)
+- `LeastSquaresOptim`: uses `Standalone` / `LeastSquaresProblem`
+- `Manopt`: uses `Manifolds`
+- `JSOSolvers`, `Ipopt`, `MadNLP`, `CaNNOLeS`: use `BundleAdjustmentModels` or `NLPModels`
+- Fallback: uses `target_model`
 """
 function resolve_optimizer_model(opt::OptimizerDefinition, target_model::ModelDefinition, all_models::Vector{<:ModelDefinition})
-    if occursin("nllsmodel", lowercase(opt.name))
-        spec_idx = findfirst(m -> m.model isa NLLSModel.Model && occursin("specialized", lowercase(m.name)), all_models)
-        spec_idx !== nothing && return all_models[spec_idx]
+    name_lower = lowercase(opt.name)
+
+    # 1. SecondOrderOptimization: thrives on NLLSModel
+    if occursin("secondorder", name_lower) || occursin("soo", name_lower) || occursin("nllsmodel", name_lower)
+        for flavour in ["specialized", "static", "sparse"]
+            idx = findfirst(m -> m.model isa NLLSModel.Model && occursin(flavour, lowercase(m.name)), all_models)
+            idx !== nothing && return all_models[idx]
+        end
         nlls_idx = findfirst(m -> m.model isa NLLSModel.Model, all_models)
         nlls_idx !== nothing && return all_models[nlls_idx]
     end
+
+    # 2. LeastSquaresOptim: thrives on LeastSquaresProblem (Standalone)
+    if occursin("leastsquares", name_lower) || occursin("lso", name_lower)
+        lso_idx = findfirst(m -> occursin("standalone", lowercase(m.name)) || m.model isa LeastSquaresProblem, all_models)
+        lso_idx !== nothing && return all_models[lso_idx]
+    end
+
+    # 3. Manopt: thrives on Manifolds
+    if occursin("manopt", name_lower)
+        man_idx = findfirst(m -> lowercase(m.name) == "manifolds" || occursin("manopt", lowercase(m.name)) || occursin("manifold", lowercase(m.name)), all_models)
+        man_idx !== nothing && return all_models[man_idx]
+    end
+
+    # 4. JSO and Interior-Point solvers: thrive on BundleAdjustmentModels or NLPModels
+    if occursin("jsosolvers", name_lower) || occursin("ipopt", name_lower) || occursin("madnlp", name_lower) || occursin("cannoles", name_lower)
+        bam_idx = findfirst(m -> occursin("bundleadjustment", lowercase(m.name)) || occursin("bam", lowercase(m.name)), all_models)
+        bam_idx !== nothing && return all_models[bam_idx]
+        nlp_idx = findfirst(m -> occursin("nlpmodels", lowercase(m.name)) || m.model isa AbstractNLPModel, all_models)
+        nlp_idx !== nothing && return all_models[nlp_idx]
+    end
+
+    # Fallback to target_model
     return target_model
 end
 
@@ -332,11 +362,11 @@ function run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=
         end
     end
 
-    # Phase 2: Optimizers on Target Model (and NLLSModel for full-stack NLLSModel + SecondOrderOptimization)
+    # Phase 2: Optimizers (each on optimal model representation)
     optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples)
 
     if verbose
-        println("\n--- [Phase 2: Solvers on Standard Target Model: $(target_model.name)] ---")
+        println("\n--- [Phase 2: Optimizer Benchmarks (Each Solver on Optimal Model)] ---")
         println(@sprintf("%-32s | %-14s | %-12s | %-8s | %-12s", "Optimizer", "Runtime", "Allocs", "Iters", "Final Cost"))
         println("-"^85)
         for opt in prob.compatible_optimizers

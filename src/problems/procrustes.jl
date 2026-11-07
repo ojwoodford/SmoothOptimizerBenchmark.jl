@@ -362,52 +362,8 @@ function create_procrustes_problem()
             return [m_ovi, m_spec, m_manopt]
         end,
         [
-            OptimizerDefinition("NLLSModel + SecondOrderOptimization (LM)", (model_def; kwargs...) -> optimize_nlls_soo(model_def; method=:lm, kwargs...)),
-            OptimizerDefinition("NLLSModel + SecondOrderOptimization (Dogleg)", (model_def; kwargs...) -> optimize_nlls_soo(model_def; method=:dogleg, kwargs...)),
-            OptimizerDefinition("SecondOrderOptimization (LM)", (model_def; gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
-                M, f_res, jac_res, p0, _ = get_procrustes_manopt_components(model_def)
-                var0 = ManifoldVar(copy(p0), M)
-                f_soo(v::ManifoldVar) = 0.5 * sum(abs2, f_res(M, v.point))
-                function fdf_soo!(g, H, v::ManifoldVar)
-                    r = f_res(M, v.point)
-                    J = jac_res(M, v.point)
-                    mul!(g, transpose(J), r)
-                    mul!(H, transpose(J), J)
-                    return 0.5 * sum(abs2, r)
-                end
-
-                actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
-                opt = OptimizationOptions(iterator = :levenbergmarquardt, gtol=gtol, dstep=xtol, reldcost=ftol, maxiters=maxiters, maxtime=actual_maxtime; kwargs...)
-                t_start = time_ns()
-                timed = @timed SecondOrderOptimization.optimize(f_soo, fdf_soo!, var0, opt)
-                t_total = time_ns() - t_start
-                _, res = timed.value
-                alloc_cnt = Base.gc_alloc_count(timed.gcstats)
-                converged = soo_converged(res.termination)
-                return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
-            end),
-            OptimizerDefinition("SecondOrderOptimization (Dogleg)", (model_def; gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
-                M, f_res, jac_res, p0, _ = get_procrustes_manopt_components(model_def)
-                var0 = ManifoldVar(copy(p0), M)
-                f_soo(v::ManifoldVar) = 0.5 * sum(abs2, f_res(M, v.point))
-                function fdf_soo!(g, H, v::ManifoldVar)
-                    r = f_res(M, v.point)
-                    J = jac_res(M, v.point)
-                    mul!(g, transpose(J), r)
-                    mul!(H, transpose(J), J)
-                    return 0.5 * sum(abs2, r)
-                end
-
-                actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
-                opt = OptimizationOptions(iterator = :dogleg, gtol=gtol, dstep=xtol, reldcost=ftol, maxiters=maxiters, maxtime=actual_maxtime; kwargs...)
-                t_start = time_ns()
-                timed = @timed SecondOrderOptimization.optimize(f_soo, fdf_soo!, var0, opt)
-                t_total = time_ns() - t_start
-                _, res = timed.value
-                alloc_cnt = Base.gc_alloc_count(timed.gcstats)
-                converged = soo_converged(res.termination)
-                return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
-            end),
+            OptimizerDefinition("SecondOrderOptimization (LM)", (model_def; kwargs...) -> optimize_soo(model_def; method=:lm, kwargs...)),
+            OptimizerDefinition("SecondOrderOptimization (Dogleg)", (model_def; kwargs...) -> optimize_soo(model_def; method=:dogleg, kwargs...)),
             OptimizerDefinition("Manopt (LevenbergMarquardt)", (model_def; gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
                 M, f_res!, jac_res!, p0, k_len, _ = get_procrustes_manopt_inplace_components(model_def)
                 r_scratch = zeros(Float64, k_len)

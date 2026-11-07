@@ -4,11 +4,11 @@
 - **Scaling Metric**: Matrix Dimension d
 - **Optimizer Target Model**: Manifolds
 - **Convergence Criteria**: gtol=1.0e-8, xtol=1.0e-8, ftol=1.0e-8, maxiters=500, maxtime=30.0s
-- **Benchmark Date**: 2026-11-07T09:13:33
+- **Benchmark Date**: 2026-11-07T21:17:58
 - **Host CPU**: apple-m1 (10 cores)
 - **OS**: Darwin (arm64-apple-darwin27.0.0)
 - **Julia Version**: 1.13.3
-- **Git Commit**: b62fcb5
+- **Git Commit**: b448285
 
 ---
 
@@ -16,108 +16,84 @@
 
 | Size | Model | Cost Time (ns) | Cost Allocs | Cost Memory (bytes) | Linsys Time (ns) | Linsys Allocs | Linsys Memory (bytes) |
 |:---|:---|---:|---:|---:|---:|---:|---:|
-| 2 | NLLSModel (ManifoldVar) | 283.55555555555554 | 12 | 480 | 1564.1538461538462 | 66 | 2880 |
-| 2 | NLLSModel (Specialized) | 5.667 | 0 | 0 | 61.817622950819676 | 0 | 0 |
-| 2 | Manifolds | 465.90909090909093 | 30 | 1232 | 1443.5 | 62 | 2704 |
-| 3 | NLLSModel (ManifoldVar) | 583.3333333333334 | 24 | 960 | 6708.333333333333 | 276 | 15264 |
-| 3 | NLLSModel (Specialized) | 29.089783281733745 | 0 | 0 | 189.85849056603774 | 0 | 0 |
-| 3 | Manifolds | 850.0 | 54 | 2352 | 5218.75 | 218 | 10912 |
-| 4 | NLLSModel (ManifoldVar) | 964.2857142857143 | 40 | 1920 | 21334.0 | 820 | 65280 |
-| 4 | NLLSModel (Specialized) | 59.525606469002696 | 0 | 0 | 421.0851063829787 | 0 | 0 |
-| 4 | Manifolds | 1395.857142857143 | 86 | 4528 | 15375.0 | 604 | 39536 |
-| 5 | NLLSModel (ManifoldVar) | 1487.1538461538462 | 60 | 2880 | 54250.0 | 1950 | 199440 |
-| 5 | NLLSModel (Specialized) | 110.51086956521739 | 0 | 0 | 2145.8 | 0 | 0 |
-| 5 | Manifolds | 2391.6 | 126 | 6768 | 37167.0 | 1389 | 103872 |
-| 6 | NLLSModel (ManifoldVar) | 2348.875 | 84 | 4704 | 128791.0 | 3990 | 559104 |
-| 6 | NLLSModel (Specialized) | 190.07619047619048 | 0 | 0 | 6031.25 | 0 | 0 |
-| 6 | Manifolds | 3375.0 | 174 | 10976 | 95750.0 | 2787 | 268400 |
-| 8 | NLLSModel (ManifoldVar) | 3941.8 | 144 | 9216 | 487333.0 | 12492 | 2693952 |
-| 8 | NLLSModel (Specialized) | 469.95348837209303 | 0 | 0 | 48417.0 | 0 | 0 |
-| 8 | Manifolds | 5611.333333333333 | 295 | 21792 | 276375.0 | 8530 | 1112432 |
-| 10 | NLLSModel (ManifoldVar) | 8055.333333333333 | 220 | 15840 | 1.568125e6 | 30360 | 9966000 |
-| 10 | NLLSModel (Specialized) | 995.8 | 0 | 0 | 165958.0 | 0 | 0 |
-| 10 | Manifolds | 10000.0 | 447 | 37920 | 942875.0 | 20520 | 3760992 |
-| 12 | NLLSModel (ManifoldVar) | 12291.0 | 312 | 24960 | 5.616917e6 | 62712 | 29270592 |
-| 12 | NLLSModel (Specialized) | 1977.2727272727273 | 0 | 0 | 536959.0 | 0 | 0 |
-| 12 | Manifolds | 15667.0 | 631 | 59584 | 2.179916e6 | 42214 | 9921616 |
-| 15 | NLLSModel (ManifoldVar) | 30083.0 | 480 | 42240 | 2.0135458e7 | 152640 | 108441600 |
-| 15 | NLLSModel (Specialized) | 4441.8 | 0 | 0 | 2.059416e6 | 0 | 0 |
-| 15 | Manifolds | 32125.0 | 967 | 103008 | 9.591042e6 | 102400 | 35021840 |
-| 18 | NLLSModel (ManifoldVar) | 36958.0 | 684 | 71136 | 5.1528541e7 | 394497 | 329909616 |
-| 18 | NLLSModel (Specialized) | 8763.666666666666 | 0 | 0 | 5.992209e6 | 0 | 0 |
-| 18 | Manifolds | 45084.0 | 1375 | 174048 | 1.8087875e7 | 238069 | 103894288 |
-| 21 | NLLSModel (ManifoldVar) | 62750.0 | 924 | 103488 | 1.52759458e8 | 730422 | 739395888 |
-| 21 | NLLSModel (Specialized) | 17458.0 | 0 | 0 | 1.5028709e7 | 0 | 0 |
-| 21 | Manifolds | 72208.0 | 1855 | 260320 | 4.560325e7 | 440128 | 220684272 |
-| 24 | NLLSModel (ManifoldVar) | 96042.0 | 1200 | 153600 | 3.32291666e8 | 1328700 | 1758768000 |
-| 24 | NLLSModel (Specialized) | 29833.0 | 0 | 0 | 3.4863417e7 | 0 | 0 |
-| 24 | Manifolds | 111666.0 | 2409 | 378048 | 1.016015e8 | 750096 | 514032016 |
+| 2 | NLLSModel (ManifoldVar) | 277.9605263157895 | 12 | 480 | 1652.75 | 66 | 2880 |
+| 2 | NLLSModel (Specialized) | 5.708 | 0 | 0 | 65.10989010989012 | 0 | 0 |
+| 2 | Manifolds | 96.83333333333333 | 0 | 0 | 294.4864864864865 | 0 | 0 |
+| 3 | NLLSModel (ManifoldVar) | 580.8823529411765 | 24 | 960 | 6792.0 | 276 | 15264 |
+| 3 | NLLSModel (Specialized) | 29.42937062937063 | 0 | 0 | 140.10526315789474 | 0 | 0 |
+| 3 | Manifolds | 230.38823529411764 | 0 | 0 | 802.4814814814815 | 0 | 0 |
+| 4 | NLLSModel (ManifoldVar) | 1033.7142857142858 | 40 | 1920 | 21250.0 | 820 | 65280 |
+| 4 | NLLSModel (Specialized) | 52.922077922077925 | 0 | 0 | 418.4255319148936 | 0 | 0 |
+| 4 | Manifolds | 453.7111111111111 | 0 | 0 | 2108.3 | 0 | 0 |
+| 5 | NLLSModel (ManifoldVar) | 1494.0714285714287 | 60 | 2880 | 55417.0 | 1950 | 199440 |
+| 5 | NLLSModel (Specialized) | 107.11413043478261 | 0 | 0 | 2070.8 | 0 | 0 |
+| 5 | Manifolds | 900.0 | 0 | 0 | 5385.25 | 0 | 0 |
+| 6 | NLLSModel (ManifoldVar) | 2314.777777777778 | 84 | 4704 | 127334.0 | 3990 | 559104 |
+| 6 | NLLSModel (Specialized) | 184.74528301886792 | 0 | 0 | 6021.0 | 0 | 0 |
+| 6 | Manifolds | 1413.9333333333334 | 0 | 0 | 12667.0 | 0 | 0 |
+| 8 | NLLSModel (ManifoldVar) | 3965.1666666666665 | 144 | 9216 | 426459.0 | 12492 | 2693952 |
+| 8 | NLLSModel (Specialized) | 461.1818181818182 | 0 | 0 | 49792.0 | 0 | 0 |
+| 8 | Manifolds | 3486.1666666666665 | 0 | 0 | 49417.0 | 0 | 0 |
+| 10 | NLLSModel (ManifoldVar) | 8097.0 | 220 | 15840 | 1.497416e6 | 30360 | 9966000 |
+| 10 | NLLSModel (Specialized) | 1052.1 | 0 | 0 | 165875.0 | 0 | 0 |
+| 10 | Manifolds | 6791.666666666667 | 0 | 0 | 171375.0 | 0 | 0 |
+| 12 | NLLSModel (ManifoldVar) | 12125.0 | 312 | 24960 | 5.315e6 | 62712 | 29270592 |
+| 12 | NLLSModel (Specialized) | 1920.4545454545455 | 0 | 0 | 538084.0 | 0 | 0 |
+| 12 | Manifolds | 11708.0 | 0 | 0 | 518250.0 | 0 | 0 |
+| 15 | NLLSModel (ManifoldVar) | 26166.0 | 480 | 42240 | 1.8712667e7 | 152640 | 108441600 |
+| 15 | NLLSModel (Specialized) | 4883.2 | 0 | 0 | 2.008166e6 | 0 | 0 |
+| 15 | Manifolds | 23583.0 | 0 | 0 | 1.811208e6 | 0 | 0 |
+| 18 | NLLSModel (ManifoldVar) | 37083.0 | 684 | 71136 | 6.0172375e7 | 394497 | 329909616 |
+| 18 | NLLSModel (Specialized) | 8777.666666666666 | 0 | 0 | 5.873084e6 | 0 | 0 |
+| 18 | Manifolds | 41834.0 | 0 | 0 | 5.358583e6 | 0 | 0 |
+| 21 | NLLSModel (ManifoldVar) | 61167.0 | 924 | 103488 | 1.70656291e8 | 730422 | 739395888 |
+| 21 | NLLSModel (Specialized) | 17375.0 | 0 | 0 | 1.4959333e7 | 0 | 0 |
+| 21 | Manifolds | 70167.0 | 0 | 0 | 1.3712458e7 | 0 | 0 |
+| 24 | NLLSModel (ManifoldVar) | 93167.0 | 1200 | 153600 | 2.09906875e8 | 1328700 | 1758768000 |
+| 24 | NLLSModel (Specialized) | 28417.0 | 0 | 0 | 3.3374625e7 | 0 | 0 |
+| 24 | Manifolds | 115166.0 | 0 | 0 | 3.1391667e7 | 0 | 0 |
 
 ---
 
 ## Optimizer Evaluation Scaling
 
-Solvers evaluated on standard target model: `Manifolds` (`NLLSModel + SecondOrderOptimization` entries run natively on `NLLSModel` with pre-allocated `OptimizationWorkspace`).
+Solvers evaluated on their respective optimal model representations (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` for JSO/interior-point solvers, `Manifolds` for `Manopt`).
 
 | Size | Optimizer | Runtime (ns) | Allocs | Memory (bytes) | Iterations | Final Cost | Converged |
 |:---|:---|---:|---:|---:|---:|---:|:---|
-| 2 | NLLSModel + SecondOrderOptimization (LM) | 542.0 | 0 | 0 | 2 | 8.1148e-23 | true |
-| 2 | NLLSModel + SecondOrderOptimization (Dogleg) | 666.5 | 0 | 0 | 2 | 4.7446e-26 | true |
-| 2 | SecondOrderOptimization (LM) | 6375.0 | 218 | 9856 | 2 | 3.4949e-23 | true |
-| 2 | SecondOrderOptimization (Dogleg) | 7187.5 | 276 | 12192 | 2 | 1.8647e-27 | true |
-| 2 | Manopt (LevenbergMarquardt) | 18708.0 | 537 | 24160 | 3 | 2.1387e-33 | true |
-| 3 | NLLSModel + SecondOrderOptimization (LM) | 1292.0 | 0 | 0 | 3 | 8.4115e-24 | true |
-| 3 | NLLSModel + SecondOrderOptimization (Dogleg) | 1375.0 | 0 | 0 | 3 | 2.2306e-20 | true |
-| 3 | SecondOrderOptimization (LM) | 24208.0 | 936 | 48192 | 3 | 2.3958e-24 | true |
-| 3 | SecondOrderOptimization (Dogleg) | 28041.5 | 1096 | 55008 | 3 | 4.0708e-21 | true |
-| 3 | Manopt (LevenbergMarquardt) | 45875.5 | 1619 | 83600 | 4 | 8.1095e-33 | true |
-| 4 | NLLSModel + SecondOrderOptimization (LM) | 2833.0 | 0 | 0 | 3 | 1.2985e-18 | true |
-| 4 | NLLSModel + SecondOrderOptimization (Dogleg) | 3875.0 | 0 | 0 | 4 | 1.0775e-23 | true |
-| 4 | SecondOrderOptimization (LM) | 65354.0 | 2492 | 166576 | 3 | 1.0658e-18 | true |
-| 4 | SecondOrderOptimization (Dogleg) | 84500.0 | 3458 | 225792 | 4 | 5.0711e-24 | true |
-| 4 | Manopt (LevenbergMarquardt) | 148250.0 | 3961 | 275520 | 4 | 2.1438e-32 | true |
-| 5 | NLLSModel + SecondOrderOptimization (LM) | 10041.0 | 0 | 0 | 3 | 1.1876e-17 | true |
-| 5 | NLLSModel + SecondOrderOptimization (Dogleg) | 13125.0 | 0 | 0 | 4 | 1.3610e-23 | true |
-| 5 | SecondOrderOptimization (LM) | 159041.5 | 5650 | 429456 | 3 | 5.0176e-18 | true |
-| 5 | SecondOrderOptimization (Dogleg) | 204729.0 | 7567 | 562320 | 4 | 6.5352e-24 | true |
-| 5 | Manopt (LevenbergMarquardt) | 293104.0 | 9754 | 758736 | 5 | 1.9842e-31 | true |
-| 6 | NLLSModel + SecondOrderOptimization (LM) | 26458.0 | 0 | 0 | 3 | 1.7633e-21 | true |
-| 6 | NLLSModel + SecondOrderOptimization (Dogleg) | 35833.0 | 0 | 0 | 4 | 5.4526e-24 | true |
-| 6 | SecondOrderOptimization (LM) | 366250.5 | 11242 | 1096464 | 3 | 8.0121e-22 | true |
-| 6 | SecondOrderOptimization (Dogleg) | 466834.0 | 14745 | 1409824 | 4 | 3.3088e-24 | true |
-| 6 | Manopt (LevenbergMarquardt) | 537312.5 | 15411 | 1522320 | 4 | 8.1040e-32 | true |
-| 8 | NLLSModel + SecondOrderOptimization (LM) | 210708.5 | 9 | 21744 | 3 | 2.7388e-20 | true |
-| 8 | NLLSModel + SecondOrderOptimization (Dogleg) | 264583.5 | 9 | 21744 | 4 | 2.0570e-23 | true |
-| 8 | SecondOrderOptimization (LM) | 1.169479e6 | 34219 | 4504480 | 3 | 2.5529e-20 | true |
-| 8 | SecondOrderOptimization (Dogleg) | 1.513333e6 | 43950 | 5702176 | 4 | 1.4720e-23 | true |
-| 8 | Manopt (LevenbergMarquardt) | 1.640833e6 | 44887 | 5968160 | 4 | 4.4155e-31 | true |
-| 10 | NLLSModel + SecondOrderOptimization (LM) | 716083.0 | 9 | 49392 | 3 | 5.1714e-19 | true |
-| 10 | NLLSModel + SecondOrderOptimization (Dogleg) | 887667.0 | 9 | 49392 | 4 | 3.3281e-22 | true |
-| 10 | SecondOrderOptimization (LM) | 3.920291e6 | 82179 | 15154832 | 3 | 3.9166e-19 | true |
-| 10 | SecondOrderOptimization (Dogleg) | 5.027083e6 | 104510 | 19060336 | 4 | 2.9149e-22 | true |
-| 10 | Manopt (LevenbergMarquardt) | 6.668167e6 | 126826 | 23535136 | 5 | 4.5490e-31 | true |
-| 12 | NLLSModel + SecondOrderOptimization (LM) | 2.2306255e6 | 9 | 147696 | 3 | 5.2405e-20 | true |
-| 12 | NLLSModel + SecondOrderOptimization (Dogleg) | 2.7446875e6 | 9 | 147696 | 4 | 1.0925e-22 | true |
-| 12 | SecondOrderOptimization (LM) | 1.20734165e7 | 168955 | 39971296 | 3 | 3.7729e-20 | true |
-| 12 | SecondOrderOptimization (Dogleg) | 1.5105542e7 | 213716 | 50094688 | 4 | 8.2407e-23 | true |
-| 12 | Manopt (LevenbergMarquardt) | 1.8978208e7 | 258278 | 61543440 | 5 | 5.7506e-31 | true |
-| 15 | NLLSModel + SecondOrderOptimization (LM) | 8.515542e6 | 33 | 314400 | 3 | 2.7564e-19 | true |
-| 15 | NLLSModel + SecondOrderOptimization (Dogleg) | 1.0812667e7 | 41 | 320816 | 4 | 3.9112e-21 | true |
-| 15 | SecondOrderOptimization (LM) | 6.48755e7 | 409699 | 140640176 | 3 | 1.9531e-19 | true |
-| 15 | SecondOrderOptimization (Dogleg) | 7.3895875e7 | 515992 | 175997840 | 4 | 2.9426e-21 | true |
-| 15 | Manopt (LevenbergMarquardt) | 8.7904166e7 | 621748 | 214466048 | 5 | 1.5232e-30 | true |
-| 18 | NLLSModel + SecondOrderOptimization (LM) | 2.4363541e7 | 42 | 619056 | 3 | 3.0835e-21 | true |
-| 18 | NLLSModel + SecondOrderOptimization (Dogleg) | 3.00993125e7 | 53 | 628720 | 4 | 1.6985e-23 | true |
-| 18 | SecondOrderOptimization (LM) | 1.37000667e8 | 952402 | 418060704 | 3 | 2.6496e-21 | true |
-| 18 | SecondOrderOptimization (Dogleg) | 1.532557705e8 | 1196003 | 521354144 | 4 | 1.5865e-23 | true |
-| 18 | Manopt (LevenbergMarquardt) | 1.89371333e8 | 1438725 | 632475568 | 5 | 1.8740e-30 | true |
-| 21 | NLLSModel + SecondOrderOptimization (LM) | 6.2246417e7 | 42 | 1115232 | 3 | 2.0541e-21 | true |
-| 21 | NLLSModel + SecondOrderOptimization (Dogleg) | 7.8086875e7 | 53 | 1126448 | 4 | 2.1128e-23 | true |
-| 21 | SecondOrderOptimization (LM) | 3.24053e8 | 1760638 | 884646416 | 3 | 1.7672e-21 | true |
-| 21 | SecondOrderOptimization (Dogleg) | 3.82790375e8 | 2208215 | 1121542368 | 4 | 1.9371e-23 | true |
-| 21 | Manopt (LevenbergMarquardt) | 4.36448958e8 | 2654439 | 1356658848 | 5 | 2.9123e-30 | true |
-| 24 | NLLSModel + SecondOrderOptimization (LM) | 1.41781083e8 | 42 | 1915584 | 3 | 4.6393e-20 | true |
-| 24 | NLLSModel + SecondOrderOptimization (Dogleg) | 1.771969795e8 | 67 | 2569968 | 5 | 3.7208e-30 | true |
-| 24 | SecondOrderOptimization (LM) | 5.84480125e8 | 3000513 | 2073711744 | 3 | 4.1481e-20 | true |
-| 24 | SecondOrderOptimization (Dogleg) | 7.25571083e8 | 3762720 | 2589726224 | 5 | 4.5958e-30 | true |
-| 24 | Manopt (LevenbergMarquardt) | 8.587845e8 | 4518136 | 3114270512 | 5 | 3.3504e-30 | true |
+| 2 | SecondOrderOptimization (LM) | 1395.5 | 23 | 1280 | 2 | 8.1148e-23 | true |
+| 2 | SecondOrderOptimization (Dogleg) | 29875.0 | 23 | 1248 | 2 | 4.7446e-26 | false |
+| 2 | Manopt (LevenbergMarquardt) | 13583.0 | 157 | 8640 | 3 | 2.1387e-33 | true |
+| 3 | SecondOrderOptimization (LM) | 2084.0 | 23 | 1808 | 3 | 8.4115e-24 | true |
+| 3 | SecondOrderOptimization (Dogleg) | 2187.5 | 23 | 1728 | 3 | 2.2306e-20 | true |
+| 3 | Manopt (LevenbergMarquardt) | 20521.0 | 228 | 17744 | 4 | 8.1095e-33 | true |
+| 4 | SecondOrderOptimization (LM) | 4104.5 | 23 | 3056 | 3 | 1.2985e-18 | true |
+| 4 | SecondOrderOptimization (Dogleg) | 5875.0 | 23 | 2784 | 4 | 1.0775e-23 | true |
+| 4 | Manopt (LevenbergMarquardt) | 57229.0 | 448 | 55600 | 4 | 1.7754e-32 | true |
+| 5 | SecondOrderOptimization (LM) | 11875.0 | 23 | 5280 | 3 | 1.1876e-17 | true |
+| 5 | SecondOrderOptimization (Dogleg) | 14458.5 | 23 | 4528 | 4 | 1.3610e-23 | true |
+| 5 | Manopt (LevenbergMarquardt) | 104937.5 | 566 | 97264 | 5 | 2.1605e-31 | true |
+| 6 | SecondOrderOptimization (LM) | 29708.5 | 23 | 9056 | 3 | 1.7633e-21 | true |
+| 6 | SecondOrderOptimization (Dogleg) | 35312.5 | 23 | 7344 | 4 | 5.4526e-24 | true |
+| 6 | Manopt (LevenbergMarquardt) | 132041.0 | 455 | 127312 | 4 | 7.8034e-32 | true |
+| 8 | SecondOrderOptimization (LM) | 207521.0 | 41 | 42400 | 3 | 2.7388e-20 | true |
+| 8 | SecondOrderOptimization (Dogleg) | 260124.5 | 37 | 28160 | 4 | 2.0570e-23 | true |
+| 8 | Manopt (LevenbergMarquardt) | 368729.0 | 501 | 304640 | 4 | 5.2475e-31 | true |
+| 10 | SecondOrderOptimization (LM) | 710104.5 | 41 | 91232 | 3 | 5.1714e-19 | true |
+| 10 | SecondOrderOptimization (Dogleg) | 871354.0 | 37 | 58704 | 4 | 3.3281e-22 | true |
+| 10 | Manopt (LevenbergMarquardt) | 1.274604e6 | 617 | 771728 | 5 | 4.9974e-31 | true |
+| 12 | SecondOrderOptimization (LM) | 2.15175e6 | 41 | 258384 | 3 | 5.2405e-20 | true |
+| 12 | SecondOrderOptimization (Dogleg) | 2.767396e6 | 37 | 160496 | 4 | 1.0925e-22 | true |
+| 12 | Manopt (LevenbergMarquardt) | 3.358396e6 | 617 | 1704576 | 5 | 6.7433e-31 | true |
+| 15 | SecondOrderOptimization (LM) | 8.4080835e6 | 65 | 529776 | 3 | 2.7564e-19 | true |
+| 15 | SecondOrderOptimization (Dogleg) | 1.03720625e7 | 69 | 340320 | 4 | 3.9112e-21 | true |
+| 15 | Manopt (LevenbergMarquardt) | 1.1556104e7 | 619 | 3828368 | 5 | 1.4513e-30 | true |
+| 18 | SecondOrderOptimization (LM) | 2.3816417e7 | 74 | 1038432 | 3 | 3.0835e-21 | true |
+| 18 | SecondOrderOptimization (Dogleg) | 2.9832125e7 | 81 | 655968 | 4 | 1.6985e-23 | true |
+| 18 | Manopt (LevenbergMarquardt) | 3.32200005e7 | 726 | 8265664 | 5 | 1.8437e-30 | true |
+| 21 | SecondOrderOptimization (LM) | 6.1532604e7 | 74 | 1871872 | 3 | 2.0541e-21 | true |
+| 21 | SecondOrderOptimization (Dogleg) | 7.7134792e7 | 81 | 1163840 | 4 | 2.1128e-23 | true |
+| 21 | Manopt (LevenbergMarquardt) | 8.13355e7 | 726 | 15872112 | 5 | 2.9298e-30 | true |
+| 24 | SecondOrderOptimization (LM) | 1.400146255e8 | 79 | 3207728 | 3 | 4.6393e-20 | true |
+| 24 | SecondOrderOptimization (Dogleg) | 1.719329585e8 | 98 | 1996688 | 5 | 3.7365e-30 | true |
+| 24 | Manopt (LevenbergMarquardt) | 1.84156042e8 | 737 | 33348128 | 5 | 3.1988e-30 | true |

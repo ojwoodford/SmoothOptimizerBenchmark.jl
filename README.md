@@ -36,13 +36,13 @@ Each problem resides in `src/problems/`, scales across $\ge 11$ problem sizes, a
 
 | Problem | Category | Scaling Metric | Models Compared | Compatible Optimizers |
 | :--- | :--- | :--- | :--- | :--- |
-| **Exponential Curve Fitting** (`curve_fitting.jl`) | Medium Dense | Data points $m \in [64, 65536]$ | `NLLSModel (Static)`, `Standalone` | `NLLSModel + SecondOrderOptimization` (Dogleg, LM), `SecondOrderOptimization` (Dogleg, LM), `LeastSquaresOptim` (Dogleg, LM), `Optim` (NewtonTrustRegion, Newton), `JSOSolvers` (trunk, tron), `Ipopt`, `MadNLP`, `NonlinearSolve` (LM, TrustRegion) |
-| **Dense Affine Alignment** (`affine_alignment.jl`) | Small Dense | Dimension $n \in [1, 32]$ | `NLLSModel`, `Standalone` (ForwardDiff) | All 14 standard Euclidean solvers (incl. `NLLSModel + SecondOrderOptimization`) |
-| **Dense Multi-dimensional Rosenbrock** (`rosenbrock_dense.jl`) | Small Dense | Dimension $n \in [2, 32]$ | `NLLSModel`, `Standalone` (ForwardDiff), `NLPModels (MathOptNLSModel)` | All 14 standard Euclidean solvers (incl. `NLLSModel + SecondOrderOptimization`) |
+| **Exponential Curve Fitting** (`curve_fitting.jl`) | Medium Dense | Data points $m \in [64, 65536]$ | `NLLSModel (Static)`, `Standalone` | `SecondOrderOptimization` (Dogleg, LM), `LeastSquaresOptim` (Dogleg, LM), `Optim` (NewtonTrustRegion, Newton), `JSOSolvers` (trunk, tron), `Ipopt`, `MadNLP`, `NonlinearSolve` (LM, TrustRegion) |
+| **Dense Affine Alignment** (`affine_alignment.jl`) | Small Dense | Dimension $n \in [1, 32]$ | `Standalone` (ForwardDiff) | All 13 standard Euclidean solvers (`SecondOrderOptimization`, `LeastSquaresOptim`, `Optim`, `JSOSolvers`, `Ipopt`, `MadNLP`, `NonlinearSolve`, `CaNNOLeS`) |
+| **Dense Multi-dimensional Rosenbrock** (`rosenbrock_dense.jl`) | Small Dense | Dimension $n \in [2, 32]$ | `NLLSModel`, `Standalone` (ForwardDiff), `NLPModels (MathOptNLSModel)` | All 12 standard Euclidean solvers (`SecondOrderOptimization`, `LeastSquaresOptim`, `Optim`, `JSOSolvers`, `Ipopt`, `MadNLP`, `NonlinearSolve`) |
 | **Sparse Multi-dimensional Rosenbrock** (`rosenbrock_sparse.jl`) | Large Sparse | Variables $n \in [100, 75000]$ | `NLLSModel`, `Standalone (Sparse)`, `NLPModels (MathOptNLSModel)` | All standard Euclidean solvers (sparse Hessians / Jacobians) |
-| **Nonlinear 3D Pose Chain** (`pose_chain.jl`) | Large Sparse | Poses $N \in [50, 10000]$ | `NLLSModel (Sparse)`, `Standalone (Sparse)` | All standard Euclidean solvers (sparse Hessians / Jacobians) |
-| **Procrustes on $SO(d)$** (`procrustes.jl`) | Manifold | Matrix dim $d \in [2, 24]$ | `NLLSModel (ManifoldVar)`, `NLLSModel (Specialized)`, `Manifolds` | `NLLSModel + SecondOrderOptimization` (LM, Dogleg), `SecondOrderOptimization` (LM, Dogleg), `Manopt` (LevenbergMarquardt) |
-| **Sparse Bundle Adjustment** (`bundle_adjustment.jl`) | Large Sparse | Cameras $N_{\text{cam}} \in [4, 256]$ | `NLLSModel`, `BundleAdjustmentModels` | `NLLSModel + SecondOrderOptimization` (Sparse LM, Sparse Dogleg), `SecondOrderOptimization` (Sparse LM, Sparse Dogleg), `CaNNOLeS`, `JSOSolvers` (trunk, tron), `Ipopt`, `MadNLP` |
+| **Nonlinear 3D Pose Chain** (`pose_chain.jl`) | Large Sparse | Poses $N \in [50, 10000]$ | `NLLSModel (Sparse)` | All standard Euclidean solvers (sparse Hessians / Jacobians) |
+| **Procrustes on $SO(d)$** (`procrustes.jl`) | Manifold | Matrix dim $d \in [2, 24]$ | `NLLSModel (ManifoldVar)`, `NLLSModel (Specialized)`, `Manifolds` | `SecondOrderOptimization` (LM, Dogleg), `Manopt` (LevenbergMarquardt) |
+| **Sparse Bundle Adjustment** (`bundle_adjustment.jl`) | Large Sparse | Cameras $N_{\text{cam}} \in [4, 256]$ | `NLLSModel`, `BundleAdjustmentModels` | `SecondOrderOptimization` (Sparse LM, Sparse Dogleg), `CaNNOLeS`, `JSOSolvers` (trunk, tron), `Ipopt`, `MadNLP` |
 
 ---
 

@@ -1200,8 +1200,6 @@ Includes all solver families configured with universal stopping criteria.
 """
 function get_standard_optimizers()
     return OptimizerDefinition[
-        OptimizerDefinition("NLLSModel + SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_nlls_soo(m; method=:dogleg, kwargs...)),
-        OptimizerDefinition("NLLSModel + SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_nlls_soo(m; method=:lm, kwargs...)),
         OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),
         OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)),
         OptimizerDefinition("LeastSquaresOptim (Dogleg)", (m; kwargs...) -> optimize_least_squares(m; method=:dogleg, kwargs...)),

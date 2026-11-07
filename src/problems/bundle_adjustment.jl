@@ -218,8 +218,6 @@ function create_bundle_adjustment_problem()
             return [m_nlls, m_bam]
         end,
         [
-            OptimizerDefinition("NLLSModel + SecondOrderOptimization (Sparse LM)", (m; kwargs...) -> optimize_nlls_soo(m; method=:lm, linsolver=:ldl, kwargs...)),
-            OptimizerDefinition("NLLSModel + SecondOrderOptimization (Sparse Dogleg)", (m; kwargs...) -> optimize_nlls_soo(m; method=:dogleg, linsolver=:ldl, kwargs...)),
             OptimizerDefinition("SecondOrderOptimization (Sparse LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, linsolver=:ldl, kwargs...)),
             OptimizerDefinition("SecondOrderOptimization (Sparse Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, linsolver=:ldl, kwargs...)),
             OptimizerDefinition("CaNNOLeS", (m; kwargs...) -> optimize_cannoles(m; kwargs...)),
