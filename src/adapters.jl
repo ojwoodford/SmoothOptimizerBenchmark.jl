@@ -187,13 +187,21 @@ function as_least_squares_problem(bam::BundleAdjustmentModel)
     NLPModels.jac_structure_residual!(bam, rows, cols)
     vals = Vector{Float64}(undef, bam.nls_meta.nnzj)
     NLPModels.jac_coord_residual!(bam, bam.meta.x0, vals)
+
+    idx_sp = sparse(rows, cols, collect(1:bam.nls_meta.nnzj), bam.nls_meta.nequ, bam.meta.nvar)
+    perm = nonzeros(idx_sp)
+
     J_proto = sparse(rows, cols, vals, bam.nls_meta.nequ, bam.meta.nvar)
+    @inbounds for k in 1:length(perm)
+        J_proto.nzval[k] = vals[perm[k]]
+    end
 
     f_res!(r, x) = NLPModels.residual!(bam, x, r)
     g_jac!(J, x) = begin
         NLPModels.jac_coord_residual!(bam, x, vals)
-        J_new = sparse(rows, cols, vals, bam.nls_meta.nequ, bam.meta.nvar)
-        copyto!(J.nzval, J_new.nzval)
+        @inbounds for k in 1:length(perm)
+            J.nzval[k] = vals[perm[k]]
+        end
         return J
     end
     return LeastSquaresProblem(x=copy(bam.meta.x0), (f!) = f_res!, (g!) = g_jac!, y=zeros(Float64, bam.nls_meta.nequ), J=deepcopy(J_proto))
@@ -231,7 +239,15 @@ function SecondOrderOptimization.optimize!(lsp::LeastSquaresProblem, options::Op
             lsp.g!(J_buffer, x)
             mul!(g, J_buffer', r_buffer)
             H_computed = J_buffer' * J_buffer
-            copyto!(H.nzval, H_computed.nzval)
+            if length(H.nzval) == length(H_computed.nzval)
+                copyto!(H.nzval, H_computed.nzval)
+            else
+                fill!(H.nzval, 0.0)
+                rows_c, cols_c, vals_c = findnz(H_computed)
+                @inbounds for (r, c, v) in zip(rows_c, cols_c, vals_c)
+                    H[r, c] = v
+                end
+            end
             return 0.5 * sum(abs2, r_buffer)
         end
         return SecondOrderOptimization.optimize!(f, fdf_sp!, lsp.x, options; H=H_proto, kwargs...)
