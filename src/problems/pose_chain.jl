@@ -21,40 +21,63 @@ NLLSModel.getvars(::BenchChainAnchor, vars::AbstractVector) = (vars[1]::SVector{
 NLLSModel.computeresidual(::BenchChainAnchor, a) = a
 Base.eltype(::BenchChainAnchor) = Float64
 
-function generate_chain_start_vars(n_poses::Int)
-    return [SVector(0.1 * i, sin(i + 1), cos(i)) for i in 1:n_poses]
+function generate_chain_ground_truth(n_poses::Int)
+    return [SVector(1.0 * i, sin(i), 0.2 * i) for i in 1:n_poses]
 end
 
-function get_chain_loop_closures(n_poses::Int, K::Int=10)
+function get_chain_measurements(n_poses::Int, K::Int=10)
+    x_true = generate_chain_ground_truth(n_poses)
+    link_offsets = [x_true[i+1] - x_true[i] + 0.1 * sin.(x_true[i]) for i in 1:n_poses-1]
     lcs = Tuple{Int, Int, SVector{3, Float64}}[]
     for i in (K + 1):n_poses
         if (i - 1) % K == 0
             u = i - K
             v = i
-            off = sum(SVector(1.0, 0.5 * sin(j), 0.2) for j in u:(v-1))
+            off = x_true[v] - x_true[u] + 0.1 * sin.(x_true[u])
             push!(lcs, (u, v, off))
         end
     end
+    return link_offsets, lcs
+end
+
+function get_chain_loop_closures(n_poses::Int, K::Int=10)
+    _, lcs = get_chain_measurements(n_poses, K)
     return lcs
 end
 
-function build_chain_nlls(n_poses::Int)
-    start_vars = generate_chain_start_vars(n_poses)
+function generate_chain_start_vars(n_poses::Int)
+    x_true = generate_chain_ground_truth(n_poses)
+    x0 = Vector{SVector{3, Float64}}(undef, n_poses)
+    x0[1] = SVector(0.0, 0.0, 0.0)
+    for i in 1:n_poses-1
+        noise = 0.02 * SVector(sin(2.3 * i), cos(1.7 * i), sin(3.1 * i))
+        x0[i+1] = x0[i] + (x_true[i+1] - x_true[i]) + noise
+    end
+    return x0
+end
+
+function build_chain_nlls(n_poses::Int, link_offsets::Vector{SVector{3, Float64}}, lcs::Vector{Tuple{Int, Int, SVector{3, Float64}}}, start_vars::Vector{SVector{3, Float64}}=generate_chain_start_vars(n_poses))
     chain_prob = NLLSModel.Model(SVector{3, Float64}, Union{BenchChainLink, BenchChainAnchor})
     for v in start_vars
         addvariable!(chain_prob, v)
     end
     addcost!(chain_prob, BenchChainAnchor())
     for i in 1:n_poses-1
-        addcost!(chain_prob, BenchChainLink(SVector(1.0, 0.5 * sin(i), 0.2), SVector(i, i + 1)))
+        addcost!(chain_prob, BenchChainLink(link_offsets[i], SVector(i, i + 1)))
     end
-    for (u, v, off) in get_chain_loop_closures(n_poses)
+    for (u, v, off) in lcs
         addcost!(chain_prob, BenchChainLink(off, SVector(u, v)))
     end
     return chain_prob
 end
 
-function chain_residuals!(out, x_flat, n_poses::Int, lcs::Vector{Tuple{Int, Int, SVector{3, Float64}}})
+function build_chain_nlls(n_poses::Int)
+    link_offsets, lcs = get_chain_measurements(n_poses)
+    start_vars = generate_chain_start_vars(n_poses)
+    return build_chain_nlls(n_poses, link_offsets, lcs, start_vars)
+end
+
+function chain_residuals!(out, x_flat, n_poses::Int, link_offsets::Vector{SVector{3, Float64}}, lcs::Vector{Tuple{Int, Int, SVector{3, Float64}}})
     # Pose 1 anchor
     @inbounds begin
         out[1] = x_flat[1]
@@ -64,7 +87,7 @@ function chain_residuals!(out, x_flat, n_poses::Int, lcs::Vector{Tuple{Int, Int,
         for i in 1:n_poses-1
             a = SVector(x_flat[3*i-2], x_flat[3*i-1], x_flat[3*i])
             b = SVector(x_flat[3*i+1], x_flat[3*i+2], x_flat[3*i+3])
-            offset = SVector(1.0, 0.5 * sin(i), 0.2)
+            offset = link_offsets[i]
             r = b - a - offset + 0.1 * sin.(a)
             out[out_idx] = r[1]
             out[out_idx+1] = r[2]
@@ -84,7 +107,8 @@ function chain_residuals!(out, x_flat, n_poses::Int, lcs::Vector{Tuple{Int, Int,
     return out
 end
 
-chain_residuals!(out, x_flat, n_poses::Int) = chain_residuals!(out, x_flat, n_poses, get_chain_loop_closures(n_poses))
+chain_residuals!(out, x_flat, n_poses::Int) = (m = get_chain_measurements(n_poses); chain_residuals!(out, x_flat, n_poses, m[1], m[2]))
+chain_residuals!(out, x_flat, n_poses::Int, lcs::Vector{Tuple{Int, Int, SVector{3, Float64}}}) = (m = get_chain_measurements(n_poses); chain_residuals!(out, x_flat, n_poses, m[1], lcs))
 
 function chain_jac_vals!(vals::Vector{Float64}, x_flat, n_poses::Int, lcs::Vector{Tuple{Int, Int, SVector{3, Float64}}})
     @inbounds begin
@@ -168,13 +192,13 @@ function create_pose_chain_problem()
         :large_sparse,
         Any[50, 100, 200, 400, 800, 1200, 2000, 3500, 5000, 7500, 10000],
         n_poses -> begin
+            link_offsets, lcs = get_chain_measurements(n_poses)
             start_vars = generate_chain_start_vars(n_poses)
             x_flat = reduce(vcat, [collect(v) for v in start_vars])
-            lcs = get_chain_loop_closures(n_poses)
             m_res = 3 * (n_poses + length(lcs))
 
             # Model 1: NLLSModel Sparse Block Tridiagonal with Loop Closures
-            nlls_prob = build_chain_nlls(n_poses)
+            nlls_prob = build_chain_nlls(n_poses, link_offsets, lcs, start_vars)
             f_nlls, fdf_nlls!, x0_nlls, H_proto_chain = NLLSModel.optimvars(nlls_prob)
             n_tot_vars = 3 * n_poses
             g_nlls = zeros(Float64, n_tot_vars)
@@ -193,7 +217,7 @@ function create_pose_chain_problem()
             x_lso = copy(x_flat)
             J_sp, jac_vals, jac_perm = build_chain_sparse_jacobian(n_poses, lcs)
             chain_jac!(J_sp, x_flat, n_poses, lcs, jac_vals, jac_perm)
-            f!(r, x) = chain_residuals!(r, x, n_poses, lcs)
+            f!(r, x) = chain_residuals!(r, x, n_poses, link_offsets, lcs)
             g!(J, x) = chain_jac!(J, x, n_poses, lcs, jac_vals, jac_perm)
             lsp = LeastSquaresProblem(x=x_lso, y=r_buf, f! = f!, g! = g!, J=J_sp)
             m_lso = ModelDefinition(

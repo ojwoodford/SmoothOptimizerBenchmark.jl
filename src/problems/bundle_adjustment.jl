@@ -95,7 +95,7 @@ function _make_nlls_ba_model_definition(bam_model::BundleAdjustmentModel)
     )
 end
 
-function make_synthetic_bam(ncams::Int, npnts::Int=ncams * 5, propvisible::Float64=0.3; rng=MersenneTwister(42 + ncams))
+function make_synthetic_bam(ncams::Int, npnts::Int=ncams * 5, propvisible::Float64=max(0.3, 3.0 / ncams); rng=MersenneTwister(42 + ncams))
     nobs = 0
     cams_indices = Int[]
     pnts_indices = Int[]
