@@ -2,12 +2,13 @@ using Documenter
 using SmoothOptimizerBenchmark
 
 makedocs(
+    root = @__DIR__,
     sitename = "SmoothOptimizerBenchmark.jl",
     authors = "Oliver Woodford",
     format = Documenter.HTML(
         prettyurls = get(ENV, "CI", nothing) == "true",
         sidebar_sitename = true,
-        canonical = "https://olly.github.io/SmoothOptimizerBenchmark.jl"
+        canonical = "https://ojwoodford.github.io/SmoothOptimizerBenchmark.jl"
     ),
     modules = [SmoothOptimizerBenchmark],
     warnonly = true,

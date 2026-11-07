@@ -8,14 +8,31 @@ export run_problem_benchmark, run_scaling_benchmark, run_all_scaling_benchmarks
 export load_benchmark_results
 
 """
-    benchmark_eval(f; samples=5, evals=1)
+    benchmark_eval(f; samples=5, evals=nothing)
 
 Runs a calibrated benchmark of an evaluation function and returns median time (ns), allocs, and bytes.
+Automatically calibrates `evals` for fast (< 10 μs) functions to prevent ~42 ns hardware timer quantization spikes.
 """
-function benchmark_eval(f::Function; samples=5, evals=1)
-    # Warmup
+function benchmark_eval(f::Function; samples=5, evals=nothing)
+    # Warmup first to exclude JIT compilation from calibration timing
     f()
-    b = @benchmark $f() samples=samples evals=evals
+    t0 = time_ns()
+    f()
+    dt = time_ns() - t0
+    actual_evals = if evals !== nothing
+        evals
+    elseif dt < 10_000
+        t1 = time_ns()
+        for _ in 1:16
+            f()
+        end
+        dt16 = max(1, (time_ns() - t1) ÷ 16)
+        clamp(cld(20_000, Int(dt16)), 1, 1000)
+    else
+        1
+    end
+    actual_samples = dt < 1_000_000 ? max(samples, 9) : samples
+    b = @benchmark $f() samples=actual_samples evals=actual_evals
     m = median(b)
     return (time_ns = Float64(m.time), allocs = b.allocs, bytes = b.memory)
 end
@@ -101,20 +118,31 @@ samples needed for up to 1s total computation (or up to `max_samples`), collecti
 """
 function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, target_model::ModelDefinition;
                                  max_samples::Int=50, target_total_time_sec::Float64=1.0, samples=nothing,
-                                 on_result=nothing)
+                                 on_result=nothing, warmed_signatures::Set{Any}=Set{Any}())
     results = Dict{String, OptimizerResult}()
     effective_max = samples !== nothing ? max(1, Int(samples)) : max_samples
 
     for opt in optimizers
-        target_model.reset!()
+        # Ensure this concrete (optimizer, model-type) specialization is JIT-compiled before timing
+        sig = (opt.name, typeof(target_model.model))
+        if !(sig in warmed_signatures)
+            push!(warmed_signatures, sig)
+            try
+                target_model.reset!()
+                opt.optimize(target_model; maxiters=1, time_limit=1.0)
+            catch
+            finally
+                target_model.reset!()
+            end
+        else
+            target_model.reset!()
+        end
 
         # 1. First (non-warmup) run with NO run time limits
         init_res = nothing
-        timed_first = nothing
-        t1_start = time_ns()
+        t1_wall_start = time_ns()
         try
-            timed_first = @timed opt.optimize(target_model; time_limit=nothing)
-            init_res = timed_first.value
+            init_res = opt.optimize(target_model; time_limit=nothing)
         catch err
             target_model.reset!()
             res = OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
@@ -124,14 +152,14 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
             end
             continue
         end
-        t1_elapsed_ns = Float64(time_ns() - t1_start)
-        t1_sec = t1_elapsed_ns / 1e9
+        t1_wall_ns = Float64(time_ns() - t1_wall_start)
+        t1_wall_sec = t1_wall_ns / 1e9
 
         if isnan(init_res.time_ns) || !init_res.converged
             res = OptimizerResult(
-                isnan(init_res.time_ns) ? NaN : t1_elapsed_ns,
-                Base.gc_alloc_count(timed_first.gcstats),
-                timed_first.bytes,
+                init_res.time_ns,
+                init_res.allocs,
+                init_res.bytes,
                 init_res.iterations,
                 init_res.start_cost,
                 init_res.final_cost,
@@ -146,28 +174,30 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
 
         # 2. Check runtime to estimate number of further samples needed
         # based on up to 50 samples, or number of samples required for 1s total computation (min 1 sample)
-        samples_for_1s = t1_sec > 0.0 ? ceil(Int, target_total_time_sec / t1_sec) : effective_max
+        samples_for_1s = t1_wall_sec > 0.0 ? ceil(Int, target_total_time_sec / t1_wall_sec) : effective_max
         total_samples = clamp(samples_for_1s, 1, effective_max)
         further_samples = total_samples - 1
 
-        times = Float64[t1_elapsed_ns]
-        allocs = Base.gc_alloc_count(timed_first.gcstats)
-        bytes = timed_first.bytes
-        total_accumulated_ns = t1_elapsed_ns
+        times = Float64[init_res.time_ns]
+        allocs = init_res.allocs
+        bytes = init_res.bytes
+        total_accumulated_wall_ns = t1_wall_ns
 
         # 3. Collect further samples
         for _ in 1:further_samples
-            if total_accumulated_ns >= target_total_time_sec * 1e9
+            if total_accumulated_wall_ns >= target_total_time_sec * 1e9
                 break
             end
             target_model.reset!()
-            t_start = time_ns()
-            timed = @timed opt.optimize(target_model; time_limit=nothing)
-            dt = Float64(time_ns() - t_start)
-            total_accumulated_ns += dt
-            push!(times, dt)
-            allocs = Base.gc_alloc_count(timed.gcstats)
-            bytes = timed.bytes
+            t_wall_start = time_ns()
+            r_sample = opt.optimize(target_model; time_limit=nothing)
+            dt_wall = Float64(time_ns() - t_wall_start)
+            total_accumulated_wall_ns += dt_wall
+            if !isnan(r_sample.time_ns)
+                push!(times, r_sample.time_ns)
+                allocs = r_sample.allocs
+                bytes = r_sample.bytes
+            end
         end
 
         res = OptimizerResult(
@@ -188,13 +218,13 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
 end
 
 """
-    warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model_name=nothing, verbose=true)
+    warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model_name=nothing, verbose=true, warmed_signatures=Set{Any}())
 
 For each optimizer, performs a warmup run on both the smallest and largest problem size
 with run time limited to 1s to trigger JIT compilation for both small and large code paths.
 """
-function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model_name=nothing, verbose=true)
-    isempty(sizes) && return
+function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model_name=nothing, verbose=true, warmed_signatures::Set{Any}=Set{Any}())
+    isempty(sizes) && return warmed_signatures
     warmup_sizes = unique([first(sizes), last(sizes)])
     if verbose
         println("\n>>> [Warmup] Performing 1s-limited warmup on sizes $(warmup_sizes) to precompile code paths...")
@@ -226,6 +256,7 @@ function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model
         end
 
         for opt in prob.compatible_optimizers
+            push!(warmed_signatures, (opt.name, typeof(target.model)))
             try
                 target.reset!()
                 opt.optimize(target; time_limit=1.0)
@@ -238,6 +269,7 @@ function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model
     if verbose
         println(">>> [Warmup] Completed 1s warmup on sizes $(warmup_sizes).\n")
     end
+    return warmed_signatures
 end
 
 """
@@ -366,7 +398,8 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
     init_optimizer_section(data_file, winning_model_name)
 
     # 3. Warmup both smallest and largest sizes for each optimizer (1s time limit)
-    warmup_problem_optimizers!(prob, sizes; target_model_name=winning_model_name, verbose=verbose)
+    warmed_signatures = Set{Any}()
+    warmup_problem_optimizers!(prob, sizes; target_model_name=winning_model_name, verbose=verbose, warmed_signatures=warmed_signatures)
 
     # 4. Benchmark optimizers across all sizes on the standardized model, streaming EVERY optimizer performance immediately to file!
     size_results = SingleSizeBenchmarkResult[]
@@ -378,6 +411,7 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
 
         # Run optimizers on target model, streaming each optimizer result immediately to file
         optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; samples=samples,
+            warmed_signatures=warmed_signatures,
             on_result = (opt_name, r) -> begin
                 append_optimizer_evaluation(data_file, sz, opt_name, r)
                 if verbose

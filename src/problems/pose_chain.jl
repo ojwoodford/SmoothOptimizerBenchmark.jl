@@ -54,65 +54,75 @@ function build_chain_nlls(n_poses::Int)
     return chain_prob
 end
 
-function chain_residuals!(out, x_flat, n_poses)
+function chain_residuals!(out, x_flat, n_poses::Int, lcs::Vector{Tuple{Int, Int, SVector{3, Float64}}})
     # Pose 1 anchor
-    out[1] = x_flat[1]
-    out[2] = x_flat[2]
-    out[3] = x_flat[3]
-    out_idx = 4
-    for i in 1:n_poses-1
-        a = SVector(x_flat[3*i-2], x_flat[3*i-1], x_flat[3*i])
-        b = SVector(x_flat[3*i+1], x_flat[3*i+2], x_flat[3*i+3])
-        offset = SVector(1.0, 0.5 * sin(i), 0.2)
-        r = b - a - offset + 0.1 * sin.(a)
-        out[out_idx] = r[1]
-        out[out_idx+1] = r[2]
-        out[out_idx+2] = r[3]
-        out_idx += 3
-    end
-    for (u, v, off) in get_chain_loop_closures(n_poses)
-        a = SVector(x_flat[3*u-2], x_flat[3*u-1], x_flat[3*u])
-        b = SVector(x_flat[3*v-2], x_flat[3*v-1], x_flat[3*v])
-        r = b - a - off + 0.1 * sin.(a)
-        out[out_idx] = r[1]
-        out[out_idx+1] = r[2]
-        out[out_idx+2] = r[3]
-        out_idx += 3
+    @inbounds begin
+        out[1] = x_flat[1]
+        out[2] = x_flat[2]
+        out[3] = x_flat[3]
+        out_idx = 4
+        for i in 1:n_poses-1
+            a = SVector(x_flat[3*i-2], x_flat[3*i-1], x_flat[3*i])
+            b = SVector(x_flat[3*i+1], x_flat[3*i+2], x_flat[3*i+3])
+            offset = SVector(1.0, 0.5 * sin(i), 0.2)
+            r = b - a - offset + 0.1 * sin.(a)
+            out[out_idx] = r[1]
+            out[out_idx+1] = r[2]
+            out[out_idx+2] = r[3]
+            out_idx += 3
+        end
+        for (u, v, off) in lcs
+            a = SVector(x_flat[3*u-2], x_flat[3*u-1], x_flat[3*u])
+            b = SVector(x_flat[3*v-2], x_flat[3*v-1], x_flat[3*v])
+            r = b - a - off + 0.1 * sin.(a)
+            out[out_idx] = r[1]
+            out[out_idx+1] = r[2]
+            out[out_idx+2] = r[3]
+            out_idx += 3
+        end
     end
     return out
 end
 
-function chain_jac!(J::SparseMatrixCSC, x_flat, n_poses)
-    fill!(nonzeros(J), 0.0)
-    J[1, 1] = 1.0
-    J[2, 2] = 1.0
-    J[3, 3] = 1.0
-    for i in 1:n_poses-1
-        r_start = 4 + 3*(i-1)
-        c_a = 3*i - 2
-        c_b = 3*i + 1
-        for k in 0:2
-            a_val = x_flat[c_a + k]
-            J[r_start + k, c_a + k] = -1.0 + 0.1 * cos(a_val)
-            J[r_start + k, c_b + k] = 1.0
+chain_residuals!(out, x_flat, n_poses::Int) = chain_residuals!(out, x_flat, n_poses, get_chain_loop_closures(n_poses))
+
+function chain_jac_vals!(vals::Vector{Float64}, x_flat, n_poses::Int, lcs::Vector{Tuple{Int, Int, SVector{3, Float64}}})
+    @inbounds begin
+        vals[1] = 1.0
+        vals[2] = 1.0
+        vals[3] = 1.0
+        idx = 4
+        for i in 1:n_poses-1
+            c_a = 3*i - 2
+            for k in 0:2
+                a_val = x_flat[c_a + k]
+                vals[idx]     = -1.0 + 0.1 * cos(a_val)
+                vals[idx + 1] = 1.0
+                idx += 2
+            end
+        end
+        for (u, _, _) in lcs
+            c_a = 3*u - 2
+            for k in 0:2
+                a_val = x_flat[c_a + k]
+                vals[idx]     = -1.0 + 0.1 * cos(a_val)
+                vals[idx + 1] = 1.0
+                idx += 2
+            end
         end
     end
-    r_start = 3 * n_poses + 1
-    for (u, v, _) in get_chain_loop_closures(n_poses)
-        c_a = 3*u - 2
-        c_b = 3*v - 2
-        for k in 0:2
-            a_val = x_flat[c_a + k]
-            J[r_start + k, c_a + k] = -1.0 + 0.1 * cos(a_val)
-            J[r_start + k, c_b + k] = 1.0
-        end
-        r_start += 3
+    return vals
+end
+
+function chain_jac!(J::SparseMatrixCSC, x_flat, n_poses::Int, lcs::Vector{Tuple{Int, Int, SVector{3, Float64}}}, vals::Vector{Float64}, perm::Vector{Int})
+    chain_jac_vals!(vals, x_flat, n_poses, lcs)
+    @inbounds for k in eachindex(perm)
+        J.nzval[k] = vals[perm[k]]
     end
     return J
 end
 
-function build_chain_sparse_jacobian(n_poses::Int)
-    lcs = get_chain_loop_closures(n_poses)
+function build_chain_sparse_jacobian(n_poses::Int, lcs::Vector{Tuple{Int, Int, SVector{3, Float64}}}=get_chain_loop_closures(n_poses))
     m_res = 3 * (n_poses + length(lcs))
     n_vars = 3 * n_poses
     rows = Int[]
@@ -144,8 +154,12 @@ function build_chain_sparse_jacobian(n_poses::Int)
         end
         r_start += 3
     end
-    vals = zeros(Float64, length(rows))
-    return sparse(rows, cols, vals, m_res, n_vars)
+    nnzj = length(rows)
+    idx_sp = sparse(rows, cols, collect(1:nnzj), m_res, n_vars)
+    perm = copy(nonzeros(idx_sp))
+    vals = ones(Float64, nnzj)
+    J = sparse(rows, cols, vals, m_res, n_vars)
+    return J, vals, perm
 end
 
 function create_pose_chain_problem()
@@ -175,11 +189,12 @@ function create_pose_chain_problem()
 
             # Model 2: Standalone (Sparse)
             r_buf = zeros(Float64, m_res)
+            g_buf = zeros(Float64, n_tot_vars)
             x_lso = copy(x_flat)
-            J_sp = build_chain_sparse_jacobian(n_poses)
-            chain_jac!(J_sp, x_flat, n_poses)
-            f!(r, x) = chain_residuals!(r, x, n_poses)
-            g!(J, x) = chain_jac!(J, x, n_poses)
+            J_sp, jac_vals, jac_perm = build_chain_sparse_jacobian(n_poses, lcs)
+            chain_jac!(J_sp, x_flat, n_poses, lcs, jac_vals, jac_perm)
+            f!(r, x) = chain_residuals!(r, x, n_poses, lcs)
+            g!(J, x) = chain_jac!(J, x, n_poses, lcs, jac_vals, jac_perm)
             lsp = LeastSquaresProblem(x=x_lso, y=r_buf, f! = f!, g! = g!, J=J_sp)
             m_lso = ModelDefinition(
                 "Standalone (Sparse)",
@@ -191,11 +206,13 @@ function create_pose_chain_problem()
                 () -> begin
                     f!(r_buf, x_lso)
                     g!(J_sp, x_lso)
-                    return (0.5 * sum(abs2, r_buf), J_sp)
+                    mul!(g_buf, J_sp', r_buf)
+                    H_sp = J_sp' * J_sp
+                    return (0.5 * sum(abs2, r_buf), H_sp)
                 end,
                 () -> begin
                     copyto!(x_lso, x_flat)
-                    chain_jac!(J_sp, x_flat, n_poses)
+                    g!(J_sp, x_flat)
                 end
             )
 

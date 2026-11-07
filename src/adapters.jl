@@ -52,6 +52,11 @@ mutable struct LeastSquaresNLPModel{TLSP, TR, TJ} <: AbstractNLPModel{Float64, V
     cache_valid::Base.RefValue{Bool}
 end
 
+function _symbolic_jtj(J::SparseMatrixCSC)
+    J_sym = SparseMatrixCSC(J.m, J.n, copy(J.colptr), copy(J.rowval), ones(Float64, length(J.nzval)))
+    return sparse(J_sym' * J_sym)
+end
+
 function LeastSquaresNLPModel(lsp::LeastSquaresProblem)
     n = length(lsp.x)
     m = length(lsp.y)
@@ -60,9 +65,18 @@ function LeastSquaresNLPModel(lsp::LeastSquaresProblem)
     Jv_buf = zeros(Float64, m)
 
     if lsp.J isa SparseMatrixCSC
-        H_proto = tril(sparse(lsp.J' * lsp.J))
-        h_rows, h_cols, _ = findnz(H_proto)
-        nnzh = length(h_rows)
+        H_proto = tril(_symbolic_jtj(lsp.J))
+        nnzh = nnz(H_proto)
+        h_rows = Vector{Int}(undef, nnzh)
+        h_cols = Vector{Int}(undef, nnzh)
+        idx = 1
+        for col in 1:size(H_proto, 2)
+            for p in nzrange(H_proto, col)
+                h_rows[idx] = H_proto.rowval[p]
+                h_cols[idx] = col
+                idx += 1
+            end
+        end
         H_dense = Matrix{Float64}(undef, 0, 0)
     else
         nnzh = n * (n + 1) ÷ 2
@@ -143,7 +157,14 @@ function NLPModels.hess_coord!(nlp::LeastSquaresNLPModel, x::AbstractVector, val
     w = Float64(obj_weight)
     if nlp.J_buf isa SparseMatrixCSC
         H_sp = tril(sparse(nlp.J_buf' * nlp.J_buf))
-        vals .= w .* nonzeros(H_sp)
+        nz = nonzeros(H_sp)
+        if length(nz) == length(vals)
+            vals .= w .* nz
+        else
+            @inbounds for k in eachindex(vals)
+                vals[k] = w * H_sp[nlp.h_rows[k], nlp.h_cols[k]]
+            end
+        end
     else
         @inbounds for k in 1:length(nlp.h_rows)
             vals[k] = w * nlp.H_dense[nlp.h_rows[k], nlp.h_cols[k]]
@@ -191,7 +212,7 @@ function as_least_squares_problem(bam::BundleAdjustmentModel)
     idx_sp = sparse(rows, cols, collect(1:bam.nls_meta.nnzj), bam.nls_meta.nequ, bam.meta.nvar)
     perm = nonzeros(idx_sp)
 
-    J_proto = sparse(rows, cols, vals, bam.nls_meta.nequ, bam.meta.nvar)
+    J_proto = sparse(rows, cols, ones(Float64, bam.nls_meta.nnzj), bam.nls_meta.nequ, bam.meta.nvar)
     @inbounds for k in 1:length(perm)
         J_proto.nzval[k] = vals[perm[k]]
     end
@@ -233,7 +254,7 @@ function SecondOrderOptimization.optimize!(lsp::LeastSquaresProblem, options::Op
     end
 
     if lsp.J isa SparseMatrixCSC
-        H_proto = lsp.J' * lsp.J
+        H_proto = _symbolic_jtj(lsp.J)
         fdf_sp!(g, H, x) = begin
             lsp.f!(r_buffer, x)
             lsp.g!(J_buffer, x)
@@ -319,6 +340,8 @@ Optimizes a model using `SecondOrderOptimization.jl`.
 Supported methods: `:dogleg`, `:lm` / `:levenbergmarquardt`.
 """
 const SOO_CONVERGENCE_MASK = (1 << 2) | (1 << 3) | (1 << 6) | (1 << 12)
+const SOO_FAILURE_MASK = (1 << 0) | (1 << 1) | (1 << 4) | (1 << 5) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 10) | (1 << 11)
+soo_converged(termination::Int) = ((termination & (1 << 12)) != 0) || (((termination & SOO_CONVERGENCE_MASK) != 0) && ((termination & SOO_FAILURE_MASK) == 0))
 
 function optimize_soo(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
@@ -332,7 +355,7 @@ function optimize_soo(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XT
         timed = @timed SecondOrderOptimization.optimize!(p, opt)
         t_total = time_ns() - t_start
         _, res = timed.value
-        converged = (res.termination & SOO_CONVERGENCE_MASK) != 0
+        converged = soo_converged(res.termination)
         return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
     elseif m isa BundleAdjustmentModel
         lsp = as_least_squares_problem(m)
@@ -343,7 +366,7 @@ function optimize_soo(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XT
         timed = @timed SecondOrderOptimization.optimize!(p, opt)
         t_total = time_ns() - t_start
         _, res = timed.value
-        converged = (res.termination & SOO_CONVERGENCE_MASK) != 0
+        converged = soo_converged(res.termination)
         return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
     elseif m isa AbstractNLPModel
         p = deepcopy(m)
@@ -351,7 +374,7 @@ function optimize_soo(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XT
         timed = @timed SecondOrderOptimization.optimize!(p, opt)
         t_total = time_ns() - t_start
         _, res = timed.value
-        converged = (res.termination & SOO_CONVERGENCE_MASK) != 0
+        converged = soo_converged(res.termination)
         return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
     else
         error("Unsupported model type for optimize_soo: $(typeof(m))")
@@ -417,7 +440,7 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
 
         if method === :newton_trust_region && is_sparse
             # NewtonTrustRegion requires dense eigen/factorization in Optim; unsupported for sparse problems.
-            return OptimizerResult(NaN, 0, 0, 0, start_c, NaN, false)
+            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
         end
 
         r_buf = zeros(Float64, length(lsp.y))
@@ -437,16 +460,24 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         end
 
         H0 = if is_sparse
-            sparse(lsp.J' * lsp.J)
+            _symbolic_jtj(lsp.J)
         else
-            Matrix{Float64}(undef, n, n)
+            zeros(Float64, n, n)
         end
 
         h! = if is_sparse
             (H, x) -> begin
                 lsp.g!(J_buf, x)
                 H_calc = J_buf' * J_buf
-                copyto!(H.nzval, H_calc.nzval)
+                if length(H.nzval) == length(H_calc.nzval)
+                    copyto!(H.nzval, H_calc.nzval)
+                else
+                    fill!(H.nzval, 0.0)
+                    rows_c, cols_c, vals_c = findnz(H_calc)
+                    @inbounds for (r, c, v) in zip(rows_c, cols_c, vals_c)
+                        H[r, c] = v
+                    end
+                end
                 return H
             end
         else
@@ -458,9 +489,6 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         end
 
         g0 = zeros(Float64, n)
-        g!(g0, x0)
-        h!(H0, x0)
-
         td = TwiceDifferentiable(f, g!, h!, x0, start_c, g0, H0)
         opts = Optim.Options(g_abstol=gtol, x_abstol=xtol, f_reltol=ftol, iterations=maxiters, time_limit=actual_maxtime; kwargs...)
 
@@ -483,17 +511,17 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
 
         if method === :newton_trust_region && is_sparse
             # NewtonTrustRegion requires dense eigen/factorization in Optim; unsupported for sparse problems.
-            return OptimizerResult(NaN, 0, 0, 0, start_c, NaN, false)
+            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
         end
 
         H0, H_buf = if is_sparse
             (deepcopy(H_proto), deepcopy(H_proto))
         else
-            (Matrix{Float64}(undef, n, n), Matrix{Float64}(undef, n, n))
+            (zeros(Float64, n, n), zeros(Float64, n, n))
         end
 
         g0 = zeros(Float64, n)
-        start_c = fdf!(g0, H0, copy(x0))
+        start_c = f(copy(x0))
         g_buf = zeros(Float64, n)
 
         f_opt(x) = f(x)
@@ -523,7 +551,6 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
 
         rows, cols = NLPModels.hess_structure(nlp)
         vals = zeros(Float64, length(rows))
-        NLPModels.hess_coord!(nlp, x0, vals)
         is_sparse = length(rows) < (n * (n + 1) ÷ 2)
 
         if method === :newton_trust_region && is_sparse
@@ -533,10 +560,9 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         f_nlp(x) = NLPModels.obj(nlp, x)
         g_nlp!(g, x) = NLPModels.grad!(nlp, x, g)
         g0 = zeros(Float64, n)
-        g_nlp!(g0, x0)
 
         H0, h_nlp! = if is_sparse
-            H_tril = sparse(rows, cols, vals, n, n)
+            H_tril = sparse(rows, cols, ones(Float64, length(rows)), n, n)
             H_init = sparse(Symmetric(H_tril, :L))
             (H_init, (H, x) -> begin
                 NLPModels.hess_coord!(nlp, x, vals)
@@ -546,13 +572,12 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
                 return H
             end)
         else
-            H_dense = Matrix{Float64}(undef, n, n)
+            H_dense = zeros(Float64, n, n)
             h_dense_eval = (H, x) -> begin
                 H_x = NLPModels.hess(nlp, x)
                 copyto!(H, Symmetric(H_x, :L))
                 return H
             end
-            h_dense_eval(H_dense, x0)
             (H_dense, h_dense_eval)
         end
 
@@ -584,9 +609,9 @@ function optimize_jsosolvers(target; solver=:trunk, gtol=DEFAULT_GTOL, maxiters=
 
     t_start = time_ns()
     timed = if solver === :tron
-        @timed JSOSolvers.tron(nlp; atol=gtol, rtol=gtol, max_iter=maxiters, max_time=actual_maxtime, kwargs...)
+        @timed JSOSolvers.tron(nlp; atol=gtol, rtol=0.0, max_iter=maxiters, max_time=actual_maxtime, kwargs...)
     else
-        @timed JSOSolvers.trunk(nlp; atol=gtol, rtol=gtol, max_iter=maxiters, max_time=actual_maxtime, kwargs...)
+        @timed JSOSolvers.trunk(nlp; atol=gtol, rtol=0.0, max_iter=maxiters, max_time=actual_maxtime, kwargs...)
     end
     t_total = time_ns() - t_start
     res = timed.value
@@ -598,7 +623,7 @@ function optimize_jsosolvers(target; solver=:trunk, gtol=DEFAULT_GTOL, maxiters=
         res.iter,
         start_c,
         res.objective,
-        res.status == :first_order
+        res.status in (:first_order, :acceptable)
     )
 end
 
@@ -614,11 +639,11 @@ function optimize_ipopt(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, ma
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
 
     t_start = time_ns()
-    timed = @timed NLPModelsIpopt.ipopt(nlp; tol=gtol, dual_inf_tol=gtol, max_iter=maxiters, max_cpu_time=actual_maxtime, print_level=print_level, kwargs...)
+    timed = @timed NLPModelsIpopt.ipopt(nlp; tol=gtol, dual_inf_tol=gtol, acceptable_tol=gtol, max_iter=maxiters, max_wall_time=actual_maxtime, print_level=print_level, kwargs...)
     t_total = time_ns() - t_start
     res = timed.value
 
-    converged = res.status in (:first_order, :acceptable_level)
+    converged = res.status in (:first_order, :acceptable)
     return OptimizerResult(
         Float64(t_total),
         Base.gc_alloc_count(timed.gcstats),
@@ -642,7 +667,7 @@ function optimize_madnlp(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, m
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
 
     t_start = time_ns()
-    timed = @timed MadNLP.madnlp(nlp; tol=gtol, max_iter=maxiters, max_wall_time=actual_maxtime, print_level=MadNLP.ERROR, kwargs...)
+    timed = @timed MadNLP.madnlp(nlp; tol=gtol, acceptable_tol=gtol, max_iter=maxiters, max_wall_time=actual_maxtime, print_level=MadNLP.ERROR, kwargs...)
     t_total = time_ns() - t_start
     res = timed.value
 
@@ -725,7 +750,7 @@ end
 
 Optimizes a model using `CaNNOLeS.jl`.
 """
-function optimize_cannoles(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+function optimize_cannoles(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, linsolve=:ldlfactorizations, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
     nls = m isa BundleAdjustmentModel ? m : as_nlpmodel(m)
     NLPModels.reset!(nls)
@@ -734,7 +759,7 @@ function optimize_cannoles(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS,
     cannoles_method = m isa BundleAdjustmentModel ? :Newton_noFHess : :Newton
 
     t_start = time_ns()
-    timed = @timed CaNNOLeS.cannoles(nls; method=cannoles_method, atol=gtol, rtol=gtol, max_iter=maxiters, max_time=actual_maxtime, kwargs...)
+    timed = @timed CaNNOLeS.cannoles(nls; method=cannoles_method, linsolve=linsolve, atol=gtol, rtol=0.0, max_iter=maxiters, max_time=actual_maxtime, kwargs...)
     t_total = time_ns() - t_start
     stats = timed.value
 
@@ -745,7 +770,7 @@ function optimize_cannoles(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS,
         stats.iter,
         start_c,
         stats.objective,
-        stats.status in (:first_order, :acceptable_level)
+        stats.status in (:first_order, :acceptable)
     )
 end
 

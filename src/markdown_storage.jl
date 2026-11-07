@@ -7,8 +7,9 @@ export load_problem_markdown, load_all_problem_markdown, update_problem_plots
 export init_problem_markdown, append_model_evaluation, init_optimizer_section, append_optimizer_evaluation
 
 function get_git_commit()
+    pkg_root = normpath(joinpath(@__DIR__, ".."))
     try
-        return strip(read(`git rev-parse --short HEAD`, String))
+        return strip(read(`git -C $pkg_root rev-parse --short HEAD`, String))
     catch
         return "unknown"
     end
@@ -238,7 +239,7 @@ Loads all `.md` benchmark result files from `dir`.
 """
 function load_all_problem_markdown(dir::String=DEFAULT_DATA_DIR)::Vector{ProblemScalingBenchmarkResult}
     !isdir(dir) && return ProblemScalingBenchmarkResult[]
-    files = filter(f -> endswith(f, ".md"), readdir(dir; join=true))
+    files = sort(filter(f -> endswith(f, ".md"), readdir(dir; join=true)))
     return ProblemScalingBenchmarkResult[load_problem_markdown(f) for f in files]
 end
 

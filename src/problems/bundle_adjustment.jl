@@ -116,6 +116,39 @@ function make_synthetic_bam(ncams::Int, npnts::Int=ncams * 5, propvisible::Float
     )
 end
 
+function _make_bam_model_definition(bam_model::BundleAdjustmentModel)
+    start_bam_x0 = copy(bam_model.meta.x0)
+    rx_bam = zeros(Float64, bam_model.nls_meta.nequ)
+    vals_bam = zeros(Float64, bam_model.nls_meta.nnzj)
+    rows_bam = Vector{Int}(undef, bam_model.nls_meta.nnzj)
+    cols_bam = Vector{Int}(undef, bam_model.nls_meta.nnzj)
+    NLPModels.jac_structure_residual!(bam_model, rows_bam, cols_bam)
+    idx_sp = sparse(rows_bam, cols_bam, collect(1:bam_model.nls_meta.nnzj), bam_model.nls_meta.nequ, bam_model.meta.nvar)
+    perm_bam = copy(nonzeros(idx_sp))
+    J_bam = sparse(rows_bam, cols_bam, ones(Float64, bam_model.nls_meta.nnzj), bam_model.nls_meta.nequ, bam_model.meta.nvar)
+    g_bam = zeros(Float64, bam_model.meta.nvar)
+
+    return ModelDefinition(
+        "BundleAdjustmentModels",
+        bam_model,
+        () -> begin
+            NLPModels.residual!(bam_model, bam_model.meta.x0, rx_bam)
+            0.5 * dot(rx_bam, rx_bam)
+        end,
+        () -> begin
+            NLPModels.residual!(bam_model, bam_model.meta.x0, rx_bam)
+            NLPModels.jac_coord_residual!(bam_model, bam_model.meta.x0, vals_bam)
+            @inbounds for k in eachindex(perm_bam)
+                J_bam.nzval[k] = vals_bam[perm_bam[k]]
+            end
+            mul!(g_bam, J_bam', rx_bam)
+            H_bam = J_bam' * J_bam
+            (0.5 * dot(rx_bam, rx_bam), H_bam)
+        end,
+        () -> copyto!(bam_model.meta.x0, start_bam_x0)
+    )
+end
+
 function create_bundle_adjustment_problem()
     ProblemDefinition(
         "Sparse Bundle Adjustment",
@@ -124,24 +157,7 @@ function create_bundle_adjustment_problem()
         sz -> begin
             if sz isa String
                 bam_model = BundleAdjustmentModel(sz)
-                start_bam_x0 = copy(bam_model.meta.x0)
-                rx_bam = zeros(Float64, bam_model.nls_meta.nequ)
-                vals_bam = zeros(Float64, bam_model.nls_meta.nnzj)
-                m_bam = ModelDefinition(
-                    "BundleAdjustmentModels",
-                    bam_model,
-                    () -> begin
-                        NLPModels.residual!(bam_model, bam_model.meta.x0, rx_bam)
-                        0.5 * dot(rx_bam, rx_bam)
-                    end,
-                    () -> begin
-                        NLPModels.residual!(bam_model, bam_model.meta.x0, rx_bam)
-                        NLPModels.jac_coord_residual!(bam_model, bam_model.meta.x0, vals_bam)
-                        (0.5 * dot(rx_bam, rx_bam), vals_bam)
-                    end,
-                    () -> copyto!(bam_model.meta.x0, start_bam_x0)
-                )
-                return [m_bam]
+                return [_make_bam_model_definition(bam_model)]
             else
                 ncams = Int(sz)
                 npts = ncams * 5
@@ -160,24 +176,7 @@ function create_bundle_adjustment_problem()
                 )
 
                 bam_model = make_synthetic_bam(ncams, npts)
-                start_bam_x0 = copy(bam_model.meta.x0)
-                rx_bam = zeros(Float64, bam_model.nls_meta.nequ)
-                vals_bam = zeros(Float64, bam_model.nls_meta.nnzj)
-
-                m_bam = ModelDefinition(
-                    "BundleAdjustmentModels",
-                    bam_model,
-                    () -> begin
-                        NLPModels.residual!(bam_model, bam_model.meta.x0, rx_bam)
-                        0.5 * dot(rx_bam, rx_bam)
-                    end,
-                    () -> begin
-                        NLPModels.residual!(bam_model, bam_model.meta.x0, rx_bam)
-                        NLPModels.jac_coord_residual!(bam_model, bam_model.meta.x0, vals_bam)
-                        (0.5 * dot(rx_bam, rx_bam), vals_bam)
-                    end,
-                    () -> copyto!(bam_model.meta.x0, start_bam_x0)
-                )
+                m_bam = _make_bam_model_definition(bam_model)
                 return [m_nlls, m_bam]
             end
         end,

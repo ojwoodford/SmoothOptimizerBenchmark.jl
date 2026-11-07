@@ -93,6 +93,9 @@ function create_rosenbrock_dense_problem()
             r_buf = zeros(Float64, m_len)
             x_lso = copy(x0)
             lsp = LeastSquaresProblem(x=x_lso, f! = rosenbrock_dense_res!, output_length=m_len, autodiff=:forward)
+            J_buf = deepcopy(lsp.J)
+            g_buf = zeros(Float64, n)
+            H_buf = zeros(Float64, n, n)
             m_lso = ModelDefinition(
                 "Standalone",
                 lsp,
@@ -102,7 +105,10 @@ function create_rosenbrock_dense_problem()
                 end,
                 () -> begin
                     rosenbrock_dense_res!(r_buf, x_lso)
-                    return (0.5 * sum(abs2, r_buf), r_buf)
+                    lsp.g!(J_buf, x_lso)
+                    mul!(g_buf, J_buf', r_buf)
+                    mul!(H_buf, J_buf', J_buf)
+                    return (0.5 * sum(abs2, r_buf), H_buf)
                 end,
                 () -> copyto!(x_lso, x0)
             )
@@ -110,7 +116,7 @@ function create_rosenbrock_dense_problem()
             # Model 3: NLPModels / MathOptNLSModel
             nls = build_jso_dense(n)
             g_nlp = zeros(Float64, n)
-            H_nlp = zeros(Float64, n, n)
+            h_vals_nlp = zeros(Float64, nls.meta.nnzh)
             m_nlp = ModelDefinition(
                 "NLPModels (MathOptNLSModel)",
                 nls,
@@ -118,7 +124,8 @@ function create_rosenbrock_dense_problem()
                 () -> begin
                     c = NLPModels.obj(nls, x0)
                     NLPModels.grad!(nls, x0, g_nlp)
-                    return (c, g_nlp)
+                    NLPModels.hess_coord!(nls, x0, h_vals_nlp)
+                    return (c, h_vals_nlp)
                 end,
                 () -> copyto!(nls.meta.x0, x0)
             )

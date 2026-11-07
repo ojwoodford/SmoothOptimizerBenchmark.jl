@@ -223,11 +223,19 @@ function create_robust_procrustes_problem()
                 return J
             end
             p_curr = copy(p0)
+            g_manopt = zeros(Float64, dim_M)
+            H_manopt = zeros(Float64, dim_M, dim_M)
             m_manopt = ModelDefinition(
                 "Manifolds",
                 (M = M, f = f_manopt, jac = jac_manopt, p0 = p0, k = k_len),
                 () -> 0.5 * sum(abs2, f_manopt(M, p_curr)),
-                () -> (0.5 * sum(abs2, f_manopt(M, p_curr)), jac_manopt(M, p_curr)),
+                () -> begin
+                    r = f_manopt(M, p_curr)
+                    J = jac_manopt(M, p_curr)
+                    mul!(g_manopt, transpose(J), r)
+                    mul!(H_manopt, transpose(J), J)
+                    return (0.5 * sum(abs2, r), H_manopt)
+                end,
                 () -> copyto!(p_curr, p0)
             )
 
@@ -253,7 +261,7 @@ function create_robust_procrustes_problem()
                 t_total = time_ns() - t_start
                 _, res = timed.value
                 alloc_cnt = Base.gc_alloc_count(timed.gcstats)
-                converged = (res.termination & ((1 << 2) | (1 << 3) | (1 << 6) | (1 << 12))) != 0
+                converged = soo_converged(res.termination)
                 return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
             end),
             OptimizerDefinition("SecondOrderOptimization (Dogleg)", (model_def; gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
@@ -275,14 +283,14 @@ function create_robust_procrustes_problem()
                 t_total = time_ns() - t_start
                 _, res = timed.value
                 alloc_cnt = Base.gc_alloc_count(timed.gcstats)
-                converged = (res.termination & ((1 << 2) | (1 << 3) | (1 << 6) | (1 << 12))) != 0
+                converged = soo_converged(res.termination)
                 return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
             end),
             OptimizerDefinition("Manopt (LevenbergMarquardt)", (model_def; gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
                 M, f_res, jac_res, p0, k_len = get_procrustes_manopt_components(model_def)
                 start_c = 0.5 * sum(abs2, f_res(M, p0))
-                actual_maxiters = (time_limit !== nothing && time_limit <= 1.0) ? 5 : maxiters
-                stop_crit = (StopWhenGradientNormLess(gtol) | StopWhenChangeLess(M, xtol) | StopWhenCostLess(ftol) | StopAfterIteration(actual_maxiters))
+                actual_maxiters = (time_limit !== nothing && time_limit <= 1.0) ? min(maxiters, 5) : maxiters
+                stop_crit = (StopWhenGradientNormLess(gtol) | StopWhenChangeLess(M, xtol) | StopAfterIteration(actual_maxiters))
                 t_start = time_ns()
                 timed = @timed Manopt.LevenbergMarquardt(M, f_res, jac_res, copy(p0), k_len; return_state=true, stopping_criterion=stop_crit, max_iterations=actual_maxiters)
                 t_total = time_ns() - t_start
@@ -295,6 +303,7 @@ function create_robust_procrustes_problem()
                 converged = !isempty(active) && !all(c -> c isa StopAfterIteration, active)
                 return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, Manopt.get_count(inner, :Iterations), start_c, final_c, converged)
             end)
-        ]
+        ],
+        "Matrix Dimension d"
     )
 end

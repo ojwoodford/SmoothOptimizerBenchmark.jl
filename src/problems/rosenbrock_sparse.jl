@@ -53,10 +53,12 @@ end
 
 function build_sparse_lso(n::Int)
     len = 2 * n - 1
+    x0 = rosen_sparse_startpoint(n)
     rows = vcat(collect(Iterators.flatten([(2*k-1, 2*k, 2*k) for k in 1:(n-1)])), len)
     cols = vcat(collect(Iterators.flatten([(k, k, k+1) for k in 1:(n-1)])), n)
-    J = SparseArrays.sparse(rows, cols, zeros(3*n - 2), len, n)
-    return LeastSquaresProblem(x=rosen_sparse_startpoint(n), f! = rosenbrock_sparse_res!, g! = rosenbrock_sparse_jac!, J=J, output_length=len)
+    J = SparseArrays.sparse(rows, cols, ones(3*n - 2), len, n)
+    rosenbrock_sparse_jac!(J, x0)
+    return LeastSquaresProblem(x=x0, f! = rosenbrock_sparse_res!, g! = rosenbrock_sparse_jac!, J=J, output_length=len)
 end
 
 function build_sparse_nlls(n::Int)
@@ -100,6 +102,7 @@ function create_rosenbrock_sparse_problem()
             # Model 2: Standalone Sparse
             lsp = build_sparse_lso(n)
             r_buf = zeros(Float64, len)
+            g_buf = zeros(Float64, n)
             m_lso = ModelDefinition(
                 "Standalone (Sparse)",
                 lsp,
@@ -110,9 +113,14 @@ function create_rosenbrock_sparse_problem()
                 () -> begin
                     rosenbrock_sparse_res!(r_buf, lsp.x)
                     rosenbrock_sparse_jac!(lsp.J, lsp.x)
-                    return (0.5 * sum(abs2, r_buf), (r_buf, lsp.J))
+                    mul!(g_buf, lsp.J', r_buf)
+                    H_sp = lsp.J' * lsp.J
+                    return (0.5 * sum(abs2, r_buf), H_sp)
                 end,
-                () -> copyto!(lsp.x, x0)
+                () -> begin
+                    copyto!(lsp.x, x0)
+                    rosenbrock_sparse_jac!(lsp.J, x0)
+                end
             )
 
             # Model 3: NLPModels Sparse (up to 32k to avoid JuMP AST memory overhead)
@@ -120,6 +128,7 @@ function create_rosenbrock_sparse_problem()
             if n <= 32768
                 nls = build_sparse_jso(n)
                 g_nlp = zeros(Float64, n)
+                h_vals_nlp = zeros(Float64, nls.meta.nnzh)
                 m_nlp = ModelDefinition(
                     "NLPModels (MathOptNLSModel)",
                     nls,
@@ -127,7 +136,8 @@ function create_rosenbrock_sparse_problem()
                     () -> begin
                         c = NLPModels.obj(nls, x0)
                         NLPModels.grad!(nls, x0, g_nlp)
-                        return (c, g_nlp)
+                        NLPModels.hess_coord!(nls, x0, h_vals_nlp)
+                        return (c, h_vals_nlp)
                     end,
                     () -> copyto!(nls.meta.x0, x0)
                 )

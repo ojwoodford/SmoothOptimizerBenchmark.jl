@@ -40,7 +40,7 @@ Maps a model formulation name to a consistent (color, marker, linsys_style, cost
   - Standalone: :blue
   - NLPModels: :forestgreen (matches JSOSolvers)
   - BundleAdjustmentModels: :teal
-  - Manifolds: :brown (matches Manopt)
+  - Manifolds: :darkgoldenrod (matches Manopt)
 - Different flavours within the same package use distinct markers and linestyles:
   - Standard / Static: :circle marker, :solid linsys, :dash cost
   - Specialized: :square marker, :dashdot linsys, :dot cost
@@ -255,7 +255,8 @@ Maps an optimizer name to a consistent (color, linestyle, marker) tuple:
   - Ipopt: :purple
   - MadNLP: :teal
   - NonlinearSolve: :deeppink
-  - Manopt: :brown
+  - CaNNOLeS: :chocolate
+  - Manopt: :darkgoldenrod
 - Different flavours (e.g. LM, Dogleg, tron, trunk) use distinct linestyles and markers:
   - LM / trunk / default Newton: :solid with :circle
   - Dogleg / tron / TrustRegion: :dash with :square
@@ -279,6 +280,8 @@ function optimizer_style(opt_name::String)
         :purple
     elseif occursin("madnlp", name_lower)
         :teal
+    elseif occursin("cannoles", name_lower)
+        :chocolate
     elseif occursin("manopt", name_lower)
         :darkgoldenrod
     else

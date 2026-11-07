@@ -16,79 +16,130 @@ function format_bytes(bytes::Int)
     return @sprintf("%.1f MiB", bytes / (1024^2))
 end
 
-function generate_docs_markdown(results::Vector{ProblemScalingBenchmarkResult}; docs_dir=joinpath(@__DIR__, "..", "docs", "src"))
+const CANONICAL_PROBLEM_SLUGS = [
+    "rosenbrock_sparse",
+    "curve_fitting",
+    "rosenbrock_dense",
+    "affine_alignment",
+    "pose_chain",
+    "bundle_adjustment",
+    "robust_procrustes"
+]
+
+function sort_results_canonically(results::Vector{ProblemScalingBenchmarkResult})
+    slug_rank(r) = begin
+        idx = findfirst(==(problem_slug(r.problem)), CANONICAL_PROBLEM_SLUGS)
+        idx === nothing ? 999 : idx
+    end
+    return sort(results; by = r -> (slug_rank(r), r.problem))
+end
+
+function summarize_solvers(res::ProblemScalingBenchmarkResult)
+    pkgs = String[]
+    seen = Set{String}()
+    order = [
+        ("secondorder", "SecondOrderOptimization"),
+        ("leastsquares", "LeastSquaresOptim"),
+        ("optim (", "Optim"),
+        ("jsosolvers", "JSOSolvers"),
+        ("ipopt", "Ipopt"),
+        ("madnlp", "MadNLP"),
+        ("nonlinearsolve", "NonlinearSolve"),
+        ("cannoles", "CaNNOLeS"),
+        ("manopt", "Manopt")
+    ]
+    all_names = String[]
+    for sr in res.size_results
+        append!(all_names, keys(sr.optimizer_results))
+    end
+    for (needle, label) in order
+        if any(n -> occursin(needle, lowercase(n)), all_names) && !(label in seen)
+            push!(pkgs, label)
+            push!(seen, label)
+        end
+    end
+    return join(pkgs, ", ")
+end
+
+function generate_docs_markdown(results::Vector{ProblemScalingBenchmarkResult}; docs_dir=DEFAULT_DOCS_DIR)
     mkpath(joinpath(docs_dir, "problems"))
     mkpath(joinpath(docs_dir, "assets", "plots"))
     mkpath(joinpath(docs_dir, "data"))
+
+    ordered_results = sort_results_canonically(results)
+
+    suite_rows = String[]
+    for res in ordered_results
+        slug = problem_slug(res.problem)
+        n_sz = length(res.sizes)
+        sz_range = isempty(res.sizes) ? "-" : "$(first(res.sizes)) … $(last(res.sizes))"
+        target_m = isempty(res.size_results) ? "Standard" : first(res.size_results).target_model
+        solvers_str = summarize_solvers(res)
+        push!(suite_rows, "| [$(res.problem)](problems/$(slug).md) | `$(res.category)` | $(res.size_metric_name) | $(n_sz) sizes ($(sz_range)) | `$(target_m)` | $(solvers_str) |")
+    end
+    suite_table = join(suite_rows, "\n")
 
     # 1. Generate index.md
     index_md = """
 # SmoothOptimizerBenchmark.jl
 
-**SmoothOptimizerBenchmark.jl** provides systematic, reproducible, multi-scale performance benchmarking across all major Julia smooth second-order and trust-region optimizers:
+**SmoothOptimizerBenchmark.jl** provides systematic, reproducible, multi-scale performance benchmarking across smooth second-order, nonlinear least-squares, and Riemannian manifold optimization packages in Julia:
 
 - **`SecondOrderOptimization.jl`**: Levenberg-Marquardt and Dogleg trust-region algorithms with zero-allocation static, dense, and sparse linear system solvers.
 - **`LeastSquaresOptim.jl`**: Levenberg-Marquardt and Dogleg algorithms for nonlinear least squares.
 - **`Optim.jl`**: Trust-Region Newton (`NewtonTrustRegion`) and Line-Search Newton (`Newton`).
-- **`JSOSolvers.jl`**: Trust-region solver `trunk` and bound-constrained/unconstrained trust-region solver `tron`.
-- **`Ipopt.jl`**: Interior-point nonlinear programming solver via `NLPModelsIpopt`.
-- **`MadNLP.jl`**: Pure-Julia filter line-search interior-point algorithm supporting sparse and dense linear solvers via `NLPModels`.
-- **`NonlinearSolve.jl`**: High-performance SciML nonlinear and least-squares solvers (`LevenbergMarquardt`, `TrustRegion`, `GaussNewton`).
-- **`Manopt.jl`**: Riemannian trust-region and Levenberg-Marquardt solvers on Riemannian matrix manifolds (for manifold benchmarks).
+- **`JSOSolvers.jl`**: Matrix-free / trust-region solvers `trunk` and `tron` via `NLPModels`.
+- **`Ipopt.jl`**: Primal-dual interior-point nonlinear programming solver via `NLPModelsIpopt`.
+- **`MadNLP.jl`**: Pure-Julia filter line-search interior-point solver via `NLPModels`.
+- **`NonlinearSolve.jl`**: SciML nonlinear least-squares solvers (`LevenbergMarquardt`, `TrustRegion`).
+- **`CaNNOLeS.jl`**: Constrained and nonlinear least-squares solver exploiting equality-constrained KKT structure.
+- **`Manopt.jl`**: Riemannian Levenberg-Marquardt optimization on matrix manifolds (`Manifolds.jl`).
 
 ---
 
 ## Benchmarking Methodology
 
-### Two-Tier Strategy
-Because optimization packages accept varying levels of abstraction (vector residual & Jacobian vs scalar objective & Hessian vs NLP models), benchmarks execute in two tiers:
+### Two-Phase Decoupled Architecture
+To separate modeling overhead from solver algorithm efficiency, every problem is benchmarked in two phases:
 
-1. **Tier 1 (Peak Performance on Best Model)**: Optimizers capable of natively exploiting zero-allocation block-sparse linear systems (`NLLSModel`) run directly on the fastest model formulation.
-2. **Tier 2 (Universal Apples-to-Apples Comparison)**: All 7 Euclidean optimizer families (`SecondOrderOptimization`, `LeastSquaresOptim`, `Optim`, `JSOSolvers`, `Ipopt`, `MadNLP`, `NonlinearSolve`) run on a standardized, shared `LeastSquaresProblem` / `LeastSquaresNLPModel`. Every solver evaluates the exact same underlying residual and derivative code.
-
-### Problem Scaling Sweeps (≥ 10 Sizes per Problem)
-For every benchmark problem, performance is evaluated across at least **10 distinct problem sizes** spanning multiple orders of magnitude. For each size, the harness measures:
-- **Model Evaluation**: Pure cost evaluation time, cost + linear system assembly time, memory allocations, and memory bandwidth.
-- **Optimizer Evaluation**: Total solve runtime to convergence, outer iteration count, initial cost, final achieved cost, and convergence status.
-- **Log-Log Scaling Plots**: Problem size vs. evaluation time (log-log) for both model representations and optimizer solvers to empirically observe asymptotic complexity \$\\mathcal{O}(N)\$, \$\\mathcal{O}(N^2)\$, or \$\\mathcal{O}(N^3)\$.
+1. **Phase 1 — Model Evaluation Scaling**:
+   Benchmarks pure **Cost Evaluation** (\$f(x) = \\frac{1}{2}\\|r(x)\\|_2^2\$) and **Cost + Linear System Assembly** (\$g = J^T r\$ and \$H = J^T J\$ or exact Hessian) across competing model representations (`NLLSModel`, `Standalone` `LeastSquaresProblem`, `NLPModels` / `JuMP`, `BundleAdjustmentModels`, and `Manifolds`).
+2. **Phase 2 — Unified Apples-to-Apples Optimizer Scaling**:
+   All compatible optimizers are benchmarked on a single **standardized baseline model** per category (`Standalone` for Euclidean problems, `BundleAdjustmentModels` for Bundle Adjustment, and `Manifolds` for Riemannian optimization) under identical stopping tolerances (`gtol = $(DEFAULT_GTOL)`, `xtol = $(DEFAULT_XTOL)`, `ftol = $(DEFAULT_FTOL)`, `maxiters = $(DEFAULT_MAXITERS)`, `maxtime = $(DEFAULT_MAXTIME)s`).
+   - Every concrete `(optimizer, model-type)` specialization is pre-warmed prior to timing so LLVM JIT compilation is excluded.
+   - Solvers that fail to satisfy convergence criteria (e.g., hitting iteration/time limits or stalling) are recorded as `converged = false` in the raw data tables and omitted (`NaN`) from convergence runtime plots.
+   - Results stream line-by-line directly to Markdown tables in `docs/src/data/` as each model and optimizer measurement completes.
 
 ---
 
 ## Benchmark Problem Suite
 
-| Problem | Category | Scaling Parameter | Sizes Tested | Tested Solvers |
-|:---|:---|:---|:---|:---|
-| [Dense Rosenbrock](problems/rosenbrock_dense.md) | Small Static Dense | Dimension \$n\$ | 12 sizes (\$n = 1 \\dots 32\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
-| [Dense Affine Alignment](problems/affine_alignment.md) | Small Static Dense | Dimension \$n\$ | 12 sizes (\$n = 1 \\dots 32\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
-| [Robust Procrustes on SO(d)](problems/robust_procrustes.md) | Small Static Manifold | Matrix dimension \$d\$ | 11 sizes (\$d = 2 \\dots 32\$) | SOO (ManifoldVar & Specialized), Manopt |
-| [Exponential Curve Fitting](problems/curve_fitting.md) | Medium Dynamic Dense | Data points \$m\$ | 10 sizes (\$m = 2^6 \\dots 2^{15}\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
-| [Sparse Rosenbrock](problems/rosenbrock_sparse.md) | Large Sparse Banded | Dimension \$n\$ | 11 sizes (\$n = 2^{10} \\dots 2^{20}\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
-| [3D Pose Chain](problems/pose_chain.md) | Large Sparse SLAM | Number of poses \$N\$ | 11 sizes (\$N = 2^{10} \\dots 2^{20}\$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
-| [Sparse Bundle Adjustment](problems/bundle_adjustment.md) | Large Sparse Bipartite | Cameras \$N_{\\text{cam}}\$ | 10 sizes (\$N_{\\text{cam}} = 4 \\dots 256\$) | SOO, JSOSolvers, Ipopt, MadNLP |
+| Problem | Category | Scaling Metric | Sizes Tested | Baseline Model | Tested Solver Packages |
+|:---|:---|:---|:---|:---|:---|
+$(suite_table)
 
 ---
 
 ## Executive Summary of Results
 
-1. **Model Evaluation & Assembly Overhead**:
-   - `NLLSModel.jl` achieves up to **5×–20× lower evaluation latency and zero memory allocations** compared to standard dense/sparse Jacobian constructions by compiling static or block-sparse residuals.
-   - For banded and sparse pose-graph problems, block-sparse linear system assembly scales strictly linearly \$\\mathcal{O}(N)\$ in time and memory.
+1. **Model Evaluation & Linear System Assembly**:
+   - `NLLSModel.jl` achieves zero-allocation cost and Gauss-Newton normal-equation assembly on static and block-sparse problems, outperforming generic `JuMP` / `NLPModels` and `BundleAdjustmentModels` coordinate assembly by **3×–10×** at scale.
+   - Hand-specialized manifold residuals (`NLLSModel (Specialized)`) on \$SO(d)\$ eliminate tangent-basis allocation overhead relative to generic `Manifolds.jl` / `ManifoldVar` representations.
 
-2. **Optimizer Efficiency & Convergence**:
-   - **`SecondOrderOptimization.jl` (Dogleg & LM)**: Consistently yields the lowest per-iteration overhead and total execution runtime, especially on sparse problems when paired with the direct sparse LDL factorizer.
-   - **`LeastSquaresOptim.jl`**: High reliability on standard least-squares problems; Dogleg steps frequently require fewer outer iterations than LM on well-conditioned problems.
-   - **`Optim.jl` (`NewtonTrustRegion` / `Newton`)**: Highly competitive on small-to-medium dense problems; for sparse problems, line-search Newton with sparse Hessians avoids dense allocations, though trust-region requires dense matrix factorizations.
-   - **`JSOSolvers.jl` (`trunk` / `tron`)**: Robust convergence behavior via the standard `NLPModels` interface, suitable for general constrained and unconstrained problems.
-   - **`Ipopt`**: Very reliable convergence from far-from-solution initializations, though per-iteration linear algebra overhead is substantially higher than dedicated unconstrained least-squares solvers.
-   - **`MadNLP.jl`**: Pure-Julia interior-point solver with native sparse linear solver integration via `NLPModels`. Scales efficiently on large sparse benchmarks (Bundle Adjustment, Pose Chain, and Sparse Rosenbrock) with memory allocation profiles comparable to Ipopt while maintaining high numerical stability.
-   - **`NonlinearSolve.jl` (`TrustRegion` / `LM`)**: Solid convergence and performance on small-to-medium dense problems and structured curve fitting via SciML linear solves; requires explicit sparse Jacobian prototypes on large problems to avoid dense fallback.
+2. **Optimizer Efficiency & Scaling**:
+   - **`SecondOrderOptimization.jl` (LM & Dogleg)**: Consistently delivers the lowest latency on small-to-medium dense problems and scales linearly on banded/tridiagonal sparse problems via direct sparse `LDL` factorizations.
+   - **`CaNNOLeS.jl` & `MadNLP.jl`**: Excel on large-scale sparse Bundle Adjustment, where augmented KKT / interior-point sparse factorizations avoid dense fill-in from high-degree camera columns in \$J^T J\$.
+   - **`Optim.jl` (`Newton` / `NewtonTrustRegion`)**: Strong performance on dense problems and sparse line-search Newton; `NewtonTrustRegion` requires dense eigendecompositions and is inapplicable to sparse Hessians.
+   - **`JSOSolvers.jl` (`trunk` / `tron`)**: Matrix-free Krylov trust-region methods (`hprod!`) scale well on well-conditioned sparse problems (such as Sparse Rosenbrock) with minimal memory footprint, though unpreconditioned CG struggles on ill-conditioned Bundle Adjustment and long Pose Chains.
+   - **`Ipopt.jl`**: Highly reliable global convergence across dense and sparse problems, with higher per-iteration interior-point overhead at small problem sizes.
+   - **`LeastSquaresOptim.jl` & `NonlinearSolve.jl`**: Competitive on small and medium dense problems; on large sparse problems, unpreconditioned iterative `LSMR` (`LeastSquaresOptim`) and sparse QR (`NonlinearSolve`) become bottlenecked compared to sparse Cholesky/LDL normal-equation or KKT solvers.
 """
     open(joinpath(docs_dir, "index.md"), "w") do io
         write(io, index_md)
     end
 
     # 2. Generate per-problem pages
-    for res in results
+    for res in ordered_results
         slug = problem_slug(res.problem)
         prob_md = generate_problem_markdown(res, slug)
         open(joinpath(docs_dir, "problems", "$(slug).md"), "w") do io
@@ -100,6 +151,33 @@ end
 function generate_problem_markdown(res::ProblemScalingBenchmarkResult, slug::String)
     target_model_name = isempty(res.size_results) ? "Standard" : first(res.size_results).target_model
     num_sizes = length(res.sizes)
+
+    # Compute data-driven highlights at largest size with model/optimizer data
+    model_summary_str = "Block-sparse and static formulations minimize heap allocations during normal-equation assembly."
+    opt_summary_str = "Solvers exploiting problem sparsity and exact second-order structure achieve superior asymptotic scaling."
+
+    if !isempty(res.size_results)
+        last_sr = last(res.size_results)
+        valid_m = [(k, v) for (k, v) in last_sr.model_results if !isnan(v.linsys_time_ns) && v.linsys_time_ns > 0]
+        if !isempty(valid_m)
+            sort!(valid_m, by = x -> x[2].linsys_time_ns)
+            best_m_name, best_mr = first(valid_m)
+            model_summary_str = "At $(res.size_metric_name) = `$(last_sr.size)`, **`$(best_m_name)`** achieves the fastest Cost + Linear System evaluation at **$(format_time(best_mr.linsys_time_ns))** ($(format_bytes(best_mr.linsys_bytes)) allocated)."
+        end
+
+        # Find largest size where at least one optimizer converged
+        for idx in length(res.size_results):-1:1
+            sr = res.size_results[idx]
+            conv_opts = [(k, v) for (k, v) in sr.optimizer_results if v.converged && !isnan(v.time_ns) && v.time_ns > 0]
+            if !isempty(conv_opts)
+                sort!(conv_opts, by = x -> x[2].time_ns)
+                best_o_name, best_or = first(conv_opts)
+                n_total = length(sr.optimizer_results)
+                opt_summary_str = "At $(res.size_metric_name) = `$(sr.size)` ($(length(conv_opts))/$(n_total) solvers converged), **`$(best_o_name)`** is fastest at **$(format_time(best_or.time_ns))** ($(best_or.iterations) iterations, final cost `$(@sprintf("%.2e", best_or.final_cost))`)."
+                break
+            end
+        end
+    end
 
     md = """
 # $(res.problem)
@@ -113,7 +191,7 @@ function generate_problem_markdown(res::ProblemScalingBenchmarkResult, slug::Str
 
 ## 1. Model Evaluation Scaling
 
-The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed lines) and **Cost + Linear System Assembly** (solid lines) across problem sizes.
+The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dotted lines) and **Cost + Linear System Assembly** (solid/dash-dot lines) across problem sizes.
 
 ![$(res.problem) Model Evaluation Scaling](../assets/plots/$(slug)_models.png)
 
@@ -121,7 +199,7 @@ The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed lin
 
 ## 2. Optimizer Evaluation Scaling
 
-The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers on the standardized baseline model (`$(target_model_name)`).
+The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers on the standardized baseline model (`$(target_model_name)`). Non-converged runs are omitted.
 
 ![$(res.problem) Optimizer Scaling](../assets/plots/$(slug)_optimizers.png)
 
@@ -137,9 +215,9 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 4. Analysis & Key Takeaways
 
-- **Asymptotic Complexity**: Log-log scaling indicates empirical runtime growth rate as $(res.size_metric_name) expands.
-- **Model Efficiency**: Block-sparse representations and static representations avoid heap allocations during linear system construction.
-- **Top Optimizer**: Solvers leveraging specialized structure (e.g. sparse block factorization in SecondOrderOptimization) demonstrate superior scaling exponents on large problem regimes.
+- **Model Efficiency**: $(model_summary_str)
+- **Top Converged Optimizer**: $(opt_summary_str)
+- **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = $(DEFAULT_GTOL)`, `xtol = $(DEFAULT_XTOL)`, `ftol = $(DEFAULT_FTOL)`) within `$(DEFAULT_MAXITERS)` iterations and `$(DEFAULT_MAXTIME)s` are plotted.
 """
 
     return md
