@@ -1,59 +1,59 @@
 # SmoothOptimizerBenchmark.jl
 
-**SmoothOptimizerBenchmark.jl** provides systematic, reproducible, multi-scale performance benchmarking across all major Julia smooth second-order and trust-region optimizers:
+**SmoothOptimizerBenchmark.jl** provides systematic, reproducible, multi-scale performance benchmarking across smooth second-order, nonlinear least-squares, and Riemannian manifold optimization packages in Julia:
 
 - **`SecondOrderOptimization.jl`**: Levenberg-Marquardt and Dogleg trust-region algorithms with zero-allocation static, dense, and sparse linear system solvers.
 - **`LeastSquaresOptim.jl`**: Levenberg-Marquardt and Dogleg algorithms for nonlinear least squares.
 - **`Optim.jl`**: Trust-Region Newton (`NewtonTrustRegion`) and Line-Search Newton (`Newton`).
-- **`JSOSolvers.jl`**: Trust-region solver `trunk` and bound-constrained/unconstrained trust-region solver `tron`.
-- **`Ipopt.jl`**: Interior-point nonlinear programming solver via `NLPModelsIpopt`.
-- **`MadNLP.jl`**: Pure-Julia filter line-search interior-point algorithm supporting sparse and dense linear solvers via `NLPModels`.
-- **`NonlinearSolve.jl`**: High-performance SciML nonlinear and least-squares solvers (`LevenbergMarquardt`, `TrustRegion`, `GaussNewton`).
-- **`Manopt.jl`**: Riemannian trust-region and Levenberg-Marquardt solvers on Riemannian matrix manifolds (for manifold benchmarks).
+- **`JSOSolvers.jl`**: Matrix-free / trust-region solvers `trunk` and `tron` via `NLPModels`.
+- **`Ipopt.jl`**: Primal-dual interior-point nonlinear programming solver via `NLPModelsIpopt`.
+- **`MadNLP.jl`**: Pure-Julia filter line-search interior-point solver via `NLPModels`.
+- **`NonlinearSolve.jl`**: SciML nonlinear least-squares solvers (`LevenbergMarquardt`, `TrustRegion`).
+- **`CaNNOLeS.jl`**: Constrained and nonlinear least-squares solver exploiting equality-constrained KKT structure.
+- **`Manopt.jl`**: Riemannian Levenberg-Marquardt optimization on matrix manifolds (`Manifolds.jl`).
 
 ---
 
 ## Benchmarking Methodology
 
-### Two-Tier Strategy
-Because optimization packages accept varying levels of abstraction (vector residual & Jacobian vs scalar objective & Hessian vs NLP models), benchmarks execute in two tiers:
+### Two-Phase Decoupled Architecture
+To separate modeling overhead from solver algorithm efficiency, every problem is benchmarked in two phases:
 
-1. **Tier 1 (Peak Performance on Best Model)**: Optimizers capable of natively exploiting zero-allocation block-sparse linear systems (`NLLSModel`) run directly on the fastest model formulation.
-2. **Tier 2 (Universal Apples-to-Apples Comparison)**: All 7 Euclidean optimizer families (`SecondOrderOptimization`, `LeastSquaresOptim`, `Optim`, `JSOSolvers`, `Ipopt`, `MadNLP`, `NonlinearSolve`) run on a standardized, shared `LeastSquaresProblem` / `LeastSquaresNLPModel`. Every solver evaluates the exact same underlying residual and derivative code.
-
-### Problem Scaling Sweeps (≥ 10 Sizes per Problem)
-For every benchmark problem, performance is evaluated across at least **10 distinct problem sizes** spanning multiple orders of magnitude. For each size, the harness measures:
-- **Model Evaluation**: Pure cost evaluation time, cost + linear system assembly time, memory allocations, and memory bandwidth.
-- **Optimizer Evaluation**: Total solve runtime to convergence, outer iteration count, initial cost, final achieved cost, and convergence status.
-- **Log-Log Scaling Plots**: Problem size vs. evaluation time (log-log) for both model representations and optimizer solvers to empirically observe asymptotic complexity $\mathcal{O}(N)$, $\mathcal{O}(N^2)$, or $\mathcal{O}(N^3)$.
+1. **Phase 1 — Model Evaluation Scaling**:
+   Benchmarks pure **Cost Evaluation** ($f(x) = \frac{1}{2}\|r(x)\|_2^2$) and **Cost + Linear System Assembly** ($g = J^T r$ and $H = J^T J$ or exact Hessian) across competing model representations (`NLLSModel`, `Standalone` `LeastSquaresProblem`, `NLPModels` / `JuMP`, `BundleAdjustmentModels`, and `Manifolds`).
+2. **Phase 2 — Unified Apples-to-Apples Optimizer Scaling**:
+   All compatible optimizers are benchmarked on a single **standardized baseline model** per category (`Standalone` for Euclidean problems, `BundleAdjustmentModels` for Bundle Adjustment, and `Manifolds` for Riemannian optimization) under identical stopping tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`, `maxiters = 500`, `maxtime = 30.0s`).
+   - Alongside the shared-baseline solver curves, **full-stack `NLLSModel + SecondOrderOptimization`** combinations evaluated from a cold start are included on every benchmark with **star (`★`) point markers**.
+   - Every concrete `(optimizer, model-type)` specialization is pre-warmed prior to timing so LLVM JIT compilation is excluded.
+   - Solvers that fail to satisfy convergence criteria (e.g., hitting iteration/time limits or stalling) are recorded as `converged = false` in the raw data tables and omitted (`NaN`) from convergence runtime plots.
+   - Results stream line-by-line directly to Markdown tables in `docs/src/data/` as each model and optimizer measurement completes.
 
 ---
 
 ## Benchmark Problem Suite
 
-| Problem | Category | Scaling Parameter | Sizes Tested | Tested Solvers |
-|:---|:---|:---|:---|:---|
-| [Dense Rosenbrock](problems/rosenbrock_dense.md) | Small Static Dense | Dimension $n$ | 12 sizes ($n = 1 \dots 32$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
-| [Dense Affine Alignment](problems/affine_alignment.md) | Small Static Dense | Dimension $n$ | 12 sizes ($n = 1 \dots 32$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
-| [Robust Procrustes on SO(d)](problems/robust_procrustes.md) | Small Static Manifold | Matrix dimension $d$ | 11 sizes ($d = 2 \dots 32$) | SOO (ManifoldVar & Specialized), Manopt |
-| [Exponential Curve Fitting](problems/curve_fitting.md) | Medium Dynamic Dense | Data points $m$ | 10 sizes ($m = 2^6 \dots 2^{15}$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
-| [Sparse Rosenbrock](problems/rosenbrock_sparse.md) | Large Sparse Banded | Dimension $n$ | 11 sizes ($n = 2^{10} \dots 2^{20}$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
-| [3D Pose Chain](problems/pose_chain.md) | Large Sparse SLAM | Number of poses $N$ | 11 sizes ($N = 2^{10} \dots 2^{20}$) | SOO, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
-| [Sparse Bundle Adjustment](problems/bundle_adjustment.md) | Large Sparse Bipartite | Cameras $N_{\text{cam}}$ | 10 sizes ($N_{\text{cam}} = 4 \dots 256$) | SOO, JSOSolvers, Ipopt, MadNLP |
+| Problem | Category | Scaling Metric | Sizes Tested | Baseline Model | Tested Solver Packages |
+|:---|:---|:---|:---|:---|:---|
+| [Sparse Multi-dimensional Rosenbrock](problems/rosenbrock_sparse.md) | `large_sparse` | Variables n | 11 sizes (100 … 75000) | `Standalone (Sparse)` | NLLSModel + SecondOrderOptimization, SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
+| [Exponential Curve Fitting](problems/curve_fitting.md) | `medium_dense` | Data Points m | 11 sizes (64 … 65536) | `Standalone` | NLLSModel + SecondOrderOptimization, SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
+| [Dense Multi-dimensional Rosenbrock](problems/rosenbrock_dense.md) | `small_dense` | Dimension n | 12 sizes (2 … 32) | `Standalone` | NLLSModel + SecondOrderOptimization, SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve |
+| [Dense Affine Alignment](problems/affine_alignment.md) | `small_dense` | Dimension n | 12 sizes (1 … 32) | `Standalone` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
+| [Nonlinear 3D Pose Chain](problems/pose_chain.md) | `large_sparse` | Poses N | 11 sizes (50 … 10000) | `NLLSModel (Sparse)` | NLLSModel + SecondOrderOptimization, SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
+| [Sparse Bundle Adjustment](problems/bundle_adjustment.md) | `large_sparse` | Cameras Ncam | 12 sizes (4 … 256) | `BundleAdjustmentModels` | NLLSModel + SecondOrderOptimization, SecondOrderOptimization, JSOSolvers, Ipopt, MadNLP, CaNNOLeS |
+| [Procrustes on SO(d)](problems/procrustes.md) | `manifold` | Matrix Dimension d | 12 sizes (2 … 24) | `Manifolds` | NLLSModel + SecondOrderOptimization, SecondOrderOptimization, Manopt |
 
 ---
 
 ## Executive Summary of Results
 
-1. **Model Evaluation & Assembly Overhead**:
-   - `NLLSModel.jl` achieves up to **5×–20× lower evaluation latency and zero memory allocations** compared to standard dense/sparse Jacobian constructions by compiling static or block-sparse residuals.
-   - For banded and sparse pose-graph problems, block-sparse linear system assembly scales strictly linearly $\mathcal{O}(N)$ in time and memory.
+1. **Model Evaluation & Linear System Assembly**:
+   - `NLLSModel.jl` achieves zero-allocation cost and Gauss-Newton normal-equation assembly on static and block-sparse problems, outperforming generic `JuMP` / `NLPModels` and `BundleAdjustmentModels` coordinate assembly by **3×–10×** at scale.
+   - Hand-specialized manifold residuals (`NLLSModel (Specialized)`) on $SO(d)$ eliminate tangent-basis allocation overhead relative to generic `Manifolds.jl` / `ManifoldVar` representations.
 
-2. **Optimizer Efficiency & Convergence**:
-   - **`SecondOrderOptimization.jl` (Dogleg & LM)**: Consistently yields the lowest per-iteration overhead and total execution runtime, especially on sparse problems when paired with the direct sparse LDL factorizer.
-   - **`LeastSquaresOptim.jl`**: High reliability on standard least-squares problems; Dogleg steps frequently require fewer outer iterations than LM on well-conditioned problems.
-   - **`Optim.jl` (`NewtonTrustRegion` / `Newton`)**: Highly competitive on small-to-medium dense problems; for sparse problems, line-search Newton with sparse Hessians avoids dense allocations, though trust-region requires dense matrix factorizations.
-   - **`JSOSolvers.jl` (`trunk` / `tron`)**: Robust convergence behavior via the standard `NLPModels` interface, suitable for general constrained and unconstrained problems.
-   - **`Ipopt`**: Very reliable convergence from far-from-solution initializations, though per-iteration linear algebra overhead is substantially higher than dedicated unconstrained least-squares solvers.
-   - **`MadNLP.jl`**: Pure-Julia interior-point solver with native sparse linear solver integration via `NLPModels`. Scales efficiently on large sparse benchmarks (Bundle Adjustment, Pose Chain, and Sparse Rosenbrock) with memory allocation profiles comparable to Ipopt while maintaining high numerical stability.
-   - **`NonlinearSolve.jl` (`TrustRegion` / `LM`)**: Solid convergence and performance on small-to-medium dense problems and structured curve fitting via SciML linear solves; requires explicit sparse Jacobian prototypes on large problems to avoid dense fallback.
+2. **Optimizer Efficiency & Scaling**:
+   - **`SecondOrderOptimization.jl` (LM & Dogleg)**: Consistently delivers the lowest latency on small-to-medium dense problems and scales linearly on banded/tridiagonal sparse problems via direct sparse `LDL` factorizations.
+   - **`CaNNOLeS.jl` & `MadNLP.jl`**: Excel on large-scale sparse Bundle Adjustment, where augmented KKT / interior-point sparse factorizations avoid dense fill-in from high-degree camera columns in $J^T J$.
+   - **`Optim.jl` (`Newton` / `NewtonTrustRegion`)**: Strong performance on dense problems and sparse line-search Newton; `NewtonTrustRegion` requires dense eigendecompositions and is inapplicable to sparse Hessians.
+   - **`JSOSolvers.jl` (`trunk` / `tron`)**: Matrix-free Krylov trust-region methods (`hprod!`) scale well on well-conditioned sparse problems (such as Sparse Rosenbrock) with minimal memory footprint, though unpreconditioned CG struggles on ill-conditioned Bundle Adjustment and long Pose Chains.
+   - **`Ipopt.jl`**: Highly reliable global convergence across dense and sparse problems, with higher per-iteration interior-point overhead at small problem sizes.
+   - **`LeastSquaresOptim.jl` & `NonlinearSolve.jl`**: Competitive on small and medium dense problems; on large sparse problems, unpreconditioned iterative `LSMR` (`LeastSquaresOptim`) and sparse QR (`NonlinearSolve`) become bottlenecked compared to sparse Cholesky/LDL normal-equation or KKT solvers.
