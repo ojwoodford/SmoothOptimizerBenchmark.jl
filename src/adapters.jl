@@ -6,6 +6,7 @@ using NLPModelsIpopt
 using JSOSolvers
 using LinearAlgebra
 using SparseArrays
+using Static
 using StaticArrays
 using NLLSModel
 using Optim
@@ -14,7 +15,7 @@ using NonlinearSolve
 using CaNNOLeS
 using BundleAdjustmentModels
 
-export optimize_soo, optimize_least_squares, optimize_optim, optimize_jsosolvers, optimize_ipopt
+export optimize_soo, optimize_nlls_soo, optimize_least_squares, optimize_optim, optimize_jsosolvers, optimize_ipopt
 export optimize_madnlp, optimize_nonlinearsolve, optimize_cannoles
 export get_standard_optimizers, get_tier1_optimizers, get_tier2_optimizers, as_nlpmodel, LeastSquaresNLPModel
 export DEFAULT_GTOL, DEFAULT_XTOL, DEFAULT_FTOL, DEFAULT_MAXITERS, DEFAULT_MAXTIME
@@ -320,7 +321,7 @@ function SecondOrderOptimization.optimize(nlp::AbstractNLPModel, options::Optimi
 end
 
 function SecondOrderOptimization.optimize!(prob::NLLSModel.Model, options::OptimizationOptions=OptimizationOptions(); unfixed=nothing, kwargs...)
-    f, fdf!, x0, H = NLLSModel.optimvars(prob, unfixed)
+    f, fdf!, x0, H = NLLSModel.optimvars(prob, unfixed, options.numthreads)
     return SecondOrderOptimization.optimize!(f, fdf!, x0, options; H=H, kwargs...)
 end
 
@@ -379,6 +380,54 @@ function optimize_soo(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XT
     else
         error("Unsupported model type for optimize_soo: $(typeof(m))")
     end
+end
+
+"""
+    optimize_nlls_soo(target; method=:dogleg, linsolver=:auto, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
+
+Optimizes an `NLLSModel.Model` directly using `SecondOrderOptimization.jl` from a cold start,
+measuring initialization and linear solver setup alongside outer iterations on an equal footing with all solvers.
+"""
+function optimize_nlls_soo(target; method=:dogleg, linsolver=:auto, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+    if target isa ModelDefinition
+        target.reset!()
+        prob = target.model
+    else
+        prob = target
+    end
+    if !(prob isa NLLSModel.Model)
+        return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+    end
+
+    actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
+    actual_method = method === :lm ? :levenbergmarquardt : method
+    opt = OptimizationOptions(
+        iterator=actual_method,
+        linsolver=linsolver,
+        numthreads=StaticInt(1),
+        gtol=gtol,
+        dstep=xtol,
+        reldcost=ftol,
+        maxiters=maxiters,
+        maxtime=actual_maxtime;
+        kwargs...
+    )
+
+    p = deepcopy(prob)
+    t_start = time_ns()
+    timed = @timed SecondOrderOptimization.optimize!(p, opt)
+    t_total = time_ns() - t_start
+    _, res = timed.value
+    converged = soo_converged(res.termination)
+    return OptimizerResult(
+        Float64(t_total),
+        Base.gc_alloc_count(timed.gcstats),
+        timed.bytes,
+        res.niterations,
+        res.startcost,
+        res.bestcost,
+        converged
+    )
 end
 
 """
@@ -786,6 +835,8 @@ Includes all solver families configured with universal stopping criteria.
 """
 function get_standard_optimizers()
     return OptimizerDefinition[
+        OptimizerDefinition("NLLSModel + SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_nlls_soo(m; method=:dogleg, kwargs...)),
+        OptimizerDefinition("NLLSModel + SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_nlls_soo(m; method=:lm, kwargs...)),
         OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),
         OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)),
         OptimizerDefinition("LeastSquaresOptim (Dogleg)", (m; kwargs...) -> optimize_least_squares(m; method=:dogleg, kwargs...)),

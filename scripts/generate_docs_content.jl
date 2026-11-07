@@ -38,6 +38,7 @@ function summarize_solvers(res::ProblemScalingBenchmarkResult)
     pkgs = String[]
     seen = Set{String}()
     order = [
+        ("nllsmodel", "NLLSModel + SecondOrderOptimization"),
         ("secondorder", "SecondOrderOptimization"),
         ("leastsquares", "LeastSquaresOptim"),
         ("optim (", "Optim"),
@@ -106,6 +107,7 @@ To separate modeling overhead from solver algorithm efficiency, every problem is
    Benchmarks pure **Cost Evaluation** (\$f(x) = \\frac{1}{2}\\|r(x)\\|_2^2\$) and **Cost + Linear System Assembly** (\$g = J^T r\$ and \$H = J^T J\$ or exact Hessian) across competing model representations (`NLLSModel`, `Standalone` `LeastSquaresProblem`, `NLPModels` / `JuMP`, `BundleAdjustmentModels`, and `Manifolds`).
 2. **Phase 2 — Unified Apples-to-Apples Optimizer Scaling**:
    All compatible optimizers are benchmarked on a single **standardized baseline model** per category (`Standalone` for Euclidean problems, `BundleAdjustmentModels` for Bundle Adjustment, and `Manifolds` for Riemannian optimization) under identical stopping tolerances (`gtol = $(DEFAULT_GTOL)`, `xtol = $(DEFAULT_XTOL)`, `ftol = $(DEFAULT_FTOL)`, `maxiters = $(DEFAULT_MAXITERS)`, `maxtime = $(DEFAULT_MAXTIME)s`).
+   - Alongside the shared-baseline solver curves, **full-stack `NLLSModel + SecondOrderOptimization`** combinations evaluated from a cold start are included on every benchmark with **star (`★`) point markers**.
    - Every concrete `(optimizer, model-type)` specialization is pre-warmed prior to timing so LLVM JIT compilation is excluded.
    - Solvers that fail to satisfy convergence criteria (e.g., hitting iteration/time limits or stalling) are recorded as `converged = false` in the raw data tables and omitted (`NaN`) from convergence runtime plots.
    - Results stream line-by-line directly to Markdown tables in `docs/src/data/` as each model and optimizer measurement completes.
@@ -199,7 +201,7 @@ The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dot
 
 ## 2. Optimizer Evaluation Scaling
 
-The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers on the standardized baseline model (`$(target_model_name)`). Non-converged runs are omitted.
+The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers on the standardized baseline model (`$(target_model_name)`), together with full-stack zero-allocation **`NLLSModel + SecondOrderOptimization`** runs (star markers). Non-converged runs are omitted.
 
 ![$(res.problem) Optimizer Scaling](../assets/plots/$(slug)_optimizers.png)
 

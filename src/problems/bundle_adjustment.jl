@@ -1,46 +1,98 @@
-# Bundle Adjustment Problem (Large Sparse, from Gist d2d75b)
+# Bundle Adjustment Problem (Large Sparse, 9-DOF BAL Camera Formulation)
 using Static, StaticArrays, LinearAlgebra, Random
 using NLLSModel, BundleAdjustmentModels, CaNNOLeS, SecondOrderOptimization
 
-NLLSModel.generatemeasurement(pose::SVector{6, T}, X::SVector{3, U}) where {T, U} =
-    SVector(dot(@inbounds(view(pose, StaticArrays.SUnitRange(1, 3))), X), dot(@inbounds(view(pose, StaticArrays.SUnitRange(4, 6))), X))
+struct BALResidual <: NLLSModel.AbstractResidual
+    obs::SVector{2, Float64}
+    varind::SVector{2, Int} # (cam_idx, pnt_idx)
+end
+Base.eltype(::BALResidual) = Float64
+NLLSModel.ndeps(::BALResidual) = static(2)
+NLLSModel.nres(::BALResidual) = static(2)
+NLLSModel.varindices(r::BALResidual) = r.varind
+NLLSModel.getvars(r::BALResidual, vars::AbstractVector) = (
+    @inbounds(vars[r.varind[1]])::SVector{9, Float64},
+    @inbounds(vars[r.varind[2]])::SVector{3, Float64}
+)
 
-function generate_synthetic_ba(ncameras::Int, nlandmarks::Int=ncameras * 5, propvisible::Float64=0.3)
-    rng = MersenneTwister(42 + ncameras)
-    prob = NLLSModel.Model(Union{SVector{6, Float64}, SVector{3, Float64}}, SimpleError2{2, Float64, SVector{6, Float64}, SVector{3, Float64}})
+@inline function bal_project(cam::SVector{9, TC}, X::SVector{3, TX}) where {TC, TX}
+    T = promote_type(TC, TX)
+    rx, ry, rz = T(cam[1]), T(cam[2]), T(cam[3])
+    tx, ty, tz = T(cam[4]), T(cam[5]), T(cam[6])
+    k1, k2, f  = T(cam[7]), T(cam[8]), T(cam[9])
+    px, py, pz = T(X[1]), T(X[2]), T(X[3])
 
-    camoffset = SVector(1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
-    for i in 1:ncameras
-        addvariable!(prob, randn(rng, SVector{6, Float64}) .+ camoffset)
+    theta2 = rx * rx + ry * ry + rz * rz
+    if theta2 > 1e-24
+        theta = sqrt(theta2)
+        inv_theta = inv(theta)
+        kx, ky, kz = rx * inv_theta, ry * inv_theta, rz * inv_theta
+        st, ct = sin(theta), cos(theta)
+        one_m_ct_kdp = (one(T) - ct) * (kx * px + ky * py + kz * pz)
+        cx = ky * pz - kz * py
+        cy = kz * px - kx * pz
+        cz = kx * py - ky * px
+        P1x = ct * px + st * cx + one_m_ct_kdp * kx + tx
+        P1y = ct * py + st * cy + one_m_ct_kdp * ky + ty
+        P1z = ct * pz + st * cz + one_m_ct_kdp * kz + tz
+    else
+        cx = ry * pz - rz * py
+        cy = rz * px - rx * pz
+        cz = rx * py - ry * px
+        c2x = ry * cz - rz * cy
+        c2y = rz * cx - rx * cz
+        c2z = rx * cy - ry * cx
+        P1x = px + cx + T(0.5) * c2x + tx
+        P1y = py + cy + T(0.5) * c2y + ty
+        P1z = pz + cz + T(0.5) * c2z + tz
     end
-    lmoffset = SVector(-0.5, -0.5, 10.0)
-    for j in 1:nlandmarks
-        addvariable!(prob, rand(rng, SVector{3, Float64}) .+ lmoffset)
-    end
+    inv_z = -inv(P1z)
+    u = P1x * inv_z
+    v = P1y * inv_z
+    r2 = u * u + v * v
+    fs = f * (one(T) + r2 * (k1 + k2 * r2))
+    return SVector{2, T}(fs * u, fs * v)
+end
 
-    visibility = abs.(repeat(vec(1:ncameras), outer=(1, nlandmarks)) .- LinRange(2, ncameras - 1, nlandmarks)')
-    visibility = visibility .<= sort(vec(visibility))[Int(ceil(length(visibility) * propvisible))]
-    for camind in 1:ncameras
-        camera = prob.variables[camind]::SVector{6, Float64}
-        for (landmark, tf) in enumerate(view(visibility, camind, :)')
-            if tf
-                landmarkind = landmark + ncameras
-                meas = generatemeasurement(camera, prob.variables[landmarkind]::SVector{3, Float64})
-                addcost!(prob, SimpleError2{SVector{6, Float64}, SVector{3, Float64}}(meas, camind, landmarkind))
-            end
-        end
-    end
+@inline NLLSModel.computeresidual(res::BALResidual, cam, X) = bal_project(cam, X) - res.obs
 
-    # Perturb variables slightly
-    for ind in eachindex(prob.variables)
-        if prob.variables[ind] isa SVector{3, Float64}
-            prob.variables[ind] = prob.variables[ind]::SVector{3, Float64} + randn(rng, SVector{3, Float64}) * 0.001
-        else
-            prob.variables[ind] = prob.variables[ind]::SVector{6, Float64} + randn(rng, SVector{6, Float64}) * 0.001
-        end
+function build_nlls_from_bam(bam::BundleAdjustmentModel)
+    prob = NLLSModel.Model(Union{SVector{9, Float64}, SVector{3, Float64}}, BALResidual)
+    x0 = bam.meta.x0
+    npnts = bam.npnts
+    ncams = bam.ncams
+    for c in 1:ncams
+        off = 3 * npnts + 9 * (c - 1)
+        addvariable!(prob, SVector{9, Float64}(ntuple(i -> @inbounds(x0[off + i]), Val(9))))
     end
-
+    for p in 1:npnts
+        off = 3 * (p - 1)
+        addvariable!(prob, SVector{3, Float64}(@inbounds(x0[off + 1]), @inbounds(x0[off + 2]), @inbounds(x0[off + 3])))
+    end
+    for obs_idx in 1:bam.nobs
+        c_idx = @inbounds bam.cams_indices[obs_idx]
+        p_idx = @inbounds bam.pnts_indices[obs_idx] + ncams
+        obs = SVector{2, Float64}(@inbounds(bam.pt2d[2 * obs_idx - 1]), @inbounds(bam.pt2d[2 * obs_idx]))
+        addcost!(prob, BALResidual(obs, SVector{2, Int}(c_idx, p_idx)))
+    end
     return prob
+end
+
+function _make_nlls_ba_model_definition(bam_model::BundleAdjustmentModel)
+    nlls_prob = build_nlls_from_bam(bam_model)
+    start_vars = copy(nlls_prob.variables)
+    f, fdf!, _, H_proto = NLLSModel.optimvars(nlls_prob)
+    n_tot_vars = 9 * bam_model.ncams + 3 * bam_model.npnts
+    g = zeros(Float64, n_tot_vars)
+    H = H_proto === nothing ? zeros(Float64, n_tot_vars, n_tot_vars) : deepcopy(H_proto)
+
+    return ModelDefinition(
+        "NLLSModel",
+        nlls_prob,
+        () -> f(nlls_prob.variables),
+        () -> (fdf!(g, H, nlls_prob.variables), H),
+        () -> copyto!(nlls_prob.variables, start_vars)
+    )
 end
 
 function make_synthetic_bam(ncams::Int, npnts::Int=ncams * 5, propvisible::Float64=0.3; rng=MersenneTwister(42 + ncams))
@@ -155,32 +207,19 @@ function create_bundle_adjustment_problem()
         :large_sparse,
         Any[4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256],
         sz -> begin
-            if sz isa String
-                bam_model = BundleAdjustmentModel(sz)
-                return [_make_bam_model_definition(bam_model)]
+            bam_model = if sz isa String
+                BundleAdjustmentModel(sz)
             else
                 ncams = Int(sz)
-                npts = ncams * 5
-                nlls_prob = generate_synthetic_ba(ncams, npts)
-                start_vars = copy(nlls_prob.variables)
-                f, fdf!, _, H_csc = NLLSModel.optimvars(nlls_prob)
-                g = zeros(Float64, size(H_csc, 1))
-                H = deepcopy(H_csc)
-
-                m_nlls = ModelDefinition(
-                    "NLLSModel",
-                    nlls_prob,
-                    () -> f(nlls_prob.variables),
-                    () -> (fdf!(g, H, nlls_prob.variables), H),
-                    () -> copyto!(nlls_prob.variables, start_vars)
-                )
-
-                bam_model = make_synthetic_bam(ncams, npts)
-                m_bam = _make_bam_model_definition(bam_model)
-                return [m_nlls, m_bam]
+                make_synthetic_bam(ncams, ncams * 5)
             end
+            m_nlls = _make_nlls_ba_model_definition(bam_model)
+            m_bam = _make_bam_model_definition(bam_model)
+            return [m_nlls, m_bam]
         end,
         [
+            OptimizerDefinition("NLLSModel + SecondOrderOptimization (Sparse LM)", (m; kwargs...) -> optimize_nlls_soo(m; method=:lm, linsolver=:ldl, kwargs...)),
+            OptimizerDefinition("NLLSModel + SecondOrderOptimization (Sparse Dogleg)", (m; kwargs...) -> optimize_nlls_soo(m; method=:dogleg, linsolver=:ldl, kwargs...)),
             OptimizerDefinition("SecondOrderOptimization (Sparse LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, linsolver=:ldl, kwargs...)),
             OptimizerDefinition("SecondOrderOptimization (Sparse Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, linsolver=:ldl, kwargs...)),
             OptimizerDefinition("CaNNOLeS", (m; kwargs...) -> optimize_cannoles(m; kwargs...)),

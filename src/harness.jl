@@ -109,42 +109,63 @@ function find_common_model(models::Vector{<:ModelDefinition})
 end
 
 """
-    run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, target_model::ModelDefinition;
-                             max_samples::Int=50, target_total_time_sec::Float64=1.0, samples=nothing)
+    resolve_optimizer_model(opt::OptimizerDefinition, target_model::ModelDefinition, all_models::Vector{<:ModelDefinition}) -> ModelDefinition
 
-Runs all compatible optimizers on the target model, returning performance statistics.
+Selects the model passed to `opt.optimize`:
+- Full-stack `NLLSModel + SecondOrderOptimization` optimizers receive the `NLLSModel` formulation
+  (preferring `"NLLSModel (Specialized)"` when present, e.g. on manifold problems).
+- All other optimizers receive the shared `target_model` baseline.
+"""
+function resolve_optimizer_model(opt::OptimizerDefinition, target_model::ModelDefinition, all_models::Vector{<:ModelDefinition})
+    if occursin("nllsmodel", lowercase(opt.name))
+        spec_idx = findfirst(m -> m.model isa NLLSModel.Model && occursin("specialized", lowercase(m.name)), all_models)
+        spec_idx !== nothing && return all_models[spec_idx]
+        nlls_idx = findfirst(m -> m.model isa NLLSModel.Model, all_models)
+        nlls_idx !== nothing && return all_models[nlls_idx]
+    end
+    return target_model
+end
+
+"""
+    run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, target_model::ModelDefinition;
+                             all_models=ModelDefinition[target_model], max_samples::Int=50,
+                             target_total_time_sec::Float64=1.0, samples=nothing)
+
+Runs all compatible optimizers on the target model (routing `NLLSModel + ...` entries to the corresponding `NLLSModel` formulation), returning performance statistics.
 Times the first (non-warmup) run with no run time limits, then calculates the number of further
 samples needed for up to 1s total computation (or up to `max_samples`), collecting at least 1 sample.
 """
 function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, target_model::ModelDefinition;
+                                 all_models::Vector{<:ModelDefinition}=ModelDefinition[target_model],
                                  max_samples::Int=50, target_total_time_sec::Float64=1.0, samples=nothing,
                                  on_result=nothing, warmed_signatures::Set{Any}=Set{Any}())
     results = Dict{String, OptimizerResult}()
     effective_max = samples !== nothing ? max(1, Int(samples)) : max_samples
 
     for opt in optimizers
+        opt_model = resolve_optimizer_model(opt, target_model, all_models)
         # Ensure this concrete (optimizer, model-type) specialization is JIT-compiled before timing
-        sig = (opt.name, typeof(target_model.model))
+        sig = (opt.name, typeof(opt_model.model))
         if !(sig in warmed_signatures)
             push!(warmed_signatures, sig)
             try
-                target_model.reset!()
-                opt.optimize(target_model; maxiters=1, time_limit=1.0)
+                opt_model.reset!()
+                opt.optimize(opt_model; maxiters=1, time_limit=1.0)
             catch
             finally
-                target_model.reset!()
+                opt_model.reset!()
             end
         else
-            target_model.reset!()
+            opt_model.reset!()
         end
 
         # 1. First (non-warmup) run with NO run time limits
         init_res = nothing
         t1_wall_start = time_ns()
         try
-            init_res = opt.optimize(target_model; time_limit=nothing)
+            init_res = opt.optimize(opt_model; time_limit=nothing)
         catch err
-            target_model.reset!()
+            opt_model.reset!()
             res = OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
             results[opt.name] = res
             if on_result !== nothing
@@ -188,9 +209,9 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
             if total_accumulated_wall_ns >= target_total_time_sec * 1e9
                 break
             end
-            target_model.reset!()
+            opt_model.reset!()
             t_wall_start = time_ns()
-            r_sample = opt.optimize(target_model; time_limit=nothing)
+            r_sample = opt.optimize(opt_model; time_limit=nothing)
             dt_wall = Float64(time_ns() - t_wall_start)
             total_accumulated_wall_ns += dt_wall
             if !isnan(r_sample.time_ns)
@@ -199,6 +220,7 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
                 bytes = r_sample.bytes
             end
         end
+        opt_model.reset!()
 
         res = OptimizerResult(
             median(times),
@@ -256,13 +278,14 @@ function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model
         end
 
         for opt in prob.compatible_optimizers
-            push!(warmed_signatures, (opt.name, typeof(target.model)))
+            opt_model = resolve_optimizer_model(opt, target, models)
+            push!(warmed_signatures, (opt.name, typeof(opt_model.model)))
             try
-                target.reset!()
-                opt.optimize(target; time_limit=1.0)
+                opt_model.reset!()
+                opt.optimize(opt_model; time_limit=1.0)
             catch
             finally
-                target.reset!()
+                opt_model.reset!()
             end
         end
     end
@@ -309,8 +332,8 @@ function run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=
         end
     end
 
-    # Phase 2: Optimizers on Target Model
-    optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; samples=samples)
+    # Phase 2: Optimizers on Target Model (and NLLSModel for full-stack NLLSModel + SecondOrderOptimization)
+    optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples)
 
     if verbose
         println("\n--- [Phase 2: Solvers on Standard Target Model: $(target_model.name)] ---")
@@ -409,8 +432,8 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
         target_idx = findfirst(m -> m.name == winning_model_name, models)
         target_model = target_idx !== nothing ? models[target_idx] : get_standard_optimizer_model(models, prob.category)
 
-        # Run optimizers on target model, streaming each optimizer result immediately to file
-        optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; samples=samples,
+        # Run optimizers on target model (routing NLLSModel + ... to NLLSModel), streaming each optimizer result immediately to file
+        optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples,
             warmed_signatures=warmed_signatures,
             on_result = (opt_name, r) -> begin
                 append_optimizer_evaluation(data_file, sz, opt_name, r)

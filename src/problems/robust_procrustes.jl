@@ -59,58 +59,87 @@ function NLLSModel.computeresjac(::StaticInt{1}, res::ProcrustesOVIResidual, v::
     return r, J
 end
 
-# 2. Specialized closed-form Rotation residual for NLLSModel
-function vec2skew(v, ind, N)
-    M = MMatrix{N, N, eltype(v), N*N}(undef)
-    for i = 1:N
-        M[i, i] = 1.0
-        for j = i+1:N
-            M[i, j] = v[ind]
-            M[j, i] = -v[ind]
+# 2. Specialized closed-form zero-allocation Rotation residual for NLLSModel
+@inline function cayley_rot(v, start::Int, ::Val{N}) where N
+    T = eltype(v)
+    M_plus = MMatrix{N, N, T, N * N}(undef)
+    M_minus = MMatrix{N, N, T, N * N}(undef)
+    ind = start
+    @inbounds for i in 1:N
+        M_plus[i, i] = one(T)
+        M_minus[i, i] = one(T)
+        for j in (i + 1):N
+            half_w = T(0.5) * v[ind]
+            M_plus[i, j] = half_w
+            M_plus[j, i] = -half_w
+            M_minus[i, j] = -half_w
+            M_minus[j, i] = half_w
             ind += 1
         end
     end
-    return SMatrix(M)
-end
-
-function proj2rot(M)
-    if !(eltype(M) <: AbstractFloat)
-        return M
-    end
-    s = svd(M)
-    res = s.U * s.V'
-    if det(res) < 0.0
-        res = s.U * diagm(convert(typeof(s.S), vcat(ones(length(s.S)-1), -1.0))) * s.V'
-    end
-    return res
+    return SMatrix(M_minus) \ SMatrix(M_plus)
 end
 
 struct SpecializedRotation{N, N2, T}
     R::SMatrix{N, N, T, N2}
 end
-OptimizationVariableInterface.nvars(::SpecializedRotation{N, N2, T}) where {N, N2, T} = StaticInt((N*(N-1)) ÷ 2)
-OptimizationVariableInterface.update(var::SpecializedRotation{N, N2, T}, updatevec, start=1) where {N, N2, T} =
-    SpecializedRotation(var.R * proj2rot(vec2skew(updatevec, start, N)))
+OptimizationVariableInterface.nvars(::SpecializedRotation{N, N2, T}) where {N, N2, T} = StaticInt((N * (N - 1)) ÷ 2)
+@inline OptimizationVariableInterface.update(var::SpecializedRotation{N, N2, T}, updatevec, start=1) where {N, N2, T} =
+    SpecializedRotation(var.R * cayley_rot(updatevec, start, Val(N)))
+
+struct ProcrustesScratchBuffers
+    J::Matrix{Float64}
+    g::Vector{Float64}
+    H::Matrix{Float64}
+end
+function ProcrustesScratchBuffers(d::Int)
+    nv = (d * (d - 1)) ÷ 2
+    return ProcrustesScratchBuffers(Matrix{Float64}(undef, d, nv), Vector{Float64}(undef, nv), Matrix{Float64}(undef, nv, nv))
+end
 
 struct SpecializedProcrustesResidual{N} <: NLLSModel.AbstractResidual
     A::SVector{N, Float64}
     B::SVector{N, Float64}
+    scratch::ProcrustesScratchBuffers
 end
+SpecializedProcrustesResidual{N}(A::SVector{N, Float64}, B::SVector{N, Float64}) where N =
+    SpecializedProcrustesResidual{N}(A, B, ProcrustesScratchBuffers(N))
+
 NLLSModel.ndeps(::SpecializedProcrustesResidual) = static(1)
 NLLSModel.nres(::SpecializedProcrustesResidual{N}) where N = static(N)
 NLLSModel.varindices(::SpecializedProcrustesResidual) = 1
-NLLSModel.getvars(res::SpecializedProcrustesResidual, vars::AbstractVector) = (vars[1],)
-NLLSModel.computeresidual(res::SpecializedProcrustesResidual, var::SpecializedRotation) = res.A - var.R * res.B
+NLLSModel.getvars(::SpecializedProcrustesResidual, vars::AbstractVector) = (@inbounds(vars[1]),)
+@inline NLLSModel.computeresidual(res::SpecializedProcrustesResidual, var::SpecializedRotation) = res.A - var.R * res.B
 Base.eltype(::SpecializedProcrustesResidual) = Float64
 
-function specialized_jac(res::SpecializedProcrustesResidual{N}, var::SpecializedRotation{N}) where N
+@generated function specialized_jac_static(B::SVector{N, Float64}, R::SMatrix{N, N, Float64}) where N
     NV = (N * (N - 1)) ÷ 2
-    J = Matrix{Float64}(undef, N, NV)
+    MN = N * NV
+    return quote
+        J = MMatrix{$N, $NV, Float64, $MN}(undef)
+        col = 1
+        @inbounds for i in 1:$N
+            Bi = B[i]
+            for j in (i + 1):$N
+                Bj = B[j]
+                for row in 1:$N
+                    J[row, col] = Bi * R[row, j] - Bj * R[row, i]
+                end
+                col += 1
+            end
+        end
+        return SMatrix(J)
+    end
+end
+
+function specialized_jac!(J::Matrix{Float64}, B::SVector{N, Float64}, R::SMatrix{N, N, Float64}) where N
     col = 1
     @inbounds for i in 1:N
-        for j in i+1:N
+        Bi = B[i]
+        for j in (i + 1):N
+            Bj = B[j]
             for row in 1:N
-                J[row, col] = res.B[i] * var.R[row, j] - res.B[j] * var.R[row, i]
+                J[row, col] = Bi * R[row, j] - Bj * R[row, i]
             end
             col += 1
         end
@@ -118,8 +147,32 @@ function specialized_jac(res::SpecializedProcrustesResidual{N}, var::Specialized
     return J
 end
 
+function specialized_jac(res::SpecializedProcrustesResidual{N}, var::SpecializedRotation{N}) where N
+    if N <= 6
+        return specialized_jac_static(res.B, var.R)
+    else
+        return specialized_jac!(res.scratch.J, res.B, var.R)
+    end
+end
+
 NLLSModel.computeresjac(::StaticInt{1}, res::SpecializedProcrustesResidual{N}, var::SpecializedRotation{N}) where N =
     (NLLSModel.computeresidual(res, var), specialized_jac(res, var))
+
+@inline function NLLSModel.computecostgradhess(::StaticInt{1}, res::SpecializedProcrustesResidual{N}, var::SpecializedRotation{N}) where N
+    r = NLLSModel.computeresidual(res, var)
+    c = 0.5 * sum(abs2, r)
+    if N <= 6
+        J = specialized_jac_static(res.B, var.R)
+        return c, J' * r, J' * J
+    else
+        J = specialized_jac!(res.scratch.J, res.B, var.R)
+        g = res.scratch.g
+        H = res.scratch.H
+        mul!(g, transpose(J), r)
+        mul!(H, transpose(J), J)
+        return c, g, H
+    end
+end
 
 function get_procrustes_dim(model)
     if model isa NLLSModel.Model
@@ -189,18 +242,19 @@ function create_robust_procrustes_problem()
 
             # Model 2: NLLSModel with Specialized SMatrix Rotation
             R0_static = SMatrix{d, d, Float64, d * d}(p0)
+            spec_scratch = ProcrustesScratchBuffers(d)
             nlls_spec = NLLSModel.Model([SpecializedRotation(R0_static)], SpecializedProcrustesResidual{d})
             for i in 1:n
-                addcost!(nlls_spec, SpecializedProcrustesResidual{d}(SVector{d, Float64}(A[:, i]), SVector{d, Float64}(B[:, i])))
+                addcost!(nlls_spec, SpecializedProcrustesResidual{d}(SVector{d, Float64}(A[:, i]), SVector{d, Float64}(B[:, i]), spec_scratch))
             end
-            f_spec, fdf_spec!, _, _ = NLLSModel.optimvars(nlls_spec)
+            f_spec, fdf_spec!, _, _ = NLLSModel.optimvars(nlls_spec, nothing, StaticInt(1))
             nv_spec = (d * (d - 1)) ÷ 2
             g_spec = zeros(Float64, nv_spec)
             H_spec = zeros(Float64, nv_spec, nv_spec)
             m_spec = ModelDefinition(
                 "NLLSModel (Specialized)",
                 nlls_spec,
-                () -> NLLSModel.cost(nlls_spec),
+                () -> NLLSModel.cost(nlls_spec, StaticInt(1)),
                 () -> (fdf_spec!(g_spec, H_spec, nlls_spec.variables[1]), H_spec),
                 () -> (nlls_spec.variables[1] = SpecializedRotation(R0_static))
             )
@@ -242,6 +296,8 @@ function create_robust_procrustes_problem()
             return [m_ovi, m_spec, m_manopt]
         end,
         [
+            OptimizerDefinition("NLLSModel + SecondOrderOptimization (LM)", (model_def; kwargs...) -> optimize_nlls_soo(model_def; method=:lm, kwargs...)),
+            OptimizerDefinition("NLLSModel + SecondOrderOptimization (Dogleg)", (model_def; kwargs...) -> optimize_nlls_soo(model_def; method=:dogleg, kwargs...)),
             OptimizerDefinition("SecondOrderOptimization (LM)", (model_def; gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
                 M, f_res, jac_res, p0, _ = get_procrustes_manopt_components(model_def)
                 var0 = ManifoldVar(copy(p0), M)

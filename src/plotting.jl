@@ -257,13 +257,21 @@ Maps an optimizer name to a consistent (color, linestyle, marker) tuple:
   - NonlinearSolve: :deeppink
   - CaNNOLeS: :chocolate
   - Manopt: :darkgoldenrod
-- Different flavours (e.g. LM, Dogleg, tron, trunk) use distinct linestyles and markers:
+- Different flavours (e.g. LM, Dogleg, tron, trunk, NLLSModel + SecondOrderOptimization) use distinct linestyles and markers:
+  - NLLSModel + SecondOrderOptimization (LM): :dot with :star5
+  - NLLSModel + SecondOrderOptimization (Dogleg): :dashdot with :star5
   - LM / trunk / default Newton: :solid with :circle
   - Dogleg / tron / TrustRegion: :dash with :square
   - GaussNewton: :dot with :diamond
 """
 function optimizer_style(opt_name::String)
     name_lower = lowercase(opt_name)
+
+    # Full-stack NLLSModel + SecondOrderOptimization uses red star markers
+    if occursin("nllsmodel", name_lower) && (occursin("secondorder", name_lower) || occursin("soo", name_lower))
+        linestyle = occursin("dogleg", name_lower) ? :dashdot : :dot
+        return :red, linestyle, :star5
+    end
 
     # 1. Package color
     color = if occursin("secondorder", name_lower) || startswith(name_lower, "soo")
@@ -382,6 +390,7 @@ function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAU
         if any(!isnan, run_times)
             plotted_count += 1
             c_color, l_style, m_shape = optimizer_style(opt_name)
+            m_size = m_shape === :star5 ? 7 : 5
             plot!(
                 p, sizes, run_times,
                 label = opt_name,
@@ -389,7 +398,7 @@ function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAU
                 linestyle = l_style,
                 markershape = m_shape,
                 markerstrokecolor = c_color,
-                markersize = 5,
+                markersize = m_size,
                 linewidth = 2.0
             )
         end
