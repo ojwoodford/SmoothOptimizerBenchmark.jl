@@ -21,7 +21,7 @@ makedocs(
             "Dense Affine Alignment" => "problems/affine_alignment.md",
             "Nonlinear 3D Pose Chain" => "problems/pose_chain.md",
             "Sparse Bundle Adjustment" => "problems/bundle_adjustment.md",
-            "Robust Procrustes on SO(d)" => "problems/robust_procrustes.md"
+            "Procrustes on SO(d)" => "problems/procrustes.md"
         ],
         "API Reference" => "api.md"
     ]

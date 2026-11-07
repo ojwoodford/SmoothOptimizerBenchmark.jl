@@ -23,7 +23,7 @@ const CANONICAL_PROBLEM_SLUGS = [
     "affine_alignment",
     "pose_chain",
     "bundle_adjustment",
-    "robust_procrustes"
+    "procrustes"
 ]
 
 function sort_results_canonically(results::Vector{ProblemScalingBenchmarkResult})

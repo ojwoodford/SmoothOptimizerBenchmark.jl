@@ -1,4 +1,4 @@
-# Robust Procrustes Problem on SO(d) (Manifold, from Gist cad99d)
+# Procrustes Problem on SO(d) (Manifold, from Gist cad99d)
 using LinearAlgebra, Manopt, Manifolds, Random, Static, StaticArrays, Dates
 using NLLSModel, SecondOrderOptimization, OptimizationVariableInterface
 
@@ -255,7 +255,7 @@ function get_procrustes_manopt_components(model_def)
     end
 end
 
-function create_robust_procrustes_problem()
+function create_procrustes_problem()
     ProblemDefinition(
         "Procrustes on SO(d)",
         :manifold,

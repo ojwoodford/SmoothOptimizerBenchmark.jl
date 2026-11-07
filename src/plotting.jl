@@ -25,7 +25,7 @@ function problem_slug(name::String)
     elseif occursin("bundle adjustment", lower)
         return "bundle_adjustment"
     elseif occursin("procrustes", lower)
-        return "robust_procrustes"
+        return "procrustes"
     else
         return replace(replace(lower, " " => "_"), "(" => "", ")" => "")
     end
@@ -40,7 +40,7 @@ Maps a model formulation name to a consistent (color, marker, linsys_style, cost
   - Standalone: :blue
   - NLPModels: :forestgreen (matches JSOSolvers)
   - BundleAdjustmentModels: :teal
-  - Manifolds: :darkgoldenrod (matches Manopt)
+  - Manifolds: :blue (matches Manopt)
 - Different flavours within the same package use distinct markers and linestyles:
   - Standard / Static: :circle marker, :solid linsys, :dash cost
   - Specialized: :square marker, :dashdot linsys, :dot cost
@@ -60,7 +60,7 @@ function model_style(m_name::String)
     elseif occursin("bundleadjustment", name_lower) || occursin("bam", name_lower)
         :teal
     elseif occursin("manifold", name_lower) || occursin("manopt", name_lower)
-        :darkgoldenrod
+        :blue
     else
         :black
     end
@@ -262,7 +262,7 @@ Maps an optimizer name to a consistent (color, linestyle, marker) tuple:
   - MadNLP: :teal
   - NonlinearSolve: :deeppink
   - CaNNOLeS: :chocolate
-  - Manopt: :darkgoldenrod
+  - Manopt: :blue
 - Different flavours (e.g. LM, Dogleg, tron, trunk, NLLSModel + SecondOrderOptimization) use distinct linestyles and markers:
   - NLLSModel + SecondOrderOptimization (LM): :dot with :star5
   - NLLSModel + SecondOrderOptimization (Dogleg): :dashdot with :star5
@@ -296,8 +296,8 @@ function optimizer_style(opt_name::String)
         :teal
     elseif occursin("cannoles", name_lower)
         :chocolate
-    elseif occursin("manopt", name_lower)
-        :darkgoldenrod
+    elseif occursin("manopt", name_lower) || occursin("manifold", name_lower)
+        :blue
     else
         :black
     end

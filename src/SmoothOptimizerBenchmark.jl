@@ -39,7 +39,7 @@ include("problems/affine_alignment.jl")
 include("problems/rosenbrock_dense.jl")
 include("problems/rosenbrock_sparse.jl")
 include("problems/pose_chain.jl")
-include("problems/robust_procrustes.jl")
+include("problems/procrustes.jl")
 include("problems/bundle_adjustment.jl")
 
 export get_all_problems
@@ -48,7 +48,7 @@ export create_affine_alignment_problem
 export create_rosenbrock_dense_problem
 export create_rosenbrock_sparse_problem
 export create_pose_chain_problem
-export create_robust_procrustes_problem
+export create_procrustes_problem
 export create_bundle_adjustment_problem
 
 export run_problem_benchmark, run_scaling_benchmark, run_all_scaling_benchmarks
@@ -70,7 +70,7 @@ function get_all_problems()
         create_affine_alignment_problem(),
         create_rosenbrock_dense_problem(),
         create_pose_chain_problem(),
-        create_robust_procrustes_problem(),
+        create_procrustes_problem(),
         create_bundle_adjustment_problem()
     ]
 end
