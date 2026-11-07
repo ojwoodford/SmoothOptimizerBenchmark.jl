@@ -40,8 +40,8 @@ using SmoothOptimizerBenchmark
     end
 
     @testset "Plot Styling & Unsupported Sparse Solver Handling" begin
-        @test SmoothOptimizerBenchmark.model_style("Manifolds")[1] == :darkgoldenrod
-        @test SmoothOptimizerBenchmark.optimizer_style("Manopt (LevenbergMarquardt)")[1] == :darkgoldenrod
+        @test SmoothOptimizerBenchmark.model_style("Manifolds")[1] == :blue
+        @test SmoothOptimizerBenchmark.optimizer_style("Manopt (LevenbergMarquardt)")[1] == :blue
         @test SmoothOptimizerBenchmark.optimizer_style("CaNNOLeS")[1] == :chocolate
         @test SmoothOptimizerBenchmark.optimizer_style("MadNLP")[1] == :teal
         @test SmoothOptimizerBenchmark.optimizer_style("NonlinearSolve (LM)")[1] == :deeppink
