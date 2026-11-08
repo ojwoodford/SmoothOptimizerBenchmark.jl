@@ -3,7 +3,7 @@ using Static, StaticArrays, LinearAlgebra, SparseArrays
 using NLLSModel, LeastSquaresOptim, JuMP, Ipopt, JSOSolvers, NLPModels, NLPModelsJuMP, SecondOrderOptimization
 const MOI = JuMP.MOI
 
-const rosen_diag_w_sparse = 1.0
+const rosen_diag_w_sparse = 10.0
 const rosen_offdiag_w_sparse = 10.0
 
 rosen_sparse_startpoint(n::Int) = fill(0.5, n)
