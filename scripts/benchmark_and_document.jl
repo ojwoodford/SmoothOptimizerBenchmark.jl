@@ -14,7 +14,7 @@ mkpath(plots_dir)
 
 # Run scaling benchmarks (streams live markdown directly to docs/src/data/<slug>.md)
 t_start = time()
-results = run_all_scaling_benchmarks(data_dir=data_dir, verbose=true)
+results = run_all_scaling_benchmarks(data_dir=data_dir)
 t_elapsed = time() - t_start
 println(@sprintf("\n✓ All scaling benchmarks completed in %.1f seconds.", t_elapsed))
 println("✓ Benchmark streaming Markdown files saved to: $data_dir")

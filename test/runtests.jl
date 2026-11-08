@@ -114,7 +114,7 @@ using SmoothOptimizerBenchmark
     @testset "Quick Single-Size Benchmark" begin
         for prob in problems
             sz = first(prob.default_sizes)
-            res = run_problem_benchmark(prob, sz; samples=1, verbose=false)
+            res = run_problem_benchmark(prob, sz; samples=1)
             @test res.problem == prob.name
             @test res.size == sz
             @test !isempty(res.model_results)
@@ -128,7 +128,7 @@ using SmoothOptimizerBenchmark
         prob = create_rosenbrock_sparse_problem()
         test_sizes = Any[4, 8]
         tmp_data_dir = mktempdir()
-        scaling_res = run_scaling_benchmark(prob; sizes=test_sizes, samples=1, data_dir=tmp_data_dir, verbose=false)
+        scaling_res = run_scaling_benchmark(prob; sizes=test_sizes, samples=1, data_dir=tmp_data_dir)
 
         @test scaling_res.problem == prob.name
         @test length(scaling_res.size_results) == 2

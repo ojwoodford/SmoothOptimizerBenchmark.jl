@@ -1,6 +1,5 @@
 # Evaluation harness for SmoothOptimizerBenchmark
 using BenchmarkTools
-using Printf
 using Statistics
 
 export run_model_benchmarks, select_best_model, run_optimizer_benchmarks, get_standard_optimizer_model
@@ -270,17 +269,14 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
 end
 
 """
-    warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model_name=nothing, verbose=true, warmed_signatures=Set{Any}())
+    warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model_name=nothing, warmed_signatures=Set{Any}())
 
 For each optimizer, performs a warmup run on both the smallest and largest problem size
 with run time limited to 1s to trigger JIT compilation for both small and large code paths.
 """
-function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model_name=nothing, verbose=true, warmed_signatures::Set{Any}=Set{Any}())
+function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model_name=nothing, warmed_signatures::Set{Any}=Set{Any}())
     isempty(sizes) && return warmed_signatures
     warmup_sizes = unique([first(sizes), last(sizes)])
-    if verbose
-        println("\n>>> [Warmup] Performing 1s-limited warmup on sizes $(warmup_sizes) to precompile code paths...")
-    end
 
     for sz in warmup_sizes
         models = prob.generate_models(sz)
@@ -319,26 +315,17 @@ function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model
             end
         end
     end
-    if verbose
-        println(">>> [Warmup] Completed 1s warmup on sizes $(warmup_sizes).\n")
-    end
     return warmed_signatures
 end
 
 """
-    run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=nothing, samples=nothing, verbose=true) -> SingleSizeBenchmarkResult
+    run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=nothing, samples=nothing) -> SingleSizeBenchmarkResult
 
 Executes the benchmark for a single problem and size:
 1. Model evaluation comparison (cost vs linear system) across all implementations
 2. Unified optimizer comparison on the standardized baseline model
 """
-function run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=nothing, samples=nothing, verbose=true)
-    if verbose
-        println("\n" * "="^85)
-        println("PROBLEM: $(prob.name) [Category: $(prob.category), $(prob.size_metric_name): $size]")
-        println("="^85)
-    end
-
+function run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=nothing, samples=nothing)
     model_samples = samples !== nothing ? max(1, Int(samples)) : 5
     models = prob.generate_models(size)
     model_results = run_model_benchmarks(models; samples=model_samples)
@@ -349,38 +336,8 @@ function run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=
         get_standard_optimizer_model(models, prob.category)
     end
 
-    if verbose
-        println("\n--- [Phase 1: Model Evaluation Benchmarks] ---")
-        println(@sprintf("%-32s | %-16s | %-16s", "Model Implementation", "Cost Eval", "Cost + Linear Sys"))
-        println("-"^85)
-        for m in models
-            r = model_results[m.name]
-            cost_str = @sprintf("%.2f μs (%d b)", r.cost_time_ns / 1e3, r.cost_bytes)
-            linsys_str = @sprintf("%.2f μs (%d b)", r.linsys_time_ns / 1e3, r.linsys_bytes)
-            star = m.name == target_model.name ? " ★ (target)" : ""
-            println(@sprintf("%-32s | %-16s | %-16s%s", m.name, cost_str, linsys_str, star))
-        end
-    end
-
     # Phase 2: Optimizers (each on optimal model representation)
     optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples)
-
-    if verbose
-        println("\n--- [Phase 2: Optimizer Benchmarks (Each Solver on Optimal Model)] ---")
-        println(@sprintf("%-32s | %-14s | %-12s | %-8s | %-12s", "Optimizer", "Runtime", "Allocs", "Iters", "Final Cost"))
-        println("-"^85)
-        for opt in prob.compatible_optimizers
-            if haskey(optimizer_results, opt.name)
-                r = optimizer_results[opt.name]
-                time_str = isnan(r.time_ns) ? "FAILED" : @sprintf("%.2f μs", r.time_ns / 1e3)
-                alloc_str = @sprintf("%d (%d b)", r.allocs, r.bytes)
-                iter_str = string(r.iterations)
-                cost_str = isnan(r.final_cost) ? "NaN" : @sprintf("%.4e", r.final_cost)
-                println(@sprintf("%-32s | %-14s | %-12s | %-8s | %-12s", opt.name, time_str, alloc_str, iter_str, cost_str))
-            end
-        end
-        println("="^85)
-    end
 
     return SingleSizeBenchmarkResult(
         prob.name,
@@ -394,17 +351,13 @@ function run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=
 end
 
 """
-    run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes, target_model_name=nothing, samples=nothing, data_dir=DEFAULT_DATA_DIR, verbose=true) -> ProblemScalingBenchmarkResult
+    run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes, target_model_name=nothing, samples=nothing, data_dir=DEFAULT_DATA_DIR) -> ProblemScalingBenchmarkResult
 
 Runs the benchmark across all specified problem sizes (collecting at least 10 problem sizes for scaling).
 Performs model evaluation across all sizes, and benchmarks optimizers across all sizes on the standardized baseline model.
 Streams results into `<data_dir>/<slug>.md` after each size finishes.
 """
-function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes, target_model_name=nothing, samples=nothing, data_dir=DEFAULT_DATA_DIR, verbose=true)
-    if verbose
-        println("\n>>> STARTING SCALING BENCHMARK FOR $(prob.name) [$(length(sizes)) SIZES] <<<")
-    end
-
+function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes, target_model_name=nothing, samples=nothing, data_dir=DEFAULT_DATA_DIR)
     model_samples = samples !== nothing ? max(1, Int(samples)) : 5
     slug = problem_slug(prob.name)
     data_file = joinpath(data_dir, "$(slug).md")
@@ -413,9 +366,6 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
     sample_models = prob.generate_models(first(sizes))
     standard_m = get_standard_optimizer_model(sample_models, prob.category)
     winning_model_name = target_model_name !== nothing ? target_model_name : standard_m.name
-    if verbose
-        println(">>> Standard target model for optimizers: $(winning_model_name) <<<")
-    end
 
     has_phase1_models = length(sample_models) > 1
 
@@ -468,10 +418,6 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
                 m_results[m.name] = mr
                 # Write every model performance immediately to file!
                 append_model_evaluation(data_file, sz, m.name, mr)
-                if verbose
-                    println(@sprintf("  [Model] %s %s | %s: Cost %.1fμs, Linsys %.1fμs",
-                        prob.size_metric_name, string(sz), m.name, mr.cost_time_ns / 1e3, mr.linsys_time_ns / 1e3))
-                end
             end
         end
         all_model_results[i] = m_results
@@ -482,7 +428,7 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
 
     # 3. Warmup both smallest and largest sizes for each optimizer (1s time limit)
     warmed_signatures = Set{Any}()
-    warmup_problem_optimizers!(prob, sizes; target_model_name=winning_model_name, verbose=verbose, warmed_signatures=warmed_signatures)
+    warmup_problem_optimizers!(prob, sizes; target_model_name=winning_model_name, warmed_signatures=warmed_signatures)
 
     # 4. Benchmark optimizers across all sizes on the standardized model, streaming EVERY optimizer performance immediately to file!
     size_results = SingleSizeBenchmarkResult[]
@@ -495,15 +441,7 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
         # Run optimizers on target model (routing NLLSModel + ... to NLLSModel), streaming each optimizer result immediately to file
         optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples,
             warmed_signatures=warmed_signatures,
-            on_result = (opt_name, r) -> begin
-                append_optimizer_evaluation(data_file, sz, opt_name, r)
-                if verbose
-                    t_str = isnan(r.time_ns) ? "FAIL" : @sprintf("%.1fμs", r.time_ns / 1e3)
-                    cost_str = isnan(r.final_cost) ? "NaN" : @sprintf("%.4e", r.final_cost)
-                    println(@sprintf("  [%s] %s %s (%d/%d) | %-32s: %10s | %3d iters | cost %s",
-                        prob.name, prob.size_metric_name, string(sz), i, length(sizes), opt_name, t_str, r.iterations, cost_str))
-                end
-            end
+            on_result = (opt_name, r) -> append_optimizer_evaluation(data_file, sz, opt_name, r)
         )
 
         s_res = SingleSizeBenchmarkResult(
@@ -528,15 +466,15 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
 end
 
 """
-    run_all_scaling_benchmarks(; problems=get_all_problems(), quick=false, samples=nothing, data_dir=DEFAULT_DATA_DIR, verbose=true) -> Vector{ProblemScalingBenchmarkResult}
+    run_all_scaling_benchmarks(; problems=get_all_problems(), quick=false, samples=nothing, data_dir=DEFAULT_DATA_DIR) -> Vector{ProblemScalingBenchmarkResult}
 
 Executes scaling benchmarks across all registered problems.
 """
-function run_all_scaling_benchmarks(; problems=get_all_problems(), quick=false, samples=nothing, data_dir=DEFAULT_DATA_DIR, verbose=true)
+function run_all_scaling_benchmarks(; problems=get_all_problems(), quick=false, samples=nothing, data_dir=DEFAULT_DATA_DIR)
     scaling_results = ProblemScalingBenchmarkResult[]
     for prob in problems
         sizes = quick ? prob.default_sizes[1:min(3, length(prob.default_sizes))] : prob.default_sizes
-        res = run_scaling_benchmark(prob; sizes=sizes, samples=samples, data_dir=data_dir, verbose=verbose)
+        res = run_scaling_benchmark(prob; sizes=sizes, samples=samples, data_dir=data_dir)
         push!(scaling_results, res)
     end
     return scaling_results

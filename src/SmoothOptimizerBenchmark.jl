@@ -76,21 +76,21 @@ function get_all_problems()
 end
 
 """
-    run_all_benchmarks(; verbose=true, quick=false)
+    run_all_benchmarks(; quick=false)
 
 Executes benchmarks for all problem types across their default test sizes.
 """
-function run_all_benchmarks(; verbose=true, quick=false)
+function run_all_benchmarks(; quick=false)
     problems = get_all_problems()
-    return harness_run_all(problems; verbose=verbose, quick=quick)
+    return harness_run_all(problems; quick=quick)
 end
 
-function harness_run_all(problems; verbose=true, quick=false)
+function harness_run_all(problems; quick=false)
     all_results = []
     for prob in problems
         sizes = quick ? [first(prob.default_sizes)] : prob.default_sizes
         for sz in sizes
-            res = run_problem_benchmark(prob, sz; samples = quick ? 2 : 5, verbose=verbose)
+            res = run_problem_benchmark(prob, sz; samples = quick ? 2 : 5)
             push!(all_results, res)
         end
     end
