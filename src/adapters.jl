@@ -518,7 +518,13 @@ soo_converged(termination::Int) = ((termination & (1 << 12)) != 0) || (((termina
 
 function optimize_soo(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
-    actual_method = method === :lm ? :levenbergmarquardt : method
+    actual_method = if method === :lm
+        :levenbergmarquardt
+    elseif method === :lm_dtd || method === :levenbergmarquardt_dtd
+        :levenbergmarquardt_dtd
+    else
+        method
+    end
     opt = OptimizationOptions(iterator=actual_method, gtol=gtol, dstep=xtol, reldcost=ftol, maxiters=maxiters, maxtime=actual_maxtime; kwargs...)
     m = target isa ModelDefinition ? target.model : target
 
@@ -572,7 +578,13 @@ function optimize_nlls_soo(target; method=:dogleg, linsolver=:auto, gtol=DEFAULT
     end
 
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
-    actual_method = method === :lm ? :levenbergmarquardt : method
+    actual_method = if method === :lm
+        :levenbergmarquardt
+    elseif method === :lm_dtd || method === :levenbergmarquardt_dtd
+        :levenbergmarquardt_dtd
+    else
+        method
+    end
     opt = OptimizationOptions(
         iterator=actual_method,
         linsolver=linsolver,
