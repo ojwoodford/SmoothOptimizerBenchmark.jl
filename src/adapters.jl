@@ -17,7 +17,7 @@ using BundleAdjustmentModels
 
 export optimize_soo, optimize_nlls_soo, optimize_least_squares, optimize_optim, optimize_jsosolvers, optimize_ipopt
 export optimize_madnlp, optimize_nonlinearsolve, optimize_cannoles
-export get_standard_optimizers, get_tier1_optimizers, get_tier2_optimizers, as_nlpmodel, LeastSquaresNLPModel
+export get_standard_optimizers, get_tier1_optimizers, get_tier2_optimizers, as_nlpmodel, LeastSquaresNLPModel, reset_nlp_cache!
 export as_nlsmodel, LeastSquaresNLSModel
 export TimeoutException
 export DEFAULT_GTOL, DEFAULT_XTOL, DEFAULT_FTOL, DEFAULT_MAXITERS, DEFAULT_MAXTIME
@@ -411,6 +411,33 @@ as_nlsmodel(bam::BundleAdjustmentModel) = bam
 as_nlsmodel(m::ModelDefinition) = as_nlsmodel(m.model)
 as_nlsmodel(prob::NLLSModel.Model) = NLLSModel.NLLSNLSModel(prob)
 as_nlsmodel(lsp::LeastSquaresProblem) = LeastSquaresNLSModel(lsp)
+
+"""
+    reset_nlp_cache!(nlp)
+
+Invalidates any internal evaluation cache in NLP models (such as JuMP/ReverseAD-backed `MathOptNLSModel`,
+`MathOptNLPModel`, or `LeastSquaresNLPModel`) so that subsequent cost and linear system evaluations are
+guaranteed to be fully recomputed rather than returning cached values.
+"""
+function reset_nlp_cache!(nlp)
+    if hasproperty(nlp, :ceval) && hasproperty(nlp.ceval, :backend) && hasproperty(nlp.ceval.backend, :last_x)
+        fill!(nlp.ceval.backend.last_x, NaN)
+    end
+    if hasproperty(nlp, :Feval) && hasproperty(nlp.Feval, :backend) && hasproperty(nlp.Feval.backend, :last_x)
+        fill!(nlp.Feval.backend.last_x, NaN)
+    end
+    if hasproperty(nlp, :evaluator) && hasproperty(nlp.evaluator, :backend) && hasproperty(nlp.evaluator.backend, :last_x)
+        fill!(nlp.evaluator.backend.last_x, NaN)
+    end
+    if hasproperty(nlp, :cache_valid)
+        nlp.cache_valid[] = false
+    end
+    if hasproperty(nlp, :last_x) && nlp.last_x isa AbstractArray
+        fill!(nlp.last_x, NaN)
+    end
+    return nlp
+end
+reset_nlp_cache!(m::ModelDefinition) = reset_nlp_cache!(m.model)
 
 # -----------------------------------------------------------------------------
 # SecondOrderOptimization In-Place Extensions

@@ -34,8 +34,8 @@ end
 Encapsulates a model formulation for a problem:
 - `name`: Human-readable identifier (e.g. "SecondOrderOpt (Static)", "LeastSquaresOptim")
 - `model`: Underlying problem/model instance
-- `eval_cost`: In-place or cached function `() -> Float64` computing pure cost
-- `eval_cost_and_linear_system`: In-place or cached function `() -> (cost, linsys)` computing cost + derivatives/linear system
+- `eval_cost`: In-place function `() -> Float64` computing pure cost (always recomputed, un-cached)
+- `eval_cost_and_linear_system`: In-place function `() -> (cost, linsys)` computing cost + derivatives/linear system
 - `reset!`: Function `() -> nothing` resetting model parameters to initial configuration
 """
 struct ModelDefinition{T}

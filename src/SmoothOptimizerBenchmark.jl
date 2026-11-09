@@ -58,6 +58,7 @@ export load_problem_markdown, load_all_problem_markdown, update_problem_plots
 export init_problem_markdown, append_model_evaluation, init_optimizer_section, append_optimizer_evaluation
 export load_benchmark_results
 export problem_slug, plot_model_scaling, plot_optimizer_scaling, generate_all_plots
+export reset_nlp_cache!
 
 """
     get_all_problems() -> Vector{ProblemDefinition}

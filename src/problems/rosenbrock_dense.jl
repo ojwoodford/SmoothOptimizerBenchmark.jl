@@ -120,14 +120,21 @@ function create_rosenbrock_dense_problem()
             m_nlp = ModelDefinition(
                 "NLPModels (MathOptNLSModel)",
                 nls,
-                () -> NLPModels.obj(nls, x0),
                 () -> begin
+                    reset_nlp_cache!(nls)
+                    NLPModels.obj(nls, x0)
+                end,
+                () -> begin
+                    reset_nlp_cache!(nls)
                     c = NLPModels.obj(nls, x0)
                     NLPModels.grad!(nls, x0, g_nlp)
                     NLPModels.hess_coord!(nls, x0, h_vals_nlp)
                     return (c, h_vals_nlp)
                 end,
-                () -> copyto!(nls.meta.x0, x0)
+                () -> begin
+                    copyto!(nls.meta.x0, x0)
+                    reset_nlp_cache!(nls)
+                end
             )
 
             return [m_nlls, m_lso, m_nlp]

@@ -45,9 +45,17 @@ function run_model_benchmarks(models::Vector{<:ModelDefinition}; samples=5, eval
     results = Dict{String, ModelEvaluationResult}()
     for m in models
         m.reset!()
-        c_res = benchmark_eval(m.eval_cost; samples=samples, evals=evals)
+        reset_nlp_cache!(m.model)
+        c_res = benchmark_eval(() -> begin
+            reset_nlp_cache!(m.model)
+            m.eval_cost()
+        end; samples=samples, evals=evals)
         m.reset!()
-        ls_res = benchmark_eval(m.eval_cost_and_linear_system; samples=samples, evals=evals)
+        reset_nlp_cache!(m.model)
+        ls_res = benchmark_eval(() -> begin
+            reset_nlp_cache!(m.model)
+            m.eval_cost_and_linear_system()
+        end; samples=samples, evals=evals)
         results[m.name] = ModelEvaluationResult(
             c_res.time_ns, c_res.allocs, c_res.bytes,
             ls_res.time_ns, ls_res.allocs, ls_res.bytes
@@ -286,12 +294,15 @@ function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model
         for m in models
             try
                 m.reset!()
+                reset_nlp_cache!(m.model)
                 m.eval_cost()
                 m.reset!()
+                reset_nlp_cache!(m.model)
                 m.eval_cost_and_linear_system()
             catch
             finally
                 m.reset!()
+                reset_nlp_cache!(m.model)
             end
         end
 
@@ -408,9 +419,17 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
         if has_phase1_models
             for m in models
                 m.reset!()
-                c_res = benchmark_eval(m.eval_cost; samples=model_samples)
+                reset_nlp_cache!(m.model)
+                c_res = benchmark_eval(() -> begin
+                    reset_nlp_cache!(m.model)
+                    m.eval_cost()
+                end; samples=model_samples)
                 m.reset!()
-                ls_res = benchmark_eval(m.eval_cost_and_linear_system; samples=model_samples)
+                reset_nlp_cache!(m.model)
+                ls_res = benchmark_eval(() -> begin
+                    reset_nlp_cache!(m.model)
+                    m.eval_cost_and_linear_system()
+                end; samples=model_samples)
                 mr = ModelEvaluationResult(
                     c_res.time_ns, c_res.allocs, c_res.bytes,
                     ls_res.time_ns, ls_res.allocs, ls_res.bytes
