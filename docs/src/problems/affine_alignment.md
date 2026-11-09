@@ -32,5 +32,5 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 ## 4. Analysis & Key Takeaways
 
 - **Model Architecture**: Handled universally via `Standalone` with built-in zero-allocation adapters.
-- **Top Converged Optimizer**: At Dimension n = `32` (12/13 solvers converged), **`SecondOrderOptimization (LM)`** is fastest at **1.05 s** (6 iterations, final cost `4.74e-27`).
+- **Top Converged Optimizer**: At Dimension n = `32` (12/13 solvers converged), **`Optim (Newton)`** is fastest at **1.03 s** (6 iterations, final cost `4.24e-27`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.
