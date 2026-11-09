@@ -22,6 +22,8 @@ function problem_slug(name::String)
         return "affine_alignment"
     elseif occursin("pose chain", lower)
         return "pose_chain"
+    elseif occursin("ode boundary value problem", lower) || occursin("ode_bvp", lower) || occursin("bratu", lower)
+        return "ode_bvp"
     elseif occursin("bundle adjustment", lower)
         return "bundle_adjustment"
     elseif occursin("procrustes", lower)

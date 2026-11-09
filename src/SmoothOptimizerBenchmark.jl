@@ -41,6 +41,7 @@ include("problems/rosenbrock_sparse.jl")
 include("problems/pose_chain.jl")
 include("problems/procrustes.jl")
 include("problems/bundle_adjustment.jl")
+include("problems/ode_bvp.jl")
 
 export get_all_problems
 export create_curve_fitting_problem
@@ -50,6 +51,7 @@ export create_rosenbrock_sparse_problem
 export create_pose_chain_problem
 export create_procrustes_problem
 export create_bundle_adjustment_problem
+export create_ode_bvp_problem
 
 export run_problem_benchmark, run_scaling_benchmark, run_all_scaling_benchmarks
 export load_problem_markdown, load_all_problem_markdown, update_problem_plots
@@ -70,6 +72,7 @@ function get_all_problems()
         create_affine_alignment_problem(),
         create_rosenbrock_dense_problem(),
         create_pose_chain_problem(),
+        create_ode_bvp_problem(),
         create_procrustes_problem(),
         create_bundle_adjustment_problem()
     ]

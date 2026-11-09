@@ -22,6 +22,7 @@ const CANONICAL_PROBLEM_SLUGS = [
     "rosenbrock_dense",
     "affine_alignment",
     "pose_chain",
+    "ode_bvp",
     "bundle_adjustment",
     "procrustes"
 ]

@@ -20,6 +20,7 @@ makedocs(
             "Dense Multi-dimensional Rosenbrock" => "problems/rosenbrock_dense.md",
             "Dense Affine Alignment" => "problems/affine_alignment.md",
             "Nonlinear 3D Pose Chain" => "problems/pose_chain.md",
+            "1D ODE Boundary Value Problem" => "problems/ode_bvp.md",
             "Sparse Bundle Adjustment" => "problems/bundle_adjustment.md",
             "Procrustes on SO(d)" => "problems/procrustes.md"
         ],

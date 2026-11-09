@@ -3,8 +3,8 @@ using SmoothOptimizerBenchmark
 
 @testset "SmoothOptimizerBenchmark Suite" begin
     problems = get_all_problems()
-    # 7 distinct problems (6 Euclidean non-manifold + 1 manifold)
-    @test length(problems) == 7
+    # 8 distinct problems (7 Euclidean non-manifold + 1 manifold)
+    @test length(problems) == 8
 
     @testset "Problem Definition & >=10 Problem Sizes" begin
         for prob in problems
@@ -109,6 +109,14 @@ using SmoothOptimizerBenchmark
         @test r_pr.converged
         @test r_pr.final_cost < r_pr.start_cost
         @test r_pr.allocs > 0
+
+        # 6. 1D ODE Boundary Value Problem (Bratu problem, tridiagonal sparse)
+        ode_models = create_ode_bvp_problem().generate_models(32)
+        ode_nlls = first(filter(m -> occursin("nllsmodel", lowercase(m.name)), ode_models))
+        r_ode = optimize_nlls_soo(ode_nlls; method=:lm)
+        @test r_ode.converged
+        @test r_ode.final_cost < r_ode.start_cost
+        @test r_ode.allocs > 0
     end
 
     @testset "Quick Single-Size Benchmark" begin
