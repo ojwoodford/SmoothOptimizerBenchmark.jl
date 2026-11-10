@@ -520,7 +520,7 @@ function SecondOrderOptimization.optimize(nlp::AbstractNLPModel, options::Optimi
 end
 
 function SecondOrderOptimization.optimize!(prob::NLLSModel.Model, options::OptimizationOptions=OptimizationOptions(); unfixed=nothing, numthreads=StaticInt(Threads.nthreads()), kwargs...)
-    f, fdf!, x0, H = NLLSModel.optimvars(prob, unfixed, numthreads)
+    f, fdf!, x0, H = NLLSModel.optimvars(prob, unfixed, numthreads; linsolver=options.linsolver)
     return SecondOrderOptimization.optimize!(f, fdf!, x0, options; H=H, kwargs...)
 end
 

@@ -1,6 +1,13 @@
 # Bundle Adjustment Problem (Large Sparse, 9-DOF BAL Camera Formulation)
 using Static, StaticArrays, LinearAlgebra, Random
-using NLLSModel, BundleAdjustmentModels, CaNNOLeS, SecondOrderOptimization
+using NLLSModel, BundleAdjustmentModels, CaNNOLeS, SecondOrderOptimization, OptimizationVariableInterface
+
+struct BALPoint{T}
+    p::SVector{3, T}
+end
+OptimizationVariableInterface.nvars(::BALPoint) = static(3)
+OptimizationVariableInterface.update(p::BALPoint, step, offset=1) = BALPoint(p.p + SVector(step[offset], step[offset+1], step[offset+2]))
+OptimizationVariableInterface.iseliminable(::Type{<:BALPoint}) = static(true)
 
 struct BALResidual <: NLLSModel.AbstractResidual
     obs::SVector{2, Float64}
@@ -12,7 +19,7 @@ NLLSModel.nres(::BALResidual) = static(2)
 NLLSModel.varindices(r::BALResidual) = r.varind
 NLLSModel.getvars(r::BALResidual, vars::AbstractVector) = (
     @inbounds(vars[r.varind[1]])::SVector{9, Float64},
-    @inbounds(vars[r.varind[2]])::SVector{3, Float64}
+    @inbounds(vars[r.varind[2]])
 )
 
 @inline function bal_project(cam::SVector{9, TC}, X::SVector{3, TX}) where {TC, TX}
@@ -54,10 +61,12 @@ NLLSModel.getvars(r::BALResidual, vars::AbstractVector) = (
     return SVector{2, T}(fs * u, fs * v)
 end
 
+@inline NLLSModel.computeresidual(res::BALResidual, cam, X::BALPoint) = bal_project(cam, X.p) - res.obs
+@inline NLLSModel.computeresidual(res::BALResidual, cam, X::SVector{3}) = bal_project(cam, X) - res.obs
 @inline NLLSModel.computeresidual(res::BALResidual, cam, X) = bal_project(cam, X) - res.obs
 
 function build_nlls_from_bam(bam::BundleAdjustmentModel)
-    prob = NLLSModel.Model(Union{SVector{9, Float64}, SVector{3, Float64}}, BALResidual)
+    prob = NLLSModel.Model(Union{SVector{9, Float64}, BALPoint{Float64}}, BALResidual)
     x0 = bam.meta.x0
     npnts = bam.npnts
     ncams = bam.ncams
@@ -67,7 +76,7 @@ function build_nlls_from_bam(bam::BundleAdjustmentModel)
     end
     for p in 1:npnts
         off = 3 * (p - 1)
-        addvariable!(prob, SVector{3, Float64}(@inbounds(x0[off + 1]), @inbounds(x0[off + 2]), @inbounds(x0[off + 3])))
+        addvariable!(prob, BALPoint(SVector{3, Float64}(@inbounds(x0[off + 1]), @inbounds(x0[off + 2]), @inbounds(x0[off + 3]))))
     end
     for obs_idx in 1:bam.nobs
         c_idx = @inbounds bam.cams_indices[obs_idx]
@@ -81,7 +90,7 @@ end
 function _make_nlls_ba_model_definition(bam_model::BundleAdjustmentModel)
     nlls_prob = build_nlls_from_bam(bam_model)
     start_vars = copy(nlls_prob.variables)
-    f, fdf!, _, H_proto = NLLSModel.optimvars(nlls_prob)
+    f, fdf!, _, H_proto = NLLSModel.optimvars(nlls_prob; linsolver=:schur)
     n_tot_vars = 9 * bam_model.ncams + 3 * bam_model.npnts
     g = zeros(Float64, n_tot_vars)
     H = H_proto === nothing ? zeros(Float64, n_tot_vars, n_tot_vars) : deepcopy(H_proto)
@@ -218,8 +227,8 @@ function create_bundle_adjustment_problem()
             return [m_nlls, m_bam]
         end,
         [
-            OptimizerDefinition("SecondOrderOptimization (Sparse LM)", (m; kwargs...) -> optimize_soo(m; method=:levenbergmarquardt_dtd, linsolver=:ldl, kwargs...)),
-            OptimizerDefinition("SecondOrderOptimization (Sparse Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, linsolver=:ldl, kwargs...)),
+            OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:levenbergmarquardt_dtd, linsolver=:schur, kwargs...)),
+            OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, linsolver=:schur, kwargs...)),
             OptimizerDefinition("CaNNOLeS", (m; kwargs...) -> optimize_cannoles(m; kwargs...)),
             OptimizerDefinition("JSOSolvers (trunk)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:trunk, kwargs...)),
             OptimizerDefinition("JSOSolvers (tron)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:tron, kwargs...)),

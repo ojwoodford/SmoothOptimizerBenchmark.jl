@@ -102,6 +102,11 @@ using SmoothOptimizerBenchmark
         @test r_ba.final_cost < r_ba.start_cost
         @test r_ba.allocs > 0
 
+        r_ba_schur = optimize_nlls_soo(ba_nlls; method=:lm, linsolver=:schur)
+        @test r_ba_schur.converged
+        @test r_ba_schur.final_cost < r_ba_schur.start_cost
+        @test r_ba_schur.allocs > 0
+
         # 5. Procrustes on SO(d) (specialized Cayley + static linear system for d <= 6)
         pr_models = create_procrustes_problem().generate_models(6)
         pr_spec = first(filter(m -> m.name == "NLLSModel (Specialized)", pr_models))
