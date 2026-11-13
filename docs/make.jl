@@ -22,7 +22,7 @@ makedocs(
             "Nonlinear 3D Pose Chain" => "problems/pose_chain.md",
             "1D ODE Boundary Value Problem" => "problems/ode_bvp.md",
             "Sparse Bundle Adjustment" => "problems/bundle_adjustment.md",
-            "Procrustes on SO(d)" => "problems/procrustes.md"
+            "Robust Procrustes on SO(d)" => "problems/robust_procrustes.md"
         ],
         "API Reference" => "api.md"
     ]

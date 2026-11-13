@@ -27,10 +27,23 @@ function problem_slug(name::String)
     elseif occursin("bundle adjustment", lower)
         return "bundle_adjustment"
     elseif occursin("procrustes", lower)
-        return "procrustes"
+        return "robust_procrustes"
     else
         return replace(replace(lower, " " => "_"), "(" => "", ")" => "")
     end
+end
+
+"""
+    small_size_axis(sizes) -> NamedTuple
+
+Log-scale x-axis settings for problems whose sizes are all at most 32: power-of-2 ticks within the
+size range, and limits just outside the smallest and largest sizes. Larger problems use the defaults.
+"""
+function small_size_axis(sizes)
+    lo, hi = minimum(sizes), maximum(sizes)
+    hi <= 32 || return NamedTuple()
+    ticks = [2^k for k in 0:5 if lo <= 2^k <= hi]
+    return (xticks = (ticks, string.(ticks)), xlims = (0.9 * lo, 1.125 * hi))
 end
 
 """
@@ -176,16 +189,7 @@ function plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_P
     model_mean_ranks = compute_mean_ranks(all_models, sizes, get_model_time)
     sort!(all_models, by = m -> (model_mean_ranks[m], m), rev = true)
 
-    is_small_sizes = maximum(sizes) <= 32
-    plot_kwargs = if is_small_sizes
-        if minimum(sizes) >= 2 || occursin("so(", lowercase(res.problem)) || occursin("procrustes", lowercase(res.problem))
-            (xticks = ([2, 4, 8, 16, 32], ["2", "4", "8", "16", "32"]), xlims = (1.8, 36.0))
-        else
-            (xticks = ([1, 2, 4, 8, 16, 32], ["1", "2", "4", "8", "16", "32"]), xlims = (0.85, 36.0))
-        end
-    else
-        NamedTuple()
-    end
+    plot_kwargs = small_size_axis(sizes)
 
     p = plot(
         title = "$(res.problem): Model Evaluation Scaling",
@@ -355,16 +359,7 @@ function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAU
     opt_mean_ranks = compute_mean_ranks(all_optimizers, sizes, get_opt_time)
     sort!(all_optimizers, by = o -> (opt_mean_ranks[o], o), rev = true)
 
-    is_small_sizes = maximum(sizes) <= 32
-    plot_kwargs = if is_small_sizes
-        if minimum(sizes) >= 2 || occursin("so(", lowercase(res.problem)) || occursin("procrustes", lowercase(res.problem))
-            (xticks = ([2, 4, 8, 16, 32], ["2", "4", "8", "16", "32"]), xlims = (1.8, 36.0))
-        else
-            (xticks = ([1, 2, 4, 8, 16, 32], ["1", "2", "4", "8", "16", "32"]), xlims = (0.85, 36.0))
-        end
-    else
-        NamedTuple()
-    end
+    plot_kwargs = small_size_axis(sizes)
 
     p = plot(
         title = "$(res.problem): Optimizer Convergence Scaling",

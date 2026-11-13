@@ -440,12 +440,13 @@ end
 reset_nlp_cache!(m::ModelDefinition) = reset_nlp_cache!(m.model)
 
 # -----------------------------------------------------------------------------
-# SecondOrderOptimization In-Place Extensions
+# SecondOrderOptimization objectives
 # -----------------------------------------------------------------------------
+# `NLLSModel.Model` is solved through NLLSModel's own `SecondOrderOptimization.optimize!(model, options)`.
+# The other model types are wrapped here in a `HessianObjective`, returning `(x0, objective)`.
 
-function SecondOrderOptimization.optimize!(lsp::LeastSquaresProblem, options::OptimizationOptions=OptimizationOptions(); kwargs...)
+function soo_objective(lsp::LeastSquaresProblem)
     m = length(lsp.y)
-    n = length(lsp.x)
     r_buffer = zeros(Float64, m)
     J_buffer = deepcopy(lsp.J)
     f(x) = begin
@@ -471,9 +472,9 @@ function SecondOrderOptimization.optimize!(lsp::LeastSquaresProblem, options::Op
             end
             return 0.5 * sum(abs2, r_buffer)
         end
-        return SecondOrderOptimization.optimize!(f, fdf_sp!, lsp.x, options; H=H_proto, kwargs...)
+        return lsp.x, HessianObjective(f, fdf_sp!; H = H_proto)
     else
-        H_proto = zeros(Float64, n, n)
+        n = length(lsp.x)
         fdf_dn!(g, H, x) = begin
             lsp.f!(r_buffer, x)
             lsp.g!(J_buffer, x)
@@ -481,52 +482,27 @@ function SecondOrderOptimization.optimize!(lsp::LeastSquaresProblem, options::Op
             mul!(H, J_buffer', J_buffer)
             return 0.5 * sum(abs2, r_buffer)
         end
-        return SecondOrderOptimization.optimize!(f, fdf_dn!, lsp.x, options; H=H_proto, kwargs...)
+        return lsp.x, HessianObjective(f, fdf_dn!; H = zeros(Float64, n, n))
     end
 end
 
-function SecondOrderOptimization.optimize(lsp::LeastSquaresProblem, options::OptimizationOptions=OptimizationOptions(); kwargs...)
-    return SecondOrderOptimization.optimize!(deepcopy(lsp), options; kwargs...)
-end
-
-function SecondOrderOptimization.optimize!(nlp::AbstractNLPModel, options::OptimizationOptions=OptimizationOptions(); kwargs...)
-    if nlp.meta.ncon != 0
-        error("Constrained NLPModels are not supported by SecondOrderOptimization")
-    end
+function soo_objective(nlp::AbstractNLPModel)
+    nlp.meta.ncon == 0 || error("Constrained NLPModels are not supported by SecondOrderOptimization")
     f(x) = NLPModels.obj(nlp, x)
-    H_low = NLPModels.hess(nlp, nlp.meta.x0)
-    H_prototype = Matrix(Symmetric(H_low, :L))
+    H_prototype = Matrix(Symmetric(NLPModels.hess(nlp, nlp.meta.x0), :L))
     fdf!(g, H, x) = begin
         NLPModels.grad!(nlp, x, g)
-        H_x = NLPModels.hess(nlp, x)
-        copyto!(H, Symmetric(H_x, :L))
+        copyto!(H, Symmetric(NLPModels.hess(nlp, x), :L))
         return NLPModels.obj(nlp, x)
     end
-    return SecondOrderOptimization.optimize!(f, fdf!, nlp.meta.x0, options; H=H_prototype, kwargs...)
+    return copy(nlp.meta.x0), HessianObjective(f, fdf!; H = H_prototype)
 end
 
-function SecondOrderOptimization.optimize(nlp::AbstractNLPModel, options::OptimizationOptions=OptimizationOptions(); kwargs...)
-    x0 = copy(nlp.meta.x0)
-    f(x) = NLPModels.obj(nlp, x)
-    H_low = NLPModels.hess(nlp, x0)
-    H_prototype = Matrix(Symmetric(H_low, :L))
-    fdf!(g, H, x) = begin
-        NLPModels.grad!(nlp, x, g)
-        H_x = NLPModels.hess(nlp, x)
-        copyto!(H, Symmetric(H_x, :L))
-        return NLPModels.obj(nlp, x)
-    end
-    return SecondOrderOptimization.optimize(f, fdf!, x0, options; H=H_prototype, kwargs...)
-end
-
-function SecondOrderOptimization.optimize!(prob::NLLSModel.Model, options::OptimizationOptions=OptimizationOptions(); unfixed=nothing, numthreads=StaticInt(Threads.nthreads()), kwargs...)
-    f, fdf!, x0, H = NLLSModel.optimvars(prob, unfixed, numthreads; linsolver=options.linsolver)
-    return SecondOrderOptimization.optimize!(f, fdf!, x0, options; H=H, kwargs...)
-end
-
-function SecondOrderOptimization.optimize(prob::NLLSModel.Model, options::OptimizationOptions=OptimizationOptions(); unfixed=nothing, numthreads=StaticInt(Threads.nthreads()), kwargs...)
-    p = deepcopy(prob)
-    return SecondOrderOptimization.optimize!(p, options; unfixed=unfixed, numthreads=numthreads, kwargs...)
+# Run SecondOrderOptimization on a (copied) model and return its OptimizationResult
+soo_run!(m::NLLSModel.Model, opt; reduction=:auto) = SecondOrderOptimization.optimize!(m, opt; reduction=reduction)
+function soo_run!(m, opt; reduction=:auto)
+    x0, obj = soo_objective(m)
+    return SecondOrderOptimization.optimize!(x0, obj, opt)
 end
 
 # -----------------------------------------------------------------------------
@@ -544,57 +520,33 @@ const SOO_CONVERGENCE_MASK = SecondOrderOptimization.SUCCESS_CONVERGENCE_MASK
 const SOO_FAILURE_MASK = SecondOrderOptimization.FAILURE_TERMINATION_MASK
 soo_converged(termination::Int) = ((termination & TERMINATION_GRAD_TOL) != 0) || (((termination & SOO_CONVERGENCE_MASK) != 0) && ((termination & SOO_FAILURE_MASK) == 0))
 
-function optimize_soo(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+function optimize_soo(target; method=:dogleg, reduction=:auto, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
-    actual_method = if method === :lm
-        :levenbergmarquardt
-    elseif method === :lm_dtd || method === :levenbergmarquardt_dtd
-        :levenbergmarquardt_dtd
-    else
-        method
-    end
-    opt = OptimizationOptions(iterator=actual_method, gtol=gtol, dstep=xtol, reldcost=ftol, maxiters=maxiters, maxtime=actual_maxtime; kwargs...)
+    opt = OptimizationOptions(iterator=soo_iterator(method), gtol=gtol, dstep=xtol, reldcost=ftol, maxiters=maxiters, maxtime=actual_maxtime; kwargs...)
     m = target isa ModelDefinition ? target.model : target
-
-    if m isa NLLSModel.Model
-        p = deepcopy(m)
-        t_start = time_ns()
-        timed = @timed SecondOrderOptimization.optimize!(p, opt)
-        t_total = time_ns() - t_start
-        _, res = timed.value
-        converged = soo_converged(res.termination)
-        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
-    elseif m isa BundleAdjustmentModel
-        lsp = as_least_squares_problem(m)
-        return optimize_soo(lsp; method=method, gtol=gtol, xtol=xtol, ftol=ftol, maxiters=maxiters, maxtime=maxtime, time_limit=time_limit, kwargs...)
-    elseif m isa LeastSquaresProblem
-        p = deepcopy(m)
-        t_start = time_ns()
-        timed = @timed SecondOrderOptimization.optimize!(p, opt)
-        t_total = time_ns() - t_start
-        _, res = timed.value
-        converged = soo_converged(res.termination)
-        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
-    elseif m isa AbstractNLPModel
-        p = deepcopy(m)
-        t_start = time_ns()
-        timed = @timed SecondOrderOptimization.optimize!(p, opt)
-        t_total = time_ns() - t_start
-        _, res = timed.value
-        converged = soo_converged(res.termination)
-        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, converged)
-    else
+    if m isa BundleAdjustmentModel
+        m = as_least_squares_problem(m)
+    elseif !(m isa NLLSModel.Model || m isa LeastSquaresProblem || m isa AbstractNLPModel)
         error("Unsupported model type for optimize_soo: $(typeof(m))")
     end
+    p = deepcopy(m)
+    t_start = time_ns()
+    timed = @timed soo_run!(p, opt; reduction=reduction)
+    t_total = time_ns() - t_start
+    res = timed.value
+    return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, soo_converged(res.termination))
 end
 
+soo_iterator(method) = method === :lm ? :levenbergmarquardt :
+    (method === :lm_dtd || method === :levenbergmarquardt_dtd) ? :levenbergmarquardt_dtd : method
+
 """
-    optimize_nlls_soo(target; method=:dogleg, linsolver=:auto, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
+    optimize_nlls_soo(target; method=:dogleg, reduction=:auto, linsolver=:auto, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes an `NLLSModel.Model` directly using `SecondOrderOptimization.jl` from a cold start,
 measuring initialization and linear solver setup alongside outer iterations on an equal footing with all solvers.
 """
-function optimize_nlls_soo(target; method=:dogleg, linsolver=:auto, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+function optimize_nlls_soo(target; method=:dogleg, reduction=:auto, linsolver=:auto, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     if target isa ModelDefinition
         target.reset!()
         prob = target.model
@@ -606,15 +558,8 @@ function optimize_nlls_soo(target; method=:dogleg, linsolver=:auto, gtol=DEFAULT
     end
 
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
-    actual_method = if method === :lm
-        :levenbergmarquardt
-    elseif method === :lm_dtd || method === :levenbergmarquardt_dtd
-        :levenbergmarquardt_dtd
-    else
-        method
-    end
     opt = OptimizationOptions(
-        iterator=actual_method,
+        iterator=soo_iterator(method),
         linsolver=linsolver,
         gtol=gtol,
         dstep=xtol,
@@ -626,9 +571,9 @@ function optimize_nlls_soo(target; method=:dogleg, linsolver=:auto, gtol=DEFAULT
 
     p = deepcopy(prob)
     t_start = time_ns()
-    timed = @timed SecondOrderOptimization.optimize!(p, opt)
+    timed = @timed SecondOrderOptimization.optimize!(p, opt; reduction=reduction)
     t_total = time_ns() - t_start
-    _, res = timed.value
+    res = timed.value
     converged = soo_converged(res.termination)
     return OptimizerResult(
         Float64(t_total),

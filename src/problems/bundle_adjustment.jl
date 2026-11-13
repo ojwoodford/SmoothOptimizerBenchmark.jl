@@ -90,7 +90,7 @@ end
 function _make_nlls_ba_model_definition(bam_model::BundleAdjustmentModel)
     nlls_prob = build_nlls_from_bam(bam_model)
     start_vars = copy(nlls_prob.variables)
-    f, fdf!, _, H_proto = NLLSModel.optimvars(nlls_prob; linsolver=:schur)
+    f, fdf!, _, H_proto = NLLSModel.optimvars(nlls_prob; reduction=:eliminate)
     n_tot_vars = 9 * bam_model.ncams + 3 * bam_model.npnts
     g = zeros(Float64, n_tot_vars)
     H = H_proto === nothing ? zeros(Float64, n_tot_vars, n_tot_vars) : deepcopy(H_proto)
@@ -227,8 +227,8 @@ function create_bundle_adjustment_problem()
             return [m_nlls, m_bam]
         end,
         [
-            OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:levenbergmarquardt_dtd, linsolver=:schur, kwargs...)),
-            OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, linsolver=:schur, kwargs...)),
+            OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:levenbergmarquardt_dtd, reduction=:eliminate, kwargs...)),
+            OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, reduction=:eliminate, kwargs...)),
             OptimizerDefinition("CaNNOLeS", (m; kwargs...) -> optimize_cannoles(m; kwargs...)),
             OptimizerDefinition("JSOSolvers (trunk)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:trunk, kwargs...)),
             OptimizerDefinition("JSOSolvers (tron)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:tron, kwargs...)),
