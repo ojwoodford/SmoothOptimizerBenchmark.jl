@@ -21,3 +21,5 @@ Static = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 ValueDispatch = "c8e4d12a-5f3b-4a9c-8d2e-1f6b3a7c9e04"
 
+[compat]
+NLPModels = "0.21"
