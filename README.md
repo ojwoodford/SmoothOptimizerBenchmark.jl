@@ -42,7 +42,7 @@ Each problem resides in `src/problems/`, scales across $\ge 11$ problem sizes, a
 | **Sparse Multi-dimensional Rosenbrock** (`rosenbrock_sparse.jl`) | Large Sparse | Variables $n \in [100, 75000]$ | `NLLSModel`, `Standalone (Sparse)`, `NLPModels (MathOptNLSModel)` | All standard Euclidean solvers (sparse Hessians / Jacobians) |
 | **Nonlinear 3D Pose Chain** (`pose_chain.jl`) | Large Sparse | Poses $N \in [50, 10000]$ | `NLLSModel (Sparse)` | All standard Euclidean solvers (sparse Hessians / Jacobians) |
 | **1D ODE Boundary Value Problem** (`ode_bvp.jl`) | Large Sparse | Grid Points $N \in [32, 32768]$ | `NLLSModel (Sparse)`, `Standalone (Sparse)`, `NLPModels (MathOptNLSModel)` | All 13 standard Euclidean solvers (`SecondOrderOptimization`, `LeastSquaresOptim`, `Optim`, `JSOSolvers`, `Ipopt`, `MadNLP`, `NonlinearSolve`, `CaNNOLeS`) |
-| **Procrustes on $SO(d)$** (`procrustes.jl`) | Manifold | Matrix dim $d \in [2, 24]$ | `NLLSModel (ManifoldVar)`, `NLLSModel (Specialized)`, `Manifolds` | `SecondOrderOptimization` (LM, Dogleg), `Manopt` (LevenbergMarquardt) |
+| **Procrustes on $SO(d)$** (`procrustes.jl`) | Manifold | Matrix dim $d \in [2, 23]$ | `NLLSModel (ManifoldVar)`, `NLLSModel (Specialized)`, `Manifolds` | `SecondOrderOptimization` (LM, Dogleg), `Manopt` (LevenbergMarquardt) |
 | **Sparse Bundle Adjustment** (`bundle_adjustment.jl`) | Large Sparse | Cameras $N_{\text{cam}} \in [4, 256]$ | `NLLSModel`, `BundleAdjustmentModels` | `SecondOrderOptimization` (LM, Dogleg with Schur solver), `CaNNOLeS`, `JSOSolvers` (trunk, tron), `Ipopt`, `MadNLP` |
 
 ---

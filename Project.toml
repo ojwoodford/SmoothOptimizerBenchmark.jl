@@ -34,6 +34,11 @@ Static = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
+[sources]
+BlockLinearSystems = {path = "/Users/olly/.julia/dev/BlockLinearSystems.jl"}
+NLLSModel = {path = "/Users/olly/.julia/dev/NLLSModel.jl"}
+OptimizationVariableInterface = {path = "/Users/olly/.julia/dev/OptimizationVariableInterface.jl"}
+SecondOrderOptimization = {path = "/Users/olly/.julia/dev/SecondOrderOptimization.jl"}
 
 [compat]
 BundleAdjustmentModels = "0.4.1"

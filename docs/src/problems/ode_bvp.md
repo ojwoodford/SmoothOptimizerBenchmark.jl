@@ -33,6 +33,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 4. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Grid Points N = `32768`, **`NLLSModel (Sparse)`** achieves the fastest Cost + Linear System evaluation at **568.79 μs** (6.5 KiB allocated).
-- **Top Converged Optimizer**: At Grid Points N = `32768` (3/13 solvers converged), **`SecondOrderOptimization (Dogleg)`** is fastest at **17.73 ms** (2 iterations, final cost `4.70e+00`).
+- **Model Efficiency**: At Grid Points N = `32768`, **`NLLSModel (Sparse)`** achieves the fastest Cost + Linear System evaluation at **302.04 μs** (464 B allocated).
+- **Top Converged Optimizer**: At Grid Points N = `32768` (3/13 solvers converged), **`SecondOrderOptimization (Dogleg)`** is fastest at **40.32 ms** (2 iterations, final cost `4.70e+00`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

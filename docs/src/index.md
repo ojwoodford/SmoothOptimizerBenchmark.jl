@@ -41,7 +41,7 @@ To separate modeling overhead from solver algorithm efficiency, every problem is
 | [Nonlinear 3D Pose Chain](problems/pose_chain.md) | `large_sparse` | Poses N | 11 sizes (50 … 10000) | `NLLSModel (Sparse)` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
 | [1D ODE Boundary Value Problem](problems/ode_bvp.md) | `large_sparse` | Grid Points N | 11 sizes (32 … 32768) | `Standalone (Sparse)` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
 | [Sparse Bundle Adjustment](problems/bundle_adjustment.md) | `large_sparse` | Cameras Ncam | 12 sizes (4 … 256) | `BundleAdjustmentModels` | SecondOrderOptimization, JSOSolvers, Ipopt, MadNLP, CaNNOLeS |
-| [Procrustes on SO(d)](problems/procrustes.md) | `manifold` | Matrix Dimension d | 12 sizes (2 … 24) | `Manifolds` | SecondOrderOptimization, Manopt |
+| [Procrustes on SO(d)](problems/procrustes.md) | `manifold` | Matrix Dimension d | 12 sizes (2 … 23) | `Manifolds` | SecondOrderOptimization, Manopt |
 
 ---
 

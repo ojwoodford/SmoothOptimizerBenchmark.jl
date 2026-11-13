@@ -2,7 +2,7 @@
 
 - **Category**: `manifold`
 - **Scaling Metric**: Matrix Dimension d
-- **Problem Sizes Evaluated**: 2, 3, 4, 5, 6, 8, 10, 12, 15, 18, 21, 24 (12 sizes)
+- **Problem Sizes Evaluated**: 2, 3, 4, 5, 6, 8, 10, 12, 15, 18, 21, 23 (12 sizes)
 - **Standard Baseline Model for Solvers**: `Manifolds`
 
 ---
@@ -33,6 +33,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 4. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Matrix Dimension d = `24`, **`Manifolds`** achieves the fastest Cost + Linear System evaluation at **31.87 ms** (32 B allocated).
-- **Top Converged Optimizer**: At Matrix Dimension d = `24` (2/3 solvers converged), **`SecondOrderOptimization (LM)`** is fastest at **141.69 ms** (3 iterations, final cost `4.64e-20`).
+- **Model Efficiency**: At Matrix Dimension d = `23`, **`Manifolds`** achieves the fastest Cost + Linear System evaluation at **17.19 ms** (32 B allocated).
+- **Top Converged Optimizer**: At Matrix Dimension d = `23` (3/3 solvers converged), **`SecondOrderOptimization (Dogleg)`** is fastest at **94.00 ms** (3 iterations, final cost `2.34e-21`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

@@ -259,7 +259,7 @@ function create_procrustes_problem()
     ProblemDefinition(
         "Procrustes on SO(d)",
         :manifold,
-        Any[2, 3, 4, 5, 6, 8, 10, 12, 15, 18, 21, 24],
+        Any[2, 3, 4, 5, 6, 8, 10, 12, 15, 18, 21, 23],  # d <= 23: NLLSModel caps variables at 255 dimensions (dim SO(d) = d(d-1)/2)
         d -> begin
             A, B, M, _ = generate_procrustes_experiment(d)
             n = size(A, 2)

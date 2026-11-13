@@ -539,9 +539,10 @@ end
 Optimizes a model using `SecondOrderOptimization.jl`.
 Supported methods: `:dogleg`, `:lm` / `:levenbergmarquardt`.
 """
-const SOO_CONVERGENCE_MASK = (1 << 2) | (1 << 3) | (1 << 6) | (1 << 12)
-const SOO_FAILURE_MASK = (1 << 0) | (1 << 1) | (1 << 4) | (1 << 5) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 10) | (1 << 11)
-soo_converged(termination::Int) = ((termination & (1 << 12)) != 0) || (((termination & SOO_CONVERGENCE_MASK) != 0) && ((termination & SOO_FAILURE_MASK) == 0))
+# Use SecondOrderOptimization's own termination masks so the bit layout cannot drift out of sync
+const SOO_CONVERGENCE_MASK = SecondOrderOptimization.SUCCESS_CONVERGENCE_MASK
+const SOO_FAILURE_MASK = SecondOrderOptimization.FAILURE_TERMINATION_MASK
+soo_converged(termination::Int) = ((termination & TERMINATION_GRAD_TOL) != 0) || (((termination & SOO_CONVERGENCE_MASK) != 0) && ((termination & SOO_FAILURE_MASK) == 0))
 
 function optimize_soo(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
@@ -1061,12 +1062,42 @@ function optimize_ipopt(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, ma
 end
 
 """
+    UnconstrainedHessView(nlp)
+
+Forwards an unconstrained `AbstractNLPModel` to MadNLP, routing the Lagrangian Hessian
+`hess_coord!(nlp, x, y, vals)` (always called by MadNLP) to the objective-only Hessian.
+Works around NLPModelsJuMP v0.13.6, whose `hess_coord!(::MathOptNLSModel, x, y, vals)`
+accesses a non-existent `nls.nnln` field whenever the residuals are nonlinear.
+"""
+struct UnconstrainedHessView{T, S, M <: AbstractNLPModel{T, S}} <: AbstractNLPModel{T, S}
+    inner::M
+    meta::NLPModels.NLPModelMeta{T, S}
+    counters::NLPModels.Counters
+end
+UnconstrainedHessView(nlp::AbstractNLPModel) = UnconstrainedHessView(nlp, nlp.meta, NLPModels.Counters())
+
+NLPModels.obj(v::UnconstrainedHessView, x::AbstractVector) = NLPModels.obj(v.inner, x)
+NLPModels.grad!(v::UnconstrainedHessView, x::AbstractVector, g::AbstractVector) = NLPModels.grad!(v.inner, x, g)
+NLPModels.cons!(v::UnconstrainedHessView, x::AbstractVector, c::AbstractVector) = c
+NLPModels.jac_structure!(v::UnconstrainedHessView, rows::AbstractVector{<:Integer}, cols::AbstractVector{<:Integer}) = (rows, cols)
+NLPModels.jac_coord!(v::UnconstrainedHessView, x::AbstractVector, vals::AbstractVector) = vals
+NLPModels.hess_structure!(v::UnconstrainedHessView, rows::AbstractVector{<:Integer}, cols::AbstractVector{<:Integer}) =
+    NLPModels.hess_structure!(v.inner, rows, cols)
+NLPModels.hess_coord!(v::UnconstrainedHessView, x::AbstractVector, vals::AbstractVector; obj_weight::Real=one(eltype(x))) =
+    NLPModels.hess_coord!(v.inner, x, vals; obj_weight=Float64(obj_weight))
+NLPModels.hess_coord!(v::UnconstrainedHessView, x::AbstractVector, y::AbstractVector, vals::AbstractVector; obj_weight::Real=one(eltype(x))) =
+    NLPModels.hess_coord!(v.inner, x, vals; obj_weight=Float64(obj_weight))
+
+"""
     optimize_madnlp(model; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `MadNLP.jl`.
 """
 function optimize_madnlp(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     nlp = as_nlpmodel(target)
+    if nlp isa NLPModelsJuMP.MathOptNLSModel && nlp.meta.ncon == 0
+        nlp = UnconstrainedHessView(nlp)
+    end
     NLPModels.reset!(nlp)
     start_c = NLPModels.obj(nlp, nlp.meta.x0)
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
@@ -1112,7 +1143,8 @@ function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEF
         start_c = 0.5 * sum(abs2, r_init)
 
         f_cb_nls!(du, u, p) = cb.res!(du, u)
-        jac_cb_nls!(J, u, p) = cb.jac!(J, u)
+        njac = Ref(0)
+        jac_cb_nls!(J, u, p) = (njac[] += 1; cb.jac!(J, u))
 
         nl_func = NonlinearFunction(f_cb_nls!; jac=jac_cb_nls!, resid_prototype=zeros(Float64, m_len), jac_prototype=copy(cb.J0))
         prob = NonlinearLeastSquaresProblem(nl_func, x0)
@@ -1132,7 +1164,8 @@ function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEF
 
         final_c = 0.5 * sum(abs2, sol.resid)
         converged = NonlinearSolve.SciMLBase.successful_retcode(sol.retcode)
-        iters = sol.stats.nsteps
+        # Simple* solvers do not populate `stats`; fall back to Jacobian evaluations (one per iteration)
+        iters = sol.stats === nothing ? njac[] : sol.stats.nsteps
 
         return OptimizerResult(
             Float64(t_total),
@@ -1165,7 +1198,8 @@ function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEF
     start_c = 0.5 * sum(abs2, r_init)
 
     f_lsp_nls!(du, u, p) = lsp.f!(du, u)
-    jac_lsp_nls!(J, u, p) = lsp.g!(J, u)
+    njac = Ref(0)
+    jac_lsp_nls!(J, u, p) = (njac[] += 1; lsp.g!(J, u))
 
     nl_func = NonlinearFunction(f_lsp_nls!; jac=jac_lsp_nls!, resid_prototype=zeros(Float64, m_len), jac_prototype=deepcopy(lsp.J))
     prob = NonlinearLeastSquaresProblem(nl_func, x0)
@@ -1185,7 +1219,8 @@ function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEF
 
     final_c = 0.5 * sum(abs2, sol.resid)
     converged = NonlinearSolve.SciMLBase.successful_retcode(sol.retcode)
-    iters = sol.stats.nsteps
+    # Simple* solvers do not populate `stats`; fall back to Jacobian evaluations (one per iteration)
+    iters = sol.stats === nothing ? njac[] : sol.stats.nsteps
 
     return OptimizerResult(
         Float64(t_total),

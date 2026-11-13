@@ -33,6 +33,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 4. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Cameras Ncam = `256`, **`NLLSModel`** achieves the fastest Cost + Linear System evaluation at **20.15 ms** (76.5 MiB allocated).
-- **Top Converged Optimizer**: At Cameras Ncam = `256` (3/7 solvers converged), **`SecondOrderOptimization (LM)`** is fastest at **1.04 s** (1 iterations, final cost `4.73e+06`).
+- **Model Efficiency**: At Cameras Ncam = `256`, **`NLLSModel`** achieves the fastest Cost + Linear System evaluation at **10.21 ms** (76.5 MiB allocated).
+- **Top Converged Optimizer**: At Cameras Ncam = `256` (4/7 solvers converged), **`SecondOrderOptimization (LM)`** is fastest at **2.41 s** (18 iterations, final cost `3.07e-16`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

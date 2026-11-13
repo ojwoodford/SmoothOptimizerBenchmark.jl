@@ -202,6 +202,7 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
         try
             init_res = opt.optimize(opt_model; time_limit=DEFAULT_MAXTIME)
         catch err
+            @warn "Optimizer $(opt.name) threw on model $(opt_model.name)" exception=(err, catch_backtrace()) maxlog=3
             opt_model.reset!()
             res = OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
             results[opt.name] = res
