@@ -90,7 +90,7 @@ end
 function _make_nlls_ba_model_definition(bam_model::BundleAdjustmentModel)
     nlls_prob = build_nlls_from_bam(bam_model)
     start_vars = copy(nlls_prob.variables)
-    f, fdf!, _, H_proto = NLLSModel.optimvars(nlls_prob; reduction=:eliminate)
+    f, fdf!, _, H_proto = NLLSModel.optimvars(nlls_prob, nothing, benchmark_numthreads(); reduction=:eliminate)
     n_tot_vars = 9 * bam_model.ncams + 3 * bam_model.npnts
     g = zeros(Float64, n_tot_vars)
     H = H_proto === nothing ? zeros(Float64, n_tot_vars, n_tot_vars) : deepcopy(H_proto)

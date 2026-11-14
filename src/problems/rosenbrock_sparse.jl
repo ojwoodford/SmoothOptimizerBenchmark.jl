@@ -88,13 +88,14 @@ function create_rosenbrock_sparse_problem()
 
             # Model 1: NLLSModel Problem
             nlls_prob = build_sparse_nlls(n)
-            f_nlls, fdf_nlls!, x0_nlls, H_proto_nlls = NLLSModel.optimvars(nlls_prob)
+            nt = benchmark_numthreads()
+            f_nlls, fdf_nlls!, x0_nlls, H_proto_nlls = NLLSModel.optimvars(nlls_prob, nothing, nt)
             g_nlls = zeros(Float64, n)
             H_buf_nlls = H_proto_nlls === nothing ? zeros(Float64, n, n) : deepcopy(H_proto_nlls)
             m_nlls = ModelDefinition(
                 "NLLSModel",
                 nlls_prob,
-                () -> NLLSModel.cost(nlls_prob),
+                () -> NLLSModel.cost(nlls_prob, nt),
                 () -> (fdf_nlls!(g_nlls, H_buf_nlls, x0_nlls), H_buf_nlls),
                 () -> copyto!(nlls_prob.variables, x0)
             )

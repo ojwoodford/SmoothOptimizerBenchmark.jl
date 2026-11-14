@@ -37,6 +37,12 @@ function parse_size_val(s::AbstractString)
     return String(s)
 end
 
+# The thread counts in force, for the header of a results file (M17)
+function threads_line()
+    t = benchmark_threads()
+    return "- **Threads**: NLLSModel numthreads=$(t.numthreads), Julia threads=$(t.julia_threads), BLAS threads=$(t.blas_threads)"
+end
+
 """
     init_problem_markdown(filepath::String, prob_name::String, category::Symbol, size_metric_name::String, target_model_name::String) -> String
 
@@ -55,6 +61,7 @@ function init_problem_markdown(filepath::String, prob_name::String, category::Sy
         println(io, "- **Host CPU**: $(Sys.CPU_NAME) ($(Sys.CPU_THREADS) cores)")
         println(io, "- **OS**: $(Sys.KERNEL) ($(Sys.MACHINE))")
         println(io, "- **Julia Version**: $(VERSION)")
+        println(io, threads_line())
         println(io, "- **Git Commit**: $(get_git_commit())")
         println(io)
         println(io, "---")

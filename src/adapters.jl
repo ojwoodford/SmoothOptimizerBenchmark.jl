@@ -499,8 +499,9 @@ function soo_objective(nlp::AbstractNLPModel)
 end
 
 # Run SecondOrderOptimization on a (copied) model and return its OptimizationResult
-soo_run!(m::NLLSModel.Model, opt; reduction=:auto) = SecondOrderOptimization.optimize!(m, opt; reduction=reduction)
-function soo_run!(m, opt; reduction=:auto)
+soo_run!(m::NLLSModel.Model, opt; reduction=:auto, numthreads=benchmark_numthreads()) =
+    SecondOrderOptimization.optimize!(m, opt; reduction=reduction, numthreads=static(numthreads))
+function soo_run!(m, opt; reduction=:auto, numthreads=nothing)
     x0, obj = soo_objective(m)
     return SecondOrderOptimization.optimize!(x0, obj, opt)
 end
@@ -541,7 +542,7 @@ end
 Optimizes a model using `SecondOrderOptimization.jl`.
 Supported methods: `:dogleg`, `:lm` / `:levenbergmarquardt`.
 """
-function optimize_soo(target; method=:dogleg, reduction=:auto, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+function optimize_soo(target; method=:dogleg, reduction=:auto, numthreads=benchmark_numthreads(), gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
     opt = OptimizationOptions(iterator=soo_iterator(method), gtol=gtol, dstep=xtol, reldcost=ftol, maxiters=maxiters, maxtime=actual_maxtime; kwargs...)
     m = target isa ModelDefinition ? target.model : target
@@ -552,7 +553,7 @@ function optimize_soo(target; method=:dogleg, reduction=:auto, gtol=DEFAULT_GTOL
     end
     p = deepcopy(m)
     t_start = time_ns()
-    timed = @timed soo_run!(p, opt; reduction=reduction)
+    timed = @timed soo_run!(p, opt; reduction=reduction, numthreads=numthreads)
     t_total = time_ns() - t_start
     return soo_result(t_total, timed, timed.value)
 end
@@ -561,12 +562,15 @@ soo_iterator(method) = method === :lm ? :levenbergmarquardt :
     (method === :lm_dtd || method === :levenbergmarquardt_dtd) ? :levenbergmarquardt_dtd : method
 
 """
-    optimize_nlls_soo(target; method=:dogleg, reduction=:auto, linsolver=:auto, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
+    optimize_nlls_soo(target; method=:dogleg, reduction=:auto, linsolver=:auto, numthreads=benchmark_numthreads(), min_work=nothing, min_work_cost=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes an `NLLSModel.Model` directly using `SecondOrderOptimization.jl` from a cold start,
 measuring initialization and linear solver setup alongside outer iterations on an equal footing with all solvers.
+
+`reduction`, `numthreads`, `min_work` and `min_work_cost` are forwarded to NLLSModel's `optimize!(model, options; ...)`
+(`nothing`: NLLSModel's default threshold); every other keyword goes to `OptimizationOptions`.
 """
-function optimize_nlls_soo(target; method=:dogleg, reduction=:auto, linsolver=:auto, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+function optimize_nlls_soo(target; method=:dogleg, reduction=:auto, linsolver=:auto, numthreads=benchmark_numthreads(), min_work=nothing, min_work_cost=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     if target isa ModelDefinition
         target.reset!()
         prob = target.model
@@ -589,9 +593,13 @@ function optimize_nlls_soo(target; method=:dogleg, reduction=:auto, linsolver=:a
         kwargs...
     )
 
+    # NLLSModel's own defaults apply to the thresholds not given here
+    model_kwargs = (; reduction, numthreads=static(numthreads),
+        (min_work === nothing ? (;) : (; min_work))...,
+        (min_work_cost === nothing ? (;) : (; min_work_cost))...)
     p = deepcopy(prob)
     t_start = time_ns()
-    timed = @timed SecondOrderOptimization.optimize!(p, opt; reduction=reduction)
+    timed = @timed SecondOrderOptimization.optimize!(p, opt; model_kwargs...)
     t_total = time_ns() - t_start
     return soo_result(t_total, timed, timed.value)
 end
@@ -776,7 +784,7 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
 
     elseif m isa NLLSModel.Model
         p = deepcopy(m)
-        f, fdf!, x0, H_proto = NLLSModel.optimvars(p)
+        f, fdf!, x0, H_proto = NLLSModel.optimvars(p, nothing, benchmark_numthreads())
         if !(x0 isa Vector{Float64})
             cb = NLLSModel.nls_callbacks(p)
             m_len = cb.nequ

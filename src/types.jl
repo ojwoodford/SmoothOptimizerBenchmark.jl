@@ -3,11 +3,51 @@
 export ModelEvaluationResult, ModelDefinition, OptimizerResult, OptimizerDefinition, ProblemDefinition
 export SingleSizeBenchmarkResult, ProblemScalingBenchmarkResult
 export OPTIMIZER_STATUSES, skipped_result, error_result
+export set_benchmark_threads!, benchmark_threads, benchmark_numthreads
 export DEFAULT_DOCS_DIR, DEFAULT_DATA_DIR, DEFAULT_PLOTS_DIR
 
 const DEFAULT_DOCS_DIR = normpath(joinpath(@__DIR__, "..", "docs", "src"))
 const DEFAULT_DATA_DIR = joinpath(DEFAULT_DOCS_DIR, "data")
 const DEFAULT_PLOTS_DIR = joinpath(DEFAULT_DOCS_DIR, "assets", "plots")
+
+# -----------------------------------------------------------------------------
+# Thread counts (M17)
+# -----------------------------------------------------------------------------
+# The number of threads NLLSModel may use, set by the harness before any model is built, so that a
+# table does not depend on how Julia happened to be started. 0 means "not set": use Threads.nthreads().
+const BENCHMARK_NUMTHREADS = Ref(0)
+
+"""
+    benchmark_numthreads() -> StaticInt
+
+The thread count passed to NLLSModel (`optimvars`, `cost`, `optimize!`) by the models and adapters:
+the one set by [`set_benchmark_threads!`](@ref), or `Threads.nthreads()` if none was set.
+"""
+benchmark_numthreads() = static(BENCHMARK_NUMTHREADS[] > 0 ? BENCHMARK_NUMTHREADS[] : Threads.nthreads())
+
+"""
+    set_benchmark_threads!(; numthreads=Threads.nthreads(), blas_threads=numthreads) -> NamedTuple
+
+Fixes the thread counts for a benchmark run: `numthreads` for NLLSModel's threaded evaluation (at most
+`Threads.nthreads()`), and `blas_threads` for BLAS, which is set with `BLAS.set_num_threads`. Returns the
+counts in force, `(; numthreads, julia_threads, blas_threads)`, for the results file.
+"""
+function set_benchmark_threads!(; numthreads::Integer=Threads.nthreads(), blas_threads::Integer=numthreads)
+    1 <= numthreads <= Threads.nthreads() || throw(ArgumentError(
+        "numthreads = $numthreads, but Julia was started with $(Threads.nthreads()) threads; start Julia with `-t $numthreads` or ask for fewer"))
+    blas_threads >= 1 || throw(ArgumentError("blas_threads = $blas_threads must be at least 1"))
+    BENCHMARK_NUMTHREADS[] = Int(numthreads)
+    BLAS.set_num_threads(Int(blas_threads))
+    return benchmark_threads()
+end
+
+"""
+    benchmark_threads() -> NamedTuple
+
+The thread counts in force: `numthreads` (NLLSModel), `julia_threads` (`Threads.nthreads()`) and
+`blas_threads` (`BLAS.get_num_threads()`).
+"""
+benchmark_threads() = (; numthreads=Int(dynamic(benchmark_numthreads())), julia_threads=Threads.nthreads(), blas_threads=BLAS.get_num_threads())
 
 """
     ModelEvaluationResult

@@ -302,14 +302,15 @@ function create_robust_procrustes_problem()
             for i in 1:n
                 addcost!(nlls_ovi, ProcrustesOVIResidual(A[:, i], B[:, i]))
             end
-            f_ovi, fdf_ovi!, _, _ = NLLSModel.optimvars(nlls_ovi)
+            nt = benchmark_numthreads()
+            f_ovi, fdf_ovi!, _, _ = NLLSModel.optimvars(nlls_ovi, nothing, nt)
             nv_ovi = (d * (d - 1)) ÷ 2
             g_ovi = zeros(Float64, nv_ovi)
             H_ovi = zeros(Float64, nv_ovi, nv_ovi)
             m_ovi = ModelDefinition(
                 "NLLSModel (ManifoldVar)",
                 nlls_ovi,
-                () -> NLLSModel.cost(nlls_ovi),
+                () -> NLLSModel.cost(nlls_ovi, nt),
                 () -> (fdf_ovi!(g_ovi, H_ovi, nlls_ovi.variables[1]), H_ovi),
                 () -> (nlls_ovi.variables[1] = ManifoldVar(copy(p0), M))
             )
