@@ -17,6 +17,7 @@ using BundleAdjustmentModels
 
 export optimize_soo, optimize_nlls_soo, optimize_least_squares, optimize_optim, optimize_jsosolvers, optimize_ipopt
 export optimize_madnlp, optimize_nonlinearsolve, optimize_cannoles
+export soo_tall_optimizer, soo_objective_tall
 export get_standard_optimizers, get_tier1_optimizers, get_tier2_optimizers, as_nlpmodel, LeastSquaresNLPModel, reset_nlp_cache!
 export as_nlsmodel, LeastSquaresNLSModel
 export TimeoutException
@@ -486,6 +487,32 @@ function soo_objective(lsp::LeastSquaresProblem)
     end
 end
 
+"""
+    soo_objective_tall(lsp::LeastSquaresProblem) -> (x0, JacobianObjective)
+
+The residual-and-Jacobian form of a dense least-squares problem, solved by SecondOrderOptimization
+through QR of `J`, with no `JᵀJ`: the like-for-like comparison with LeastSquaresOptim's QR.
+`resjac!` evaluates `lsp.f!` and `lsp.g!` straight into the optimizer's `r` and `J`. The optimizer
+neither zeroes `r` and `J` nor writes to them, so this relies on `lsp.f!` setting every residual and
+`lsp.g!` every entry of the dense `J` on every call, which is LeastSquaresOptim's own contract for a
+dense Jacobian (and what its ForwardDiff Jacobian does).
+"""
+function soo_objective_tall(lsp::LeastSquaresProblem)
+    lsp.J isa Matrix{Float64} || throw(ArgumentError("soo_objective_tall needs a dense Matrix{Float64} Jacobian; got $(typeof(lsp.J))"))
+    m = length(lsp.y)
+    r_buffer = zeros(Float64, m)
+    f(x) = begin
+        lsp.f!(r_buffer, x)
+        return 0.5 * sum(abs2, r_buffer)
+    end
+    resjac!(r, J, x) = begin
+        lsp.f!(r, x)
+        lsp.g!(J, x)
+        return 0.5 * sum(abs2, r)
+    end
+    return lsp.x, JacobianObjective(f, resjac!, zeros(Float64, m, length(lsp.x)))
+end
+
 function soo_objective(nlp::AbstractNLPModel)
     nlp.meta.ncon == 0 || error("Constrained NLPModels are not supported by SecondOrderOptimization")
     f(x) = NLPModels.obj(nlp, x)
@@ -499,12 +526,27 @@ function soo_objective(nlp::AbstractNLPModel)
 end
 
 # Run SecondOrderOptimization on a (copied) model and return its OptimizationResult
-soo_run!(m::NLLSModel.Model, opt; reduction=:auto, numthreads=benchmark_numthreads()) =
-    SecondOrderOptimization.optimize!(m, opt; reduction=reduction, numthreads=static(numthreads))
-function soo_run!(m, opt; reduction=:auto, numthreads=nothing)
-    x0, obj = soo_objective(m)
-    return SecondOrderOptimization.optimize!(x0, obj, opt)
+# Run SecondOrderOptimization on a (copied) model; returns the OptimizationResult and what holds the solution
+function soo_run!(m::NLLSModel.Model, opt; formulation=:normal, reduction=:auto, numthreads=benchmark_numthreads())
+    res = SecondOrderOptimization.optimize!(m, opt; formulation, reduction, numthreads=static(numthreads))
+    return res, m
 end
+function soo_run!(m, opt; formulation=:normal, reduction=:auto, numthreads=nothing)
+    x0, obj = formulation === :tall ? soo_objective_tall(m) : soo_objective(m)
+    return SecondOrderOptimization.optimize!(x0, obj, opt), x0
+end
+
+# The solution as a flat Vector{Float64}: an NLLSModel holds it in its variables (written back by optimize!)
+soo_solution(x::AbstractVector) = Vector{Float64}(x)
+soo_solution(m::NLLSModel.Model) = reduce(vcat, [v isa Number ? [Float64(v)] : collect(Float64, vec(v)) for v in m.variables]; init=Float64[])
+
+# Copy the solution into a caller's buffer (outside the timed region)
+store_solution!(::Nothing, x) = nothing
+store_solution!(out::Vector{Float64}, x) = (resize!(out, length(x)); copyto!(out, x); nothing)
+
+# A tall run that NLLSModel or SecondOrderOptimization reports as unavailable for this model or size
+# (sparse or too large for a dense Jacobian, elimination, unsupported costs) is a skip, not a failure
+tall_unavailable(err) = err isa ArgumentError && (startswith(err.msg, "formulation = :tall") || startswith(err.msg, "soo_objective_tall"))
 
 # -----------------------------------------------------------------------------
 # Uniform Optimizer Dispatchers
@@ -542,7 +584,7 @@ end
 Optimizes a model using `SecondOrderOptimization.jl`.
 Supported methods: `:dogleg`, `:lm` / `:levenbergmarquardt`.
 """
-function optimize_soo(target; method=:dogleg, reduction=:auto, numthreads=benchmark_numthreads(), gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+function optimize_soo(target; method=:dogleg, formulation=:normal, reduction=:auto, numthreads=benchmark_numthreads(), solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
     opt = OptimizationOptions(iterator=soo_iterator(method), gtol=gtol, dstep=xtol, reldcost=ftol, maxiters=maxiters, maxtime=actual_maxtime; kwargs...)
     m = target isa ModelDefinition ? target.model : target
@@ -551,26 +593,42 @@ function optimize_soo(target; method=:dogleg, reduction=:auto, numthreads=benchm
     elseif !(m isa NLLSModel.Model || m isa LeastSquaresProblem || m isa AbstractNLPModel)
         error("Unsupported model type for optimize_soo: $(typeof(m))")
     end
+    formulation in (:normal, :tall) || throw(ArgumentError("Unknown formulation $(repr(formulation)); expected :normal or :tall"))
+    if formulation === :tall && m isa AbstractNLPModel
+        return skipped_result("formulation = :tall needs residuals and a Jacobian; this model is an NLPModel")
+    end
+    if formulation === :tall && m isa LeastSquaresProblem && !(m.J isa Matrix{Float64})
+        return skipped_result("formulation = :tall needs a dense Jacobian; this one is $(nameof(typeof(m.J)))")
+    end
     p = deepcopy(m)
     t_start = time_ns()
-    timed = @timed soo_run!(p, opt; reduction=reduction, numthreads=numthreads)
+    timed = try
+        @timed soo_run!(p, opt; formulation, reduction, numthreads)
+    catch err
+        formulation === :tall && tall_unavailable(err) && return skipped_result(err.msg)
+        rethrow()
+    end
     t_total = time_ns() - t_start
-    return soo_result(t_total, timed, timed.value)
+    res, holder = timed.value
+    solution === nothing || store_solution!(solution, soo_solution(holder))
+    return soo_result(t_total, timed, res)
 end
 
 soo_iterator(method) = method === :lm ? :levenbergmarquardt :
     (method === :lm_dtd || method === :levenbergmarquardt_dtd) ? :levenbergmarquardt_dtd : method
 
 """
-    optimize_nlls_soo(target; method=:dogleg, reduction=:auto, linsolver=:auto, numthreads=benchmark_numthreads(), min_work=nothing, min_work_cost=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
+    optimize_nlls_soo(target; method=:dogleg, formulation=:normal, reduction=:auto, linsolver=:auto, numthreads=benchmark_numthreads(), min_work=nothing, min_work_cost=nothing, max_dense_bytes=nothing, solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes an `NLLSModel.Model` directly using `SecondOrderOptimization.jl` from a cold start,
 measuring initialization and linear solver setup alongside outer iterations on an equal footing with all solvers.
 
-`reduction`, `numthreads`, `min_work` and `min_work_cost` are forwarded to NLLSModel's `optimize!(model, options; ...)`
-(`nothing`: NLLSModel's default threshold); every other keyword goes to `OptimizationOptions`.
+`formulation`, `reduction`, `numthreads`, `min_work`, `min_work_cost` and `max_dense_bytes` are forwarded to NLLSModel's `optimize!(model, options; ...)`
+(`nothing`: NLLSModel's default threshold); every other keyword goes to `OptimizationOptions`. With `formulation = :tall`, a model
+or size the tall path does not support (a Jacobian too large to hold dense, unsupported costs) gives a `:skipped` row.
+If `solution` is a `Vector{Float64}`, the solution is copied into it after the timed run.
 """
-function optimize_nlls_soo(target; method=:dogleg, reduction=:auto, linsolver=:auto, numthreads=benchmark_numthreads(), min_work=nothing, min_work_cost=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+function optimize_nlls_soo(target; method=:dogleg, formulation=:normal, reduction=:auto, linsolver=:auto, numthreads=benchmark_numthreads(), min_work=nothing, min_work_cost=nothing, max_dense_bytes=nothing, solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     if target isa ModelDefinition
         target.reset!()
         prob = target.model
@@ -594,13 +652,20 @@ function optimize_nlls_soo(target; method=:dogleg, reduction=:auto, linsolver=:a
     )
 
     # NLLSModel's own defaults apply to the thresholds not given here
-    model_kwargs = (; reduction, numthreads=static(numthreads),
+    model_kwargs = (; formulation, reduction, numthreads=static(numthreads),
         (min_work === nothing ? (;) : (; min_work))...,
-        (min_work_cost === nothing ? (;) : (; min_work_cost))...)
+        (min_work_cost === nothing ? (;) : (; min_work_cost))...,
+        (max_dense_bytes === nothing ? (;) : (; max_dense_bytes))...)
     p = deepcopy(prob)
     t_start = time_ns()
-    timed = @timed SecondOrderOptimization.optimize!(p, opt; model_kwargs...)
+    timed = try
+        @timed SecondOrderOptimization.optimize!(p, opt; model_kwargs...)
+    catch err
+        formulation === :tall && tall_unavailable(err) && return skipped_result(err.msg)
+        rethrow()
+    end
     t_total = time_ns() - t_start
+    solution === nothing || store_solution!(solution, soo_solution(p))
     return soo_result(t_total, timed, timed.value)
 end
 
@@ -610,14 +675,14 @@ end
 Optimizes a model using `LeastSquaresOptim.jl`.
 Supported methods: `:dogleg`, `:lm` / `:levenbergmarquardt`.
 """
-function optimize_least_squares(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+function optimize_least_squares(target; method=:dogleg, solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
     lso_method = (method === :lm || method === :levenbergmarquardt) ? LeastSquaresOptim.LevenbergMarquardt() : LeastSquaresOptim.Dogleg()
 
     if m isa NLLSModel.Model
         cb = NLLSModel.nls_callbacks(m)
         lsp = LeastSquaresProblem(x=copy(cb.x0), y=cb.r0, f! = cb.res!, g! = cb.jac!, J=copy(cb.J0))
-        return optimize_least_squares(lsp; method=method, gtol=gtol, xtol=xtol, ftol=ftol, maxiters=maxiters, maxtime=maxtime, time_limit=time_limit, kwargs...)
+        return optimize_least_squares(lsp; method=method, solution=solution, gtol=gtol, xtol=xtol, ftol=ftol, maxiters=maxiters, maxtime=maxtime, time_limit=time_limit, kwargs...)
     end
 
     if !(m isa LeastSquaresProblem)
@@ -688,6 +753,7 @@ function optimize_least_squares(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=
 
     final_c = timed_out[] ? 0.5 * sum(abs2, last_r) : res.ssr * 0.5
     converged = timed_out[] ? false : res.converged
+    timed_out[] || store_solution!(solution, res.minimizer)
     return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.iterations, start_c, final_c, converged;
         timed_out=timed_out[], message=timed_out[] ? "time limit" : converged ? "converged" : "not converged")
 end
@@ -1194,15 +1260,25 @@ end
 # -----------------------------------------------------------------------------
 
 """
-    get_standard_optimizers() -> Vector{OptimizerDefinition}
+    soo_tall_optimizer() -> OptimizerDefinition
+
+"SecondOrderOptimization (LM, tall)": Levenberg–Marquardt on the residual-and-Jacobian form (QR of a dense `J`), through
+`formulation = :tall`. For the dense problems; a size the tall path does not support is reported as `:skipped`.
+"""
+soo_tall_optimizer() = OptimizerDefinition("SecondOrderOptimization (LM, tall)", (m; kwargs...) -> optimize_soo(m; method=:lm, formulation=:tall, kwargs...))
+
+"""
+    get_standard_optimizers(; tall=false) -> Vector{OptimizerDefinition}
 
 Returns standard unified optimizer definitions for Euclidean problems on the standardized baseline model (e.g. `LeastSquaresProblem`).
-Includes all solver families configured with universal stopping criteria.
+Includes all solver families configured with universal stopping criteria. `tall = true` adds the
+"SecondOrderOptimization (LM, tall)" row ([`soo_tall_optimizer`](@ref)), for the dense problems.
 """
-function get_standard_optimizers()
+function get_standard_optimizers(; tall::Bool=false)
     return OptimizerDefinition[
         OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),
         OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)),
+        (tall ? [soo_tall_optimizer()] : OptimizerDefinition[])...,
         OptimizerDefinition("LeastSquaresOptim (Dogleg)", (m; kwargs...) -> optimize_least_squares(m; method=:dogleg, kwargs...)),
         OptimizerDefinition("LeastSquaresOptim (LM)", (m; kwargs...) -> optimize_least_squares(m; method=:lm, kwargs...)),
         OptimizerDefinition("Optim (NewtonTrustRegion)", (m; kwargs...) -> optimize_optim(m; method=:newton_trust_region, kwargs...)),

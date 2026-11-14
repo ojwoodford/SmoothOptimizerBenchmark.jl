@@ -374,6 +374,7 @@ function create_robust_procrustes_problem()
         end,
         [
             OptimizerDefinition("SecondOrderOptimization (LM)", (model_def; kwargs...) -> optimize_soo(model_def; method=:lm, kwargs...)),
+            soo_tall_optimizer(),
             OptimizerDefinition("SecondOrderOptimization (Dogleg)", (model_def; kwargs...) -> optimize_soo(model_def; method=:dogleg, kwargs...)),
             OptimizerDefinition("Manopt (LevenbergMarquardt)", (model_def; gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
                 M, blocks, A, B, p0 = get_procrustes_manopt_components(model_def)

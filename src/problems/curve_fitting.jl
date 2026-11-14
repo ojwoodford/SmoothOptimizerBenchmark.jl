@@ -94,7 +94,7 @@ function create_curve_fitting_problem()
 
             return [m_nlls, m_standalone]
         end,
-        get_standard_optimizers(),
+        get_standard_optimizers(; tall=true),
         "Data Points m"
     )
 end

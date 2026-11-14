@@ -101,8 +101,8 @@ function init_optimizer_section(filepath::String, target_model_name::String)
         println(io)
         println(io, "Solvers evaluated on their respective optimal model representations (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` for JSO/interior-point solvers, `Manifolds` for `Manopt`).")
         println(io)
-        println(io, "| Size | Optimizer | Runtime (ns) | Allocs | Memory (bytes) | Iterations | Final Cost | Converged | Status | Message |")
-        println(io, "|:---|:---|---:|---:|---:|---:|---:|:---|:---|:---|")
+        println(io, "| Size | Optimizer | Runtime (ns) | Allocs | Memory (bytes) | Iterations | Final Cost | Converged | Status | Excess Cost | Message |")
+        println(io, "|:---|:---|---:|---:|---:|---:|---:|:---|:---|---:|:---|")
         flush(io)
     end
 end
@@ -115,7 +115,8 @@ Appends a single optimizer result row to the Markdown file and flushes immediate
 function append_optimizer_evaluation(filepath::String, sz, opt_name::String, r::OptimizerResult)
     open(filepath, "a") do io
         cost_str = isnan(r.final_cost) ? "NaN" : @sprintf("%.4e", r.final_cost)
-        println(io, "| $(sz) | $(opt_name) | $(r.time_ns) | $(r.allocs) | $(r.bytes) | $(r.iterations) | $(cost_str) | $(r.converged) | $(r.status) | $(md_escape(table_message(r.message))) |")
+        excess_str = isnan(r.excess_cost) ? "NaN" : @sprintf("%.4e", r.excess_cost)
+        println(io, "| $(sz) | $(opt_name) | $(r.time_ns) | $(r.allocs) | $(r.bytes) | $(r.iterations) | $(cost_str) | $(r.converged) | $(r.status) | $(excess_str) | $(md_escape(table_message(r.message))) |")
         flush(io)
     end
 end
@@ -217,7 +218,7 @@ function load_problem_markdown(filepath::String)::ProblemScalingBenchmarkResult
         # Columns are found by header, so files written before a column existed still load
         hdr = [lowercase(strip(extract_text(c))) for c in opt_table.rows[1]]
         col(name) = findfirst(h -> startswith(h, name), hdr)
-        c_status, c_message = col("status"), col("message")
+        c_status, c_message, c_excess = col("status"), col("message"), col("excess")
         for row in opt_table.rows[2:end]
             cells = [strip(extract_text(c)) for c in row]
             length(cells) < 8 && continue
@@ -232,6 +233,7 @@ function load_problem_markdown(filepath::String)::ProblemScalingBenchmarkResult
             # Rows from before the status column: only convergence was recorded
             status = c_status !== nothing && c_status <= length(cells) ? Symbol(cells[c_status]) : (converged ? :ok : :not_converged)
             message = c_message !== nothing && c_message <= length(cells) ? String(cells[c_message]) : ""
+            excess = c_excess !== nothing && c_excess <= length(cells) && cells[c_excess] != "NaN" ? parse(Float64, cells[c_excess]) : NaN
 
             if !haskey(opts_by_size, sz)
                 opts_by_size[sz] = Dict{String, OptimizerResult}()
@@ -239,7 +241,7 @@ function load_problem_markdown(filepath::String)::ProblemScalingBenchmarkResult
                     push!(ordered_sizes, sz)
                 end
             end
-            opts_by_size[sz][opt_name] = OptimizerResult(time_ns, allocs, bytes, iters, NaN, final_cost, converged, status, message)
+            opts_by_size[sz][opt_name] = OptimizerResult(time_ns, allocs, bytes, iters, NaN, final_cost, converged, status, message, excess)
         end
     end
 

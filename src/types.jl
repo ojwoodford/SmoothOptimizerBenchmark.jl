@@ -107,6 +107,9 @@ Results from running an optimizer on a benchmark model:
   - `:skipped`: the run was deliberately not attempted (size cut-off, unsupported model or path);
   - `:error`: the adapter or solver threw an exception.
 - `message`: why, in a few words (the solver's own status, the skip reason, or the exception)
+- `excess_cost`: final cost minus the problem's least-squares minimum, both in extended precision,
+  for problems that provide a reference minimum (`NaN` otherwise). Formulations are compared on this,
+  not on the final gradient norm, which is rounding noise at an accurate minimum of an ill-conditioned problem.
 """
 struct OptimizerResult
     time_ns::Float64
@@ -118,12 +121,16 @@ struct OptimizerResult
     converged::Bool
     status::Symbol
     message::String
-    function OptimizerResult(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged::Bool, status::Symbol, message::AbstractString)
+    excess_cost::Float64
+    function OptimizerResult(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged::Bool, status::Symbol, message::AbstractString, excess_cost::Real)
         status in OPTIMIZER_STATUSES || throw(ArgumentError("Unknown optimizer status $(repr(status)); expected one of $(OPTIMIZER_STATUSES)"))
         converged == (status === :ok) || throw(ArgumentError("converged = $converged is inconsistent with status = $(repr(status))"))
-        return new(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged, status, String(message))
+        return new(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged, status, String(message), Float64(excess_cost))
     end
 end
+
+OptimizerResult(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged::Bool, status::Symbol, message::AbstractString) =
+    OptimizerResult(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged, status, message, NaN)
 
 # A solver that ran: the status follows from convergence and whether the time limit stopped it
 function OptimizerResult(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged::Bool;
@@ -148,7 +155,11 @@ error_result(err) = OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false, :error, sprin
 
 # Copy of `r` with the timing fields replaced
 with_timing(r::OptimizerResult, time_ns, allocs, bytes) =
-    OptimizerResult(time_ns, allocs, bytes, r.iterations, r.start_cost, r.final_cost, r.converged, r.status, r.message)
+    OptimizerResult(time_ns, allocs, bytes, r.iterations, r.start_cost, r.final_cost, r.converged, r.status, r.message, r.excess_cost)
+
+# Copy of `r` with the excess cost over the reference minimum set
+with_excess_cost(r::OptimizerResult, excess_cost) =
+    OptimizerResult(r.time_ns, r.allocs, r.bytes, r.iterations, r.start_cost, r.final_cost, r.converged, r.status, r.message, excess_cost)
 
 """
     OptimizerDefinition

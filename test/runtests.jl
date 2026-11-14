@@ -3,8 +3,8 @@ using SmoothOptimizerBenchmark
 
 @testset "SmoothOptimizerBenchmark Suite" begin
     problems = get_all_problems()
-    # 8 distinct problems (7 Euclidean non-manifold + 1 manifold)
-    @test length(problems) == 8
+    # 9 distinct problems (8 Euclidean non-manifold + 1 manifold)
+    @test length(problems) == 9
 
     @testset "Problem Definition & >=10 Problem Sizes" begin
         for prob in problems
@@ -180,6 +180,83 @@ using SmoothOptimizerBenchmark
         @test r_forced.final_cost ≈ r_default.final_cost rtol=1e-10
         @test r_serial.final_cost ≈ r_default.final_cost rtol=1e-10
         @test_throws TypeError optimize_nlls_soo(cf; method=:lm, min_work="a lot")   # forwarded to optimize!, which types it
+    end
+
+    @testset "Tall formulation (N1, N2, N5)" begin
+        # N5: the tall and normal rows reach the same cost on the well-conditioned dense problems
+        tall = soo_tall_optimizer()
+        @test tall.name == "SecondOrderOptimization (LM, tall)"
+        normal_lm(m) = optimize_soo(m; method=:lm)
+        for (prob, sz) in ((create_curve_fitting_problem(), 256), (create_rosenbrock_dense_problem(), 8), (create_robust_procrustes_problem(), 4))
+            @test any(o -> o.name == tall.name, prob.compatible_optimizers)
+            models = prob.generate_models(sz)
+            target = get_standard_optimizer_model(models, prob.category)
+            md = SmoothOptimizerBenchmark.resolve_optimizer_model(tall, target, models)
+            r_tall = tall.optimize(md)
+            r_norm = normal_lm(md)
+            @test r_norm.status === :ok
+            if r_tall.status === :skipped
+                # The tall path does not support this model: reported as a skip with NLLSModel's reason, not a failure
+                @test occursin("formulation = :tall", r_tall.message)
+                @info "Tall row skipped on $(prob.name)" r_tall.message
+            else
+                @test r_tall.status === :ok
+                @test isapprox(r_tall.final_cost, r_norm.final_cost; rtol=1e-6, atol=1e-12)
+            end
+        end
+
+        # The tall row is skipped, not failed, where the dense Jacobian is unavailable
+        sp = create_rosenbrock_sparse_problem()
+        sp_models = sp.generate_models(10)
+        sp_nlls = first(filter(m -> m.model isa SmoothOptimizerBenchmark.NLLSModel.Model, sp_models))
+        r_big = optimize_nlls_soo(sp_nlls; method=:lm, formulation=:tall, max_dense_bytes=8)
+        @test r_big.status === :skipped
+        @test occursin("dense", r_big.message)
+        sp_lsp = get_standard_optimizer_model(sp_models, sp.category)
+        @test optimize_soo(sp_lsp; method=:lm, formulation=:tall).status === :skipped
+
+        # N2: the tall objective of a dense LeastSquaresProblem gives the same minimum as the normal equations
+        cf_models = create_curve_fitting_problem().generate_models(256)
+        cf_lsp = first(filter(m -> m.name == "Standalone", cf_models))
+        x_t, x_n = Float64[], Float64[]
+        r_t = optimize_soo(cf_lsp; method=:lm, formulation=:tall, solution=x_t)
+        r_n = optimize_soo(cf_lsp; method=:lm, solution=x_n)
+        @test r_t.status === :ok && r_n.status === :ok
+        @test r_t.final_cost ≈ r_n.final_cost rtol=1e-8
+        @test x_t ≈ x_n rtol=1e-5
+        x0, obj = soo_objective_tall(cf_lsp.model)
+        @test obj isa SmoothOptimizerBenchmark.SecondOrderOptimization.JacobianObjective
+        @test all(iszero, obj.J)
+        @test_throws ArgumentError soo_objective_tall(sp_lsp.model)
+    end
+
+    @testset "Ill-conditioned polynomial fit: excess cost over the reference minimum (N3, N4)" begin
+        prob = create_polynomial_fitting_problem()
+        sz = first(prob.default_sizes)
+        ref = SmoothOptimizerBenchmark.polyfit_reference(sz)
+        models = prob.generate_models(sz)
+        target = get_standard_optimizer_model(models, prob.category)
+        res = run_optimizer_benchmarks(prob.compatible_optimizers, target; all_models=models, samples=1)
+        r_tall = res["SecondOrderOptimization (LM, tall)"]
+        r_norm = res["SecondOrderOptimization (LM)"]
+        @test all(r -> !isnan(r.excess_cost), values(res))
+        # The tall path reaches the extended-precision minimum; the normal equations stop well above it
+        @test 0 <= r_tall.excess_cost <= 1e-12 * Float64(ref.minimum)
+        @test r_norm.excess_cost > 1e-8 * Float64(ref.minimum)
+        @test r_tall.iterations < r_norm.iterations
+        # The excess survives the round trip through the results file
+        dir = mktempdir()
+        f = joinpath(dir, "polyfit.md")
+        init_problem_markdown(f, prob.name, prob.category, prob.size_metric_name, target.name)
+        init_optimizer_section(f, target.name)
+        for (k, r) in res
+            append_optimizer_evaluation(f, sz, k, r)
+        end
+        loaded = load_problem_markdown(f).size_results[1].optimizer_results
+        for (k, r) in res
+            @test loaded[k].excess_cost ≈ r.excess_cost rtol=1e-3
+            @test loaded[k].status === r.status
+        end
     end
 
     @testset "Quick Single-Size Benchmark" begin
