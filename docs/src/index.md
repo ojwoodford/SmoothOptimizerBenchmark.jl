@@ -42,6 +42,7 @@ To separate modeling overhead from solver algorithm efficiency, every problem is
 | [1D ODE Boundary Value Problem](problems/ode_bvp.md) | `large_sparse` | Grid Points N | 11 sizes (32 … 32768) | `Standalone (Sparse)` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
 | [Sparse Bundle Adjustment](problems/bundle_adjustment.md) | `large_sparse` | Cameras Ncam | 12 sizes (4 … 256) | `BundleAdjustmentModels` | SecondOrderOptimization, JSOSolvers, Ipopt, MadNLP, CaNNOLeS |
 | [Robust Procrustes on SO(d)](problems/robust_procrustes.md) | `manifold` | Matrix Dimension d | 11 sizes (3 … 32) | `Manifolds` | SecondOrderOptimization, Manopt |
+| [Ill-Conditioned Polynomial Fitting](problems/ill-conditioned_polynomial_fitting.md) | `medium_dense` | Data Points m | 11 sizes (60 … 6400) | `Standalone` | SecondOrderOptimization, LeastSquaresOptim, Optim |
 
 ---
 

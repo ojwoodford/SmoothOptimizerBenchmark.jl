@@ -33,6 +33,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 4. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Data Points m = `65536`, **`NLLSModel (Static)`** achieves the fastest Cost + Linear System evaluation at **786.50 μs** (576 B allocated).
-- **Top Converged Optimizer**: At Data Points m = `65536` (10/13 solvers converged), **`SecondOrderOptimization (Dogleg)`** is fastest at **2.17 ms** (5 iterations, final cost `1.32e+01`).
+- **Model Efficiency**: At Data Points m = `65536`, **`NLLSModel (Static)`** achieves the fastest Cost + Linear System evaluation at **480.67 μs** (576 B allocated).
+- **Top Converged Optimizer**: At Data Points m = `65536` (11/14 solvers converged), **`SecondOrderOptimization (LM)`** is fastest at **2.23 ms** (5 iterations, final cost `1.32e+01`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

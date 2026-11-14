@@ -33,6 +33,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 4. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Matrix Dimension d = `32`, **`Manifolds`** achieves the fastest Cost + Linear System evaluation at **346.35 ms** (32 B allocated).
-- **Top Converged Optimizer**: At Matrix Dimension d = `32` (3/3 solvers converged), **`SecondOrderOptimization (Dogleg)`** is fastest at **1.91 s** (14 iterations, final cost `3.92e-06`).
+- **Model Efficiency**: At Matrix Dimension d = `32`, **`Manifolds`** achieves the fastest Cost + Linear System evaluation at **262.09 ms** (32 B allocated).
+- **Top Converged Optimizer**: At Matrix Dimension d = `32` (4/4 solvers converged), **`SecondOrderOptimization (LM)`** is fastest at **1.73 s** (14 iterations, final cost `3.92e-06`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.
