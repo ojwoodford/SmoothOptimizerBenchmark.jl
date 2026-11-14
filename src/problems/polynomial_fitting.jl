@@ -105,9 +105,10 @@ function create_polynomial_fitting_problem()
                 addcost!(nlls_prob, PolyFitResidual(SVector{POLYFIT_NCOEFFS}(view(V, i, :)), y[i]))
             end
             nt = benchmark_numthreads()
-            f_nlls, fdf_nlls!, _, _ = NLLSModel.optimvars(nlls_prob, nothing, nt)
-            g_nlls = zeros(Float64, POLYFIT_NCOEFFS)
-            H_nlls = zeros(Float64, POLYFIT_NCOEFFS, POLYFIT_NCOEFFS)
+            # Buffers of the types NLLSModel's linear system uses (MVector/MMatrix), so fdf! writes straight into them
+            f_nlls, fdf_nlls!, _, H_proto_nlls = NLLSModel.optimvars(nlls_prob, nothing, nt)
+            H_nlls = deepcopy(H_proto_nlls)
+            g_nlls = zero(H_proto_nlls[:, 1])
             m_nlls = ModelDefinition(
                 "NLLSModel (Static)",
                 nlls_prob,

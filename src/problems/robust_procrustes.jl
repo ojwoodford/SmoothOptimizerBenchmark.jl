@@ -322,10 +322,11 @@ function create_robust_procrustes_problem()
             for i in 1:n
                 addcost!(nlls_spec, SpecializedProcrustesResidual{d}(SVector{d, Float64}(A[:, i]), SVector{d, Float64}(B[:, i]), spec_scratch))
             end
-            f_spec, fdf_spec!, _, _ = NLLSModel.optimvars(nlls_spec, nothing, StaticInt(1))
-            nv_spec = (d * (d - 1)) ÷ 2
-            g_spec = zeros(Float64, nv_spec)
-            H_spec = zeros(Float64, nv_spec, nv_spec)
+            # Buffers of the types NLLSModel's linear system uses: MVector/MMatrix while nvars = d(d-1)/2 <= 16 (d <= 6),
+            # Vector/Matrix above, so fdf! writes straight into them at every d
+            f_spec, fdf_spec!, _, H_proto_spec = NLLSModel.optimvars(nlls_spec, nothing, StaticInt(1))
+            H_spec = deepcopy(H_proto_spec)
+            g_spec = zero(H_proto_spec[:, 1])
             m_spec = ModelDefinition(
                 "NLLSModel (Specialized)",
                 nlls_spec,

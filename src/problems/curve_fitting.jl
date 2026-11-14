@@ -55,9 +55,10 @@ function create_curve_fitting_problem()
                 addcost!(nlls_prob, ExpFitResidual(t_pts[i], y_data[i]))
             end
             nt = benchmark_numthreads()
-            f_nlls, fdf_nlls!, _, _ = NLLSModel.optimvars(nlls_prob, nothing, nt)
-            g_nlls = zeros(Float64, 3)
-            H_nlls = zeros(Float64, 3, 3)
+            # Buffers of the types NLLSModel's linear system uses (MVector/MMatrix), so fdf! writes straight into them
+            f_nlls, fdf_nlls!, _, H_proto_nlls = NLLSModel.optimvars(nlls_prob, nothing, nt)
+            H_nlls = deepcopy(H_proto_nlls)
+            g_nlls = zero(H_proto_nlls[:, 1])
             m_nlls = ModelDefinition(
                 "NLLSModel (Static)",
                 nlls_prob,
