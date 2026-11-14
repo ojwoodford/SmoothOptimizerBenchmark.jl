@@ -61,10 +61,50 @@ using SmoothOptimizerBenchmark
         res_ntr = optimize_optim(sp_target; method=:newton_trust_region)
         @test isnan(res_ntr.time_ns)
         @test !res_ntr.converged
+        @test res_ntr.status === :skipped
+        @test !isempty(res_ntr.message)
 
         # SOO with maxiters=1 from non-optimal start must report converged=false
         res_soo_1 = optimize_soo(sp_target; method=:lm, maxiters=1)
         @test !res_soo_1.converged
+        @test res_soo_1.status === :not_converged
+        @test occursin("max_iters", res_soo_1.message)
+    end
+
+    @testset "Optimizer status (B3)" begin
+        @test_throws ArgumentError OptimizerResult(1.0, 0, 0, 1, 1.0, 0.5, true, :not_converged, "")
+        @test_throws ArgumentError OptimizerResult(1.0, 0, 0, 1, 1.0, 0.5, false, :failed, "")
+        @test OptimizerResult(1.0, 0, 0, 1, 1.0, 0.5, false; timed_out=true).status === :timeout
+
+        # An adapter that throws is reported as :error with the exception text, not as a bare NaN row
+        prob = create_curve_fitting_problem()
+        models = prob.generate_models(64)
+        target = get_standard_optimizer_model(models, prob.category)
+        bad = OptimizerDefinition("Broken adapter", (m; kwargs...) -> error("adapter exploded"))
+        skip = OptimizerDefinition("Skipping adapter", (m; kwargs...) -> skipped_result("not applicable"))
+        good = OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_nlls_soo(m; method=:lm, kwargs...))
+        res = @test_logs (:warn, r"Broken adapter") match_mode=:any run_optimizer_benchmarks([bad, skip, good], target; all_models=models, samples=1)
+        @test res["Broken adapter"].status === :error
+        @test occursin("adapter exploded", res["Broken adapter"].message)
+        @test res["Skipping adapter"].status === :skipped
+        @test res["SecondOrderOptimization (LM)"].status === :ok
+        @test res["SecondOrderOptimization (LM)"].converged
+
+        # Result files written before the status column still load
+        legacy = joinpath(mktempdir(), "legacy.md")
+        write(legacy, """
+        # Benchmark Results: Legacy
+
+        - **Category**: small_dense
+
+        | Size | Optimizer | Runtime (ns) | Allocs | Memory (bytes) | Iterations | Final Cost | Converged |
+        |:---|:---|---:|---:|---:|---:|---:|:---|
+        | 4 | A | 10.0 | 1 | 2 | 3 | 1.0000e-01 | true |
+        | 4 | B | NaN | 0 | 0 | 0 | NaN | false |
+        """)
+        lr = load_problem_markdown(legacy)
+        @test lr.size_results[1].optimizer_results["A"].status === :ok
+        @test lr.size_results[1].optimizer_results["B"].status === :not_converged
     end
 
     @testset "Cold-Start NLLSModel + SecondOrderOptimization & BAL Equivalence" begin
@@ -164,6 +204,8 @@ using SmoothOptimizerBenchmark
                 opt_load = sr_load.optimizer_results[opt_name]
                 @test opt_load.converged == opt_orig.converged
                 @test opt_load.iterations == opt_orig.iterations
+                @test opt_load.status === opt_orig.status
+                @test opt_load.message == SmoothOptimizerBenchmark.table_message(opt_orig.message)
             end
         end
         rm(tmp_data_dir; recursive=true, force=true)

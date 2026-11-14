@@ -399,7 +399,9 @@ function create_robust_procrustes_problem()
                 alloc_cnt = Base.gc_alloc_count(timed.gcstats)
                 active = Manopt.get_active_stopping_criteria(stop_crit)
                 converged = !isempty(active) && !all(c -> c isa StopAfterIteration || c isa Manopt.StopAfter, active)
-                return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, Manopt.get_count(inner, :Iterations), start_c, final_c, converged)
+                timed_out = !converged && any(c -> c isa Manopt.StopAfter, active)
+                return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, Manopt.get_count(inner, :Iterations), start_c, final_c, converged;
+                    timed_out, message=join(string.(nameof.(typeof.(active))), ", "))
             end)
         ],
         "Matrix Dimension d"

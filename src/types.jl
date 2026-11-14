@@ -2,6 +2,7 @@
 
 export ModelEvaluationResult, ModelDefinition, OptimizerResult, OptimizerDefinition, ProblemDefinition
 export SingleSizeBenchmarkResult, ProblemScalingBenchmarkResult
+export OPTIMIZER_STATUSES, skipped_result, error_result
 export DEFAULT_DOCS_DIR, DEFAULT_DATA_DIR, DEFAULT_PLOTS_DIR
 
 const DEFAULT_DOCS_DIR = normpath(joinpath(@__DIR__, "..", "docs", "src"))
@@ -46,6 +47,8 @@ struct ModelDefinition{T}
     reset!::Function
 end
 
+const OPTIMIZER_STATUSES = (:ok, :not_converged, :timeout, :skipped, :error)
+
 """
     OptimizerResult
 
@@ -56,7 +59,14 @@ Results from running an optimizer on a benchmark model:
 - `iterations`: number of iterations performed
 - `start_cost`: starting objective cost
 - `final_cost`: final achieved objective cost
-- `converged`: whether the optimizer converged within tolerance
+- `converged`: whether the optimizer converged within tolerance (true exactly when `status == :ok`)
+- `status`: one of `OPTIMIZER_STATUSES`:
+  - `:ok`: the solver reports convergence;
+  - `:not_converged`: the solver ran and stopped without converging (iteration limit, stall, failure);
+  - `:timeout`: the solver stopped on the time limit without converging;
+  - `:skipped`: the run was deliberately not attempted (size cut-off, unsupported model or path);
+  - `:error`: the adapter or solver threw an exception.
+- `message`: why, in a few words (the solver's own status, the skip reason, or the exception)
 """
 struct OptimizerResult
     time_ns::Float64
@@ -66,7 +76,39 @@ struct OptimizerResult
     start_cost::Float64
     final_cost::Float64
     converged::Bool
+    status::Symbol
+    message::String
+    function OptimizerResult(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged::Bool, status::Symbol, message::AbstractString)
+        status in OPTIMIZER_STATUSES || throw(ArgumentError("Unknown optimizer status $(repr(status)); expected one of $(OPTIMIZER_STATUSES)"))
+        converged == (status === :ok) || throw(ArgumentError("converged = $converged is inconsistent with status = $(repr(status))"))
+        return new(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged, status, String(message))
+    end
 end
+
+# A solver that ran: the status follows from convergence and whether the time limit stopped it
+function OptimizerResult(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged::Bool;
+                         timed_out::Bool=false, message::AbstractString="")
+    status = converged ? :ok : timed_out ? :timeout : :not_converged
+    return OptimizerResult(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged, status, message)
+end
+
+"""
+    skipped_result(reason; start_cost=NaN) -> OptimizerResult
+
+A row for a run that was deliberately not attempted.
+"""
+skipped_result(reason::AbstractString; start_cost=NaN) = OptimizerResult(NaN, 0, 0, 0, start_cost, NaN, false, :skipped, reason)
+
+"""
+    error_result(err) -> OptimizerResult
+
+A row for a run whose adapter or solver threw `err`.
+"""
+error_result(err) = OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false, :error, sprint(showerror, err))
+
+# Copy of `r` with the timing fields replaced
+with_timing(r::OptimizerResult, time_ns, allocs, bytes) =
+    OptimizerResult(time_ns, allocs, bytes, r.iterations, r.start_cost, r.final_cost, r.converged, r.status, r.message)
 
 """
     OptimizerDefinition

@@ -188,7 +188,8 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
             try
                 opt_model.reset!()
                 opt.optimize(opt_model; maxiters=1, time_limit=1.0)
-            catch
+            catch err
+                @warn "Warm-up of optimizer $(opt.name) threw on model $(opt_model.name)" exception=(err, catch_backtrace()) maxlog=3
             finally
                 opt_model.reset!()
             end
@@ -204,7 +205,7 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
         catch err
             @warn "Optimizer $(opt.name) threw on model $(opt_model.name)" exception=(err, catch_backtrace()) maxlog=3
             opt_model.reset!()
-            res = OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+            res = error_result(err)
             results[opt.name] = res
             if on_result !== nothing
                 on_result(opt.name, res)
@@ -215,15 +216,7 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
         t1_wall_sec = t1_wall_ns / 1e9
 
         if isnan(init_res.time_ns) || !init_res.converged
-            res = OptimizerResult(
-                init_res.time_ns,
-                init_res.allocs,
-                init_res.bytes,
-                init_res.iterations,
-                init_res.start_cost,
-                init_res.final_cost,
-                init_res.converged
-            )
+            res = init_res
             results[opt.name] = res
             if on_result !== nothing
                 on_result(opt.name, res)
@@ -260,15 +253,7 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
         end
         opt_model.reset!()
 
-        res = OptimizerResult(
-            median(times),
-            allocs,
-            bytes,
-            init_res.iterations,
-            init_res.start_cost,
-            init_res.final_cost,
-            init_res.converged
-        )
+        res = with_timing(init_res, median(times), allocs, bytes)
         results[opt.name] = res
         if on_result !== nothing
             on_result(opt.name, res)
@@ -300,7 +285,8 @@ function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model
                 m.reset!()
                 reset_nlp_cache!(m.model)
                 m.eval_cost_and_linear_system()
-            catch
+            catch err
+                @warn "Warm-up of model $(m.name) threw" exception=(err, catch_backtrace()) maxlog=3
             finally
                 m.reset!()
                 reset_nlp_cache!(m.model)
@@ -321,7 +307,8 @@ function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model
             try
                 opt_model.reset!()
                 opt.optimize(opt_model; time_limit=1.0)
-            catch
+            catch err
+                @warn "Warm-up of optimizer $(opt.name) threw on model $(opt_model.name)" exception=(err, catch_backtrace()) maxlog=3
             finally
                 opt_model.reset!()
             end
@@ -488,7 +475,7 @@ end
 """
     run_all_scaling_benchmarks(; problems=get_all_problems(), quick=false, samples=nothing, data_dir=DEFAULT_DATA_DIR) -> Vector{ProblemScalingBenchmarkResult}
 
-Executes scaling benchmarks across all registered problems.
+Executes scaling benchmarks across all registered problems, at the thread counts given (see [`run_scaling_benchmark`](@ref)).
 """
 function run_all_scaling_benchmarks(; problems=get_all_problems(), quick=false, samples=nothing, data_dir=DEFAULT_DATA_DIR)
     scaling_results = ProblemScalingBenchmarkResult[]

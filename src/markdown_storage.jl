@@ -94,8 +94,8 @@ function init_optimizer_section(filepath::String, target_model_name::String)
         println(io)
         println(io, "Solvers evaluated on their respective optimal model representations (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` for JSO/interior-point solvers, `Manifolds` for `Manopt`).")
         println(io)
-        println(io, "| Size | Optimizer | Runtime (ns) | Allocs | Memory (bytes) | Iterations | Final Cost | Converged |")
-        println(io, "|:---|:---|---:|---:|---:|---:|---:|:---|")
+        println(io, "| Size | Optimizer | Runtime (ns) | Allocs | Memory (bytes) | Iterations | Final Cost | Converged | Status | Message |")
+        println(io, "|:---|:---|---:|---:|---:|---:|---:|:---|:---|:---|")
         flush(io)
     end
 end
@@ -108,10 +108,19 @@ Appends a single optimizer result row to the Markdown file and flushes immediate
 function append_optimizer_evaluation(filepath::String, sz, opt_name::String, r::OptimizerResult)
     open(filepath, "a") do io
         cost_str = isnan(r.final_cost) ? "NaN" : @sprintf("%.4e", r.final_cost)
-        println(io, "| $(sz) | $(opt_name) | $(r.time_ns) | $(r.allocs) | $(r.bytes) | $(r.iterations) | $(cost_str) | $(r.converged) |")
+        println(io, "| $(sz) | $(opt_name) | $(r.time_ns) | $(r.allocs) | $(r.bytes) | $(r.iterations) | $(cost_str) | $(r.converged) | $(r.status) | $(md_escape(table_message(r.message))) |")
         flush(io)
     end
 end
+
+# A message fit for one table cell: one line, no pipes, at most `maxlen` characters
+function table_message(msg::AbstractString; maxlen::Int=160)
+    s = strip(replace(msg, r"\s+" => " ", "|" => "/"))
+    return length(s) <= maxlen ? s : first(s, maxlen - 1) * "…"
+end
+
+# Escape the characters Markdown would read as formatting (`abs_dcost` would lose its underscore)
+md_escape(s::AbstractString) = replace(s, r"([\\`*_\[\]<>])" => s"\\\1")
 
 """
     load_problem_markdown(filepath::String) -> ProblemScalingBenchmarkResult
@@ -198,6 +207,10 @@ function load_problem_markdown(filepath::String)::ProblemScalingBenchmarkResult
     end
 
     if opt_table !== nothing
+        # Columns are found by header, so files written before a column existed still load
+        hdr = [lowercase(strip(extract_text(c))) for c in opt_table.rows[1]]
+        col(name) = findfirst(h -> startswith(h, name), hdr)
+        c_status, c_message = col("status"), col("message")
         for row in opt_table.rows[2:end]
             cells = [strip(extract_text(c)) for c in row]
             length(cells) < 8 && continue
@@ -209,6 +222,9 @@ function load_problem_markdown(filepath::String)::ProblemScalingBenchmarkResult
             iters = parse(Int, cells[6])
             final_cost = cells[7] == "NaN" ? NaN : parse(Float64, cells[7])
             converged = parse(Bool, cells[8])
+            # Rows from before the status column: only convergence was recorded
+            status = c_status !== nothing && c_status <= length(cells) ? Symbol(cells[c_status]) : (converged ? :ok : :not_converged)
+            message = c_message !== nothing && c_message <= length(cells) ? String(cells[c_message]) : ""
 
             if !haskey(opts_by_size, sz)
                 opts_by_size[sz] = Dict{String, OptimizerResult}()
@@ -216,7 +232,7 @@ function load_problem_markdown(filepath::String)::ProblemScalingBenchmarkResult
                     push!(ordered_sizes, sz)
                 end
             end
-            opts_by_size[sz][opt_name] = OptimizerResult(time_ns, allocs, bytes, iters, NaN, final_cost, converged)
+            opts_by_size[sz][opt_name] = OptimizerResult(time_ns, allocs, bytes, iters, NaN, final_cost, converged, status, message)
         end
     end
 

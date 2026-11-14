@@ -509,6 +509,32 @@ end
 # Uniform Optimizer Dispatchers
 # -----------------------------------------------------------------------------
 
+# The named termination masks, for the message of a SecondOrderOptimization row. TERMINATION_STALLED is
+# new (SecondOrderOptimization's Q7); include it only when the loaded version defines it.
+const SOO_TERMINATION_NAMES = let names = Pair{String, Int}[
+        "cost_inf" => TERMINATION_COST_INF, "cost_nan" => TERMINATION_COST_NAN,
+        "rel_dcost" => TERMINATION_REL_DCOST, "abs_dcost" => TERMINATION_ABS_DCOST,
+        "step_inf" => TERMINATION_STEP_INF, "step_nan" => TERMINATION_STEP_NAN,
+        "step_size" => TERMINATION_STEP_SIZE, "max_fails" => TERMINATION_MAX_FAILS,
+        "max_iters" => TERMINATION_MAX_ITERS, "max_time" => TERMINATION_MAX_TIME,
+        "cost_discrepancy" => TERMINATION_COST_DISCREPANCY, "start_not_finite" => TERMINATION_START_NOT_FINITE,
+        "grad_not_finite" => TERMINATION_GRAD_NOT_FINITE, "grad_tol" => TERMINATION_GRAD_TOL,
+        "linsolver_failed" => TERMINATION_LINSOLVER_FAILED]
+    isdefined(SecondOrderOptimization, :TERMINATION_STALLED) && push!(names, "stalled" => getfield(SecondOrderOptimization, :TERMINATION_STALLED))
+    Tuple(names)
+end
+
+soo_termination_message(termination::Integer) =
+    join([name for (name, mask) in SOO_TERMINATION_NAMES if termination & mask != 0], ", ")
+
+# OptimizerResult for a SecondOrderOptimization run: converged from isconverged, the reason from the named masks
+function soo_result(t_total, timed, res)
+    converged = isconverged(res)
+    timed_out = !converged && (res.termination & TERMINATION_MAX_TIME != 0)
+    return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost,
+        converged; timed_out, message=soo_termination_message(res.termination))
+end
+
 """
     optimize_soo(model; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
@@ -528,8 +554,7 @@ function optimize_soo(target; method=:dogleg, reduction=:auto, gtol=DEFAULT_GTOL
     t_start = time_ns()
     timed = @timed soo_run!(p, opt; reduction=reduction)
     t_total = time_ns() - t_start
-    res = timed.value
-    return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, isconverged(res))
+    return soo_result(t_total, timed, timed.value)
 end
 
 soo_iterator(method) = method === :lm ? :levenbergmarquardt :
@@ -549,7 +574,7 @@ function optimize_nlls_soo(target; method=:dogleg, reduction=:auto, linsolver=:a
         prob = target
     end
     if !(prob isa NLLSModel.Model)
-        return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+        return skipped_result("not an NLLSModel.Model")
     end
 
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
@@ -568,17 +593,7 @@ function optimize_nlls_soo(target; method=:dogleg, reduction=:auto, linsolver=:a
     t_start = time_ns()
     timed = @timed SecondOrderOptimization.optimize!(p, opt; reduction=reduction)
     t_total = time_ns() - t_start
-    res = timed.value
-    converged = isconverged(res)
-    return OptimizerResult(
-        Float64(t_total),
-        Base.gc_alloc_count(timed.gcstats),
-        timed.bytes,
-        res.niterations,
-        res.startcost,
-        res.bestcost,
-        converged
-    )
+    return soo_result(t_total, timed, timed.value)
 end
 
 """
@@ -598,7 +613,7 @@ function optimize_least_squares(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=
     end
 
     if !(m isa LeastSquaresProblem)
-        return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+        return skipped_result("not a LeastSquaresProblem")
     end
 
     lsp = deepcopy(m)
@@ -609,7 +624,7 @@ function optimize_least_squares(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=
         # Dogleg attempts to solve the un-damped Gauss-Newton system (singular on gauge-free problems like pose graphs),
         # causing LSMR to stall beyond ~5,000 variables.
         if (method === :dogleg && n_vars > 5000) || n_vars > 25000
-            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+            return skipped_result("sparse LSMR beyond $(method === :dogleg ? 5000 : 25000) variables")
         end
     end
 
@@ -655,7 +670,7 @@ function optimize_least_squares(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=
         if err isa TimeoutException || timed_out[]
             t_total = time_ns() - t_start
             final_c = 0.5 * sum(abs2, last_r)
-            return OptimizerResult(Float64(t_total), 0, 0, iters_count[], start_c, final_c, false)
+            return OptimizerResult(Float64(t_total), 0, 0, iters_count[], start_c, final_c, false; timed_out=true, message="time limit")
         else
             rethrow(err)
         end
@@ -665,7 +680,8 @@ function optimize_least_squares(target; method=:dogleg, gtol=DEFAULT_GTOL, xtol=
 
     final_c = timed_out[] ? 0.5 * sum(abs2, last_r) : res.ssr * 0.5
     converged = timed_out[] ? false : res.converged
-    return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.iterations, start_c, final_c, converged)
+    return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.iterations, start_c, final_c, converged;
+        timed_out=timed_out[], message=timed_out[] ? "time limit" : converged ? "converged" : "not converged")
 end
 
 """
@@ -687,7 +703,7 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
 
         if method === :newton_trust_region && is_sparse
             # NewtonTrustRegion requires dense eigen/factorization in Optim; unsupported for sparse problems.
-            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+            return skipped_result("NewtonTrustRegion needs a dense Hessian")
         end
 
         r_buf = zeros(Float64, length(lsp.y))
@@ -756,7 +772,7 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         t_total = time_ns() - t_start
         res = timed.value
 
-        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.iterations, start_c, res.minimum, Optim.converged(res))
+        return optim_result(t_total, timed, res.iterations, start_c, res.minimum)
 
     elseif m isa NLLSModel.Model
         p = deepcopy(m)
@@ -769,7 +785,7 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
             is_sparse = cb.J0 isa SparseMatrixCSC
 
             if method === :newton_trust_region && is_sparse
-                return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+                return skipped_result("NewtonTrustRegion needs a dense Hessian")
             end
 
             H0 = if is_sparse
@@ -827,14 +843,14 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
             timed = @timed Optim.optimize(td, copy(x0_cb), optim_method, opts)
             t_total = time_ns() - t_start
             res = timed.value
-            return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, Optim.iterations(res), start_c, Optim.minimum(res), Optim.converged(res))
+            return optim_result(t_total, timed, Optim.iterations(res), start_c, Optim.minimum(res))
         end
         n = length(x0)
         is_sparse = H_proto isa SparseMatrixCSC
 
         if method === :newton_trust_region && is_sparse
             # NewtonTrustRegion requires dense eigen/factorization in Optim; unsupported for sparse problems.
-            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+            return skipped_result("NewtonTrustRegion needs a dense Hessian")
         end
 
         H0, H_buf = if is_sparse
@@ -882,7 +898,7 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         timed = @timed Optim.optimize(td, copy(x0), optim_method, opts)
         t_total = time_ns() - t_start
         res = timed.value
-        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, Optim.iterations(res), start_c, Optim.minimum(res), Optim.converged(res))
+        return optim_result(t_total, timed, Optim.iterations(res), start_c, Optim.minimum(res))
 
     elseif m isa AbstractNLPModel
         nlp = deepcopy(m)
@@ -895,7 +911,7 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         is_sparse = length(rows) < (n * (n + 1) ÷ 2)
 
         if method === :newton_trust_region && is_sparse
-            return OptimizerResult(NaN, 0, 0, 0, start_c, NaN, false)
+            return skipped_result("NewtonTrustRegion needs a dense Hessian"; start_c)
         end
 
         f_nlp(x) = NLPModels.obj(nlp, x)
@@ -929,11 +945,26 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         timed = @timed Optim.optimize(td, copy(x0), optim_method, opts)
         t_total = time_ns() - t_start
         res = timed.value
-        return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, Optim.iterations(res), start_c, Optim.minimum(res), Optim.converged(res))
+        return optim_result(t_total, timed, Optim.iterations(res), start_c, Optim.minimum(res))
 
     else
         error("Unsupported model type for optimize_optim: $(typeof(m))")
     end
+end
+
+function optim_result(t_total, timed, iterations, start_c, final_c)
+    res = timed.value
+    converged = Optim.converged(res)
+    timed_out = !converged && hasproperty(res, :time_run) && hasproperty(res, :time_limit) && res.time_run >= res.time_limit
+    return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, iterations, start_c, final_c, converged;
+        timed_out, message=timed_out ? "time limit" : converged ? "converged" : "not converged")
+end
+
+# OptimizerResult for a solver that reports a status symbol (JSOSolvers, Ipopt, CaNNOLeS)
+function stats_result(t_total, timed, iterations, start_c, final_c, status)
+    converged = status in (:first_order, :acceptable)
+    return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, iterations, start_c, final_c, converged;
+        timed_out=status === :max_time, message=string(status))
 end
 
 """
@@ -962,15 +993,7 @@ function optimize_jsosolvers(target; solver=:trunk, gtol=DEFAULT_GTOL, maxiters=
     t_total = time_ns() - t_start
     res = timed.value
 
-    return OptimizerResult(
-        Float64(t_total),
-        Base.gc_alloc_count(timed.gcstats),
-        timed.bytes,
-        res.iter,
-        start_c,
-        res.objective,
-        res.status in (:first_order, :acceptable)
-    )
+    return stats_result(t_total, timed, res.iter, start_c, res.objective, res.status)
 end
 
 """
@@ -989,16 +1012,7 @@ function optimize_ipopt(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, ma
     t_total = time_ns() - t_start
     res = timed.value
 
-    converged = res.status in (:first_order, :acceptable)
-    return OptimizerResult(
-        Float64(t_total),
-        Base.gc_alloc_count(timed.gcstats),
-        timed.bytes,
-        res.iter,
-        start_c,
-        res.objective,
-        converged
-    )
+    return stats_result(t_total, timed, res.iter, start_c, res.objective, res.status)
 end
 
 """
@@ -1048,15 +1062,8 @@ function optimize_madnlp(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, m
     res = timed.value
 
     converged = res.status in (MadNLP.SOLVE_SUCCEEDED, MadNLP.SOLVED_TO_ACCEPTABLE_LEVEL)
-    return OptimizerResult(
-        Float64(t_total),
-        Base.gc_alloc_count(timed.gcstats),
-        timed.bytes,
-        res.iter,
-        start_c,
-        res.objective,
-        converged
-    )
+    return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.iter, start_c, res.objective, converged;
+        timed_out=res.status == MadNLP.MAXIMUM_WALLTIME_EXCEEDED, message=string(res.status))
 end
 
 """
@@ -1074,7 +1081,7 @@ function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEF
         n_len = cb.nvar
         if cb.J0 isa SparseMatrixCSC && n_len > 25000
             # Avoid excessive sparse QR solve time on massive sparse regimes
-            return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+            return skipped_result("sparse QR beyond 25000 variables")
         end
         x0 = copy(cb.x0)
         actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
@@ -1100,26 +1107,11 @@ function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEF
         t_start = time_ns()
         timed = @timed solve(prob, solver; abstol=gtol, reltol=ftol, maxiters=maxiters, maxtime=actual_maxtime, kwargs...)
         t_total = time_ns() - t_start
-        sol = timed.value
-
-        final_c = 0.5 * sum(abs2, sol.resid)
-        converged = NonlinearSolve.SciMLBase.successful_retcode(sol.retcode)
-        # Simple* solvers do not populate `stats`; fall back to Jacobian evaluations (one per iteration)
-        iters = sol.stats === nothing ? njac[] : sol.stats.nsteps
-
-        return OptimizerResult(
-            Float64(t_total),
-            Base.gc_alloc_count(timed.gcstats),
-            timed.bytes,
-            iters,
-            start_c,
-            final_c,
-            converged
-        )
+        return nonlinearsolve_result(t_total, timed, njac[], start_c)
     end
 
     if !(m isa LeastSquaresProblem)
-        return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+        return skipped_result("not a LeastSquaresProblem")
     end
 
     lsp = deepcopy(m)
@@ -1130,7 +1122,7 @@ function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEF
 
     if lsp.J isa SparseMatrixCSC && n_len > 25000
         # Avoid excessive sparse QR solve time on massive sparse regimes
-        return OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false)
+        return skipped_result("sparse QR beyond 25000 variables")
     end
 
     r_init = zeros(Float64, m_len)
@@ -1155,22 +1147,17 @@ function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEF
     t_start = time_ns()
     timed = @timed solve(prob, solver; abstol=gtol, reltol=ftol, maxiters=maxiters, maxtime=actual_maxtime, kwargs...)
     t_total = time_ns() - t_start
-    sol = timed.value
+    return nonlinearsolve_result(t_total, timed, njac[], start_c)
+end
 
+function nonlinearsolve_result(t_total, timed, njac, start_c)
+    sol = timed.value
     final_c = 0.5 * sum(abs2, sol.resid)
     converged = NonlinearSolve.SciMLBase.successful_retcode(sol.retcode)
     # Simple* solvers do not populate `stats`; fall back to Jacobian evaluations (one per iteration)
-    iters = sol.stats === nothing ? njac[] : sol.stats.nsteps
-
-    return OptimizerResult(
-        Float64(t_total),
-        Base.gc_alloc_count(timed.gcstats),
-        timed.bytes,
-        iters,
-        start_c,
-        final_c,
-        converged
-    )
+    iters = sol.stats === nothing ? njac : sol.stats.nsteps
+    return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, iters, start_c, final_c, converged;
+        timed_out=sol.retcode == NonlinearSolve.SciMLBase.ReturnCode.MaxTime, message=string(sol.retcode))
 end
 
 """
@@ -1191,15 +1178,7 @@ function optimize_cannoles(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS,
     t_total = time_ns() - t_start
     stats = timed.value
 
-    return OptimizerResult(
-        Float64(t_total),
-        Base.gc_alloc_count(timed.gcstats),
-        timed.bytes,
-        stats.iter,
-        start_c,
-        stats.objective,
-        stats.status in (:first_order, :acceptable)
-    )
+    return stats_result(t_total, timed, stats.iter, start_c, stats.objective, stats.status)
 end
 
 # -----------------------------------------------------------------------------
