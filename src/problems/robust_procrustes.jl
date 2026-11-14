@@ -390,7 +390,8 @@ function create_robust_procrustes_problem()
                     return_state = true,
                     stopping_criterion = stop_crit,
                     # Manopt >= 0.6 defaults to a matrix-free conjugate-residual subsolver; use the
-                    # direct normal-equations solve in a single coordinate basis instead.
+                    # direct normal-equations solve in a single coordinate basis instead. On 0.6.15 both
+                    # converge to the same minimum, but the default is 8-37x slower from d = 10 up (81 s at d = 32).
                     use_unified_basis = true
                 )
                 t_total = time_ns() - t_start
