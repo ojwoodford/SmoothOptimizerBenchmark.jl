@@ -560,7 +560,7 @@ const SOO_TERMINATION_NAMES = let names = Pair{String, Int}[
         "step_inf" => TERMINATION_STEP_INF, "step_nan" => TERMINATION_STEP_NAN,
         "step_size" => TERMINATION_STEP_SIZE, "max_fails" => TERMINATION_MAX_FAILS,
         "max_iters" => TERMINATION_MAX_ITERS, "max_time" => TERMINATION_MAX_TIME,
-        "cost_discrepancy" => TERMINATION_COST_DISCREPANCY, "start_not_finite" => TERMINATION_START_NOT_FINITE,
+        "start_not_finite" => TERMINATION_START_NOT_FINITE,
         "grad_not_finite" => TERMINATION_GRAD_NOT_FINITE, "grad_tol" => TERMINATION_GRAD_TOL,
         "linsolver_failed" => TERMINATION_LINSOLVER_FAILED]
     isdefined(SecondOrderOptimization, :TERMINATION_STALLED) && push!(names, "stalled" => getfield(SecondOrderOptimization, :TERMINATION_STALLED))
