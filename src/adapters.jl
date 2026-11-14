@@ -515,11 +515,6 @@ end
 Optimizes a model using `SecondOrderOptimization.jl`.
 Supported methods: `:dogleg`, `:lm` / `:levenbergmarquardt`.
 """
-# Use SecondOrderOptimization's own termination masks so the bit layout cannot drift out of sync
-const SOO_CONVERGENCE_MASK = SecondOrderOptimization.SUCCESS_CONVERGENCE_MASK
-const SOO_FAILURE_MASK = SecondOrderOptimization.FAILURE_TERMINATION_MASK
-soo_converged(termination::Int) = ((termination & TERMINATION_GRAD_TOL) != 0) || (((termination & SOO_CONVERGENCE_MASK) != 0) && ((termination & SOO_FAILURE_MASK) == 0))
-
 function optimize_soo(target; method=:dogleg, reduction=:auto, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
     opt = OptimizationOptions(iterator=soo_iterator(method), gtol=gtol, dstep=xtol, reldcost=ftol, maxiters=maxiters, maxtime=actual_maxtime; kwargs...)
@@ -534,7 +529,7 @@ function optimize_soo(target; method=:dogleg, reduction=:auto, gtol=DEFAULT_GTOL
     timed = @timed soo_run!(p, opt; reduction=reduction)
     t_total = time_ns() - t_start
     res = timed.value
-    return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, soo_converged(res.termination))
+    return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.niterations, res.startcost, res.bestcost, isconverged(res))
 end
 
 soo_iterator(method) = method === :lm ? :levenbergmarquardt :
@@ -574,7 +569,7 @@ function optimize_nlls_soo(target; method=:dogleg, reduction=:auto, linsolver=:a
     timed = @timed SecondOrderOptimization.optimize!(p, opt; reduction=reduction)
     t_total = time_ns() - t_start
     res = timed.value
-    converged = soo_converged(res.termination)
+    converged = isconverged(res)
     return OptimizerResult(
         Float64(t_total),
         Base.gc_alloc_count(timed.gcstats),
