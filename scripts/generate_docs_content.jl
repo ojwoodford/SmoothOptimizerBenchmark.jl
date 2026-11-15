@@ -19,6 +19,7 @@ end
 const CANONICAL_PROBLEM_SLUGS = [
     "rosenbrock_sparse",
     "curve_fitting",
+    "polynomial_fitting",
     "rosenbrock_dense",
     "affine_alignment",
     "pose_chain",

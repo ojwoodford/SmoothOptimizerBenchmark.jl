@@ -11,7 +11,7 @@
 
 The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dotted lines) and **Cost + Linear System Assembly** (solid/dash-dot lines) across problem sizes.
 
-![Ill-Conditioned Polynomial Fitting Model Evaluation Scaling](../assets/plots/ill-conditioned_polynomial_fitting_models.png)
+![Ill-Conditioned Polynomial Fitting Model Evaluation Scaling](../assets/plots/polynomial_fitting_models.png)
 
 ---
 
@@ -19,7 +19,7 @@ The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dot
 
 The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, where each solver is evaluated on its optimal problem representation (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` for JSO/interior-point solvers, and `Manifolds` for `Manopt`). Non-converged runs are omitted.
 
-![Ill-Conditioned Polynomial Fitting Optimizer Scaling](../assets/plots/ill-conditioned_polynomial_fitting_optimizers.png)
+![Ill-Conditioned Polynomial Fitting Optimizer Scaling](../assets/plots/polynomial_fitting_optimizers.png)
 
 ---
 
@@ -27,7 +27,7 @@ The plot below shows the log-log scaling of **Optimizer Runtime to Convergence**
 
 The full numeric benchmark measurements (cost, linear system assembly times, outer iterations, memory, and convergence status across all sizes) are persisted in the streaming Markdown data file:
 
-- [View Full Raw Benchmark Results Data (Markdown Table)](../data/ill-conditioned_polynomial_fitting.md)
+- [View Full Raw Benchmark Results Data (Markdown Table)](../data/polynomial_fitting.md)
 
 ---
 

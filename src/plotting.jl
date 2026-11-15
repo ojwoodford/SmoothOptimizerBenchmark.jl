@@ -28,6 +28,8 @@ function problem_slug(name::String)
         return "bundle_adjustment"
     elseif occursin("procrustes", lower)
         return "robust_procrustes"
+    elseif occursin("polynomial fitting", lower)
+        return "polynomial_fitting"
     else
         return replace(replace(lower, " " => "_"), "(" => "", ")" => "")
     end
@@ -272,6 +274,7 @@ Maps an optimizer name to a consistent (color, linestyle, marker) tuple:
 - Different flavours (e.g. LM, Dogleg, tron, trunk, NLLSModel + SecondOrderOptimization) use distinct linestyles and markers:
   - NLLSModel + SecondOrderOptimization (LM): :dot with :star5
   - NLLSModel + SecondOrderOptimization (Dogleg): :dashdot with :star5
+  - SecondOrderOptimization (LM, tall): :dashdotdot with :utriangle, so it is not drawn like the normal-equations row
   - LM / trunk / default Newton: :solid with :circle
   - Dogleg / tron / TrustRegion: :dash with :square
   - GaussNewton: :dot with :diamond
@@ -283,6 +286,11 @@ function optimizer_style(opt_name::String)
     if occursin("nllsmodel", name_lower) && (occursin("secondorder", name_lower) || occursin("soo", name_lower))
         linestyle = occursin("dogleg", name_lower) ? :dashdot : :dot
         return :red, linestyle, :star5
+    end
+
+    # The tall formulation (residual and Jacobian) of SecondOrderOptimization, beside its normal-equations rows
+    if (occursin("secondorder", name_lower) || startswith(name_lower, "soo")) && occursin("tall", name_lower)
+        return :red, :dashdotdot, :utriangle
     end
 
     # 1. Package color

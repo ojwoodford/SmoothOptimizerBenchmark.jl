@@ -235,14 +235,21 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
         bytes = init_res.bytes
         total_accumulated_wall_ns = t1_wall_ns
 
-        # 3. Collect further samples
+        # 3. Collect further samples; a throw in any of them makes the row an :error, as in the first run (B10)
+        sample_err = nothing
         for _ in 1:further_samples
             if total_accumulated_wall_ns >= target_total_time_sec * 1e9
                 break
             end
             opt_model.reset!()
             t_wall_start = time_ns()
-            r_sample = opt.optimize(opt_model; time_limit=DEFAULT_MAXTIME)
+            r_sample = try
+                opt.optimize(opt_model; time_limit=DEFAULT_MAXTIME)
+            catch err
+                @warn "Optimizer $(opt.name) threw in a timing sample on model $(opt_model.name)" exception=(err, catch_backtrace()) maxlog=3
+                sample_err = err
+                break
+            end
             dt_wall = Float64(time_ns() - t_wall_start)
             total_accumulated_wall_ns += dt_wall
             if !isnan(r_sample.time_ns)
@@ -253,7 +260,7 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
         end
         opt_model.reset!()
 
-        res = with_timing(init_res, median(times), allocs, bytes)
+        res = sample_err === nothing ? with_timing(init_res, median(times), allocs, bytes) : error_result(sample_err)
         results[opt.name] = res
         if on_result !== nothing
             on_result(opt.name, res)

@@ -53,6 +53,12 @@ using SmoothOptimizerBenchmark
         @test SmoothOptimizerBenchmark.optimizer_style("NLLSModel + SecondOrderOptimization (Dogleg)") == (:red, :dashdot, :star5)
         @test SmoothOptimizerBenchmark.optimizer_style("NLLSModel + SecondOrderOptimization (Sparse LM)") == (:red, :dot, :star5)
         @test SmoothOptimizerBenchmark.optimizer_style("NLLSModel + SecondOrderOptimization (Sparse Dogleg)") == (:red, :dashdot, :star5)
+        # B11: the tall row has a line of its own; the polynomial fit has an explicit slug
+        tall_style = SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (LM, tall)")
+        @test tall_style == (:red, :dashdotdot, :utriangle)
+        @test tall_style != SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (LM)")
+        @test problem_slug(create_polynomial_fitting_problem().name) == "polynomial_fitting"
+        @test length(unique(problem_slug(p.name) for p in problems)) == length(problems)
 
         # Optim NewtonTrustRegion on sparse problem must gracefully return converged=false & NaN time
         sp_prob = create_rosenbrock_sparse_problem()
@@ -89,6 +95,18 @@ using SmoothOptimizerBenchmark
         @test res["Skipping adapter"].status === :skipped
         @test res["SecondOrderOptimization (LM)"].status === :ok
         @test res["SecondOrderOptimization (LM)"].converged
+
+        # B10: a throw in a later timing sample, after a converged first run, makes the row an :error too
+        calls = Ref(0)
+        flaky = OptimizerDefinition("Flaky adapter", (m; kwargs...) -> begin
+            calls[] += 1
+            calls[] >= 3 && error("sample exploded")   # call 1 is the warm-up, call 2 the first timed run
+            OptimizerResult(1.0e3, 0, 0, 1, 1.0, 0.5, true)
+        end)
+        res_flaky = @test_logs (:warn, r"Flaky adapter threw in a timing sample") match_mode=:any run_optimizer_benchmarks([flaky], target; all_models=models, samples=3)
+        @test calls[] == 3
+        @test res_flaky["Flaky adapter"].status === :error
+        @test occursin("sample exploded", res_flaky["Flaky adapter"].message)
 
         # Result files written before the status column still load
         legacy = joinpath(mktempdir(), "legacy.md")
