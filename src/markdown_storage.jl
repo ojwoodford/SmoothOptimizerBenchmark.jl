@@ -6,13 +6,33 @@ using Dates
 export load_problem_markdown, load_all_problem_markdown, update_problem_plots
 export init_problem_markdown, append_model_evaluation, init_optimizer_section, append_optimizer_evaluation
 
-function get_git_commit()
-    pkg_root = normpath(joinpath(@__DIR__, ".."))
+# The short commit of the git checkout at `dir`, with "-dirty" if it has uncommitted changes to tracked files under
+# `pathspec`; "unknown" if it is not a git checkout
+function checkout_commit(dir, pathspec=String[])
     try
-        return strip(read(`git -C $pkg_root rev-parse --short HEAD`, String))
+        commit = strip(read(`git -C $dir rev-parse --short HEAD`, String))
+        dirty = !isempty(strip(read(`git -C $dir status --porcelain --untracked-files=no -- $pathspec`, String)))
+        return dirty ? commit * "-dirty" : commit
     catch
         return "unknown"
     end
+end
+
+# This package's commit; the results the run is writing (docs/) do not make it dirty
+get_git_commit() = checkout_commit(normpath(joinpath(@__DIR__, "..")), [".", ":!docs"])
+
+# The sibling packages whose commits every results header records
+const RECORDED_DEPENDENCIES = ("BlockLinearSystems", "OptimizationVariableInterface", "SecondOrderOptimization", "NLLSModel")
+
+# The commit of each recorded dependency, from the checkout it was loaded from
+function dependency_commits_line()
+    entries = map(RECORDED_DEPENDENCIES) do name
+        id = Base.identify_package(@__MODULE__, name)
+        path = id === nothing ? nothing : Base.locate_package(id)
+        commit = path === nothing ? "unknown" : checkout_commit(dirname(dirname(path)))
+        "$name $commit"
+    end
+    return "- **Dependency Commits**: " * join(entries, ", ")
 end
 
 function extract_text(x)
@@ -63,6 +83,7 @@ function init_problem_markdown(filepath::String, prob_name::String, category::Sy
         println(io, "- **Julia Version**: $(VERSION)")
         println(io, threads_line())
         println(io, "- **Git Commit**: $(get_git_commit())")
+        println(io, dependency_commits_line())
         println(io)
         println(io, "---")
         println(io)

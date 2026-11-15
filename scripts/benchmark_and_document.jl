@@ -12,6 +12,13 @@ plots_dir = DEFAULT_PLOTS_DIR
 mkpath(data_dir)
 mkpath(plots_dir)
 
+# The resolved environment of this run (Manifest.toml is not committed), next to the results
+using Pkg
+open(joinpath(data_dir, "environment.txt"), "w") do io
+    println(io, "Julia $(VERSION), started with -t $(Threads.nthreads())")
+    Pkg.status(; mode=Pkg.PKGMODE_MANIFEST, io)
+end
+
 # Run scaling benchmarks (streams live markdown directly to docs/src/data/<slug>.md): threaded, at the thread
 # counts Julia was started with, then single-threaded (NLLSModel and BLAS on one thread) into its own folder
 t_start = time()

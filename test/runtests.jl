@@ -329,6 +329,10 @@ using SmoothOptimizerBenchmark
         md_text = read(streamed_md, String)
         @test occursin("**Threads**: NLLSModel numthreads=$(Threads.nthreads()), Julia threads=$(Threads.nthreads()), BLAS threads=$(Threads.nthreads())", md_text)
         @test !occursin("Git Commit: unknown", md_text)
+        # Every header records the commit of each sibling package it ran against
+        for dep in SmoothOptimizerBenchmark.RECORDED_DEPENDENCIES
+            @test occursin(Regex("Dependency Commits\\*\\*: .*\\b$(dep) [0-9a-f]{7,}"), md_text)
+        end
 
         loaded = load_problem_markdown(streamed_md)
         @test loaded.problem == prob.name

@@ -405,6 +405,7 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
             println(io, "- **Julia Version**: $(VERSION)")
             println(io, threads_line())
             println(io, "- **Git Commit**: $(SmoothOptimizerBenchmark.get_git_commit())")
+            println(io, dependency_commits_line())
             println(io)
             println(io, "---")
             println(io)
