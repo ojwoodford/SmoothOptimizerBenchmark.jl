@@ -624,7 +624,9 @@ Optimizes an `NLLSModel.Model` directly using `SecondOrderOptimization.jl` from 
 measuring initialization and linear solver setup alongside outer iterations on an equal footing with all solvers.
 
 `formulation`, `reduction`, `numthreads`, `min_work`, `min_work_cost` and `max_dense_bytes` are forwarded to NLLSModel's `optimize!(model, options; ...)`
-(`nothing`: NLLSModel's default threshold); every other keyword goes to `OptimizationOptions`. With `formulation = :tall`, a model
+(`nothing`: NLLSModel's default). `min_work` and `min_work_cost` are per-thread floors, each in its own work estimate:
+an evaluation is split over `clamp(work ÷ floor, 1, numthreads)` threads (see NLLSModel's `optimvars`). Every other keyword
+goes to `OptimizationOptions`. With `formulation = :tall`, a model
 or size the tall path does not support (a Jacobian too large to hold dense, unsupported costs) gives a `:skipped` row.
 If `solution` is a `Vector{Float64}`, the solution is copied into it after the timed run.
 """
@@ -850,7 +852,7 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
 
     elseif m isa NLLSModel.Model
         p = deepcopy(m)
-        f, fdf!, x0, H_proto = NLLSModel.optimvars(p, nothing, benchmark_numthreads())
+        f, fdf!, x0, H_proto = NLLSModel.optimvars(p; unfixed=nothing, numthreads=benchmark_numthreads())
         if !(x0 isa Vector{Float64})
             cb = NLLSModel.nls_callbacks(p)
             m_len = cb.nequ

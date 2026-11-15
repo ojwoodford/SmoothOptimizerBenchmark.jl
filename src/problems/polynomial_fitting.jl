@@ -106,7 +106,7 @@ function create_polynomial_fitting_problem()
             end
             nt = benchmark_numthreads()
             # Buffers of the types NLLSModel's linear system uses (MVector/MMatrix), so fdf! writes straight into them
-            f_nlls, fdf_nlls!, _, H_proto_nlls = NLLSModel.optimvars(nlls_prob, nothing, nt)
+            f_nlls, fdf_nlls!, _, H_proto_nlls = NLLSModel.optimvars(nlls_prob; unfixed=nothing, numthreads=nt)
             H_nlls = deepcopy(H_proto_nlls)
             g_nlls = zero(H_proto_nlls[:, 1])
             m_nlls = ModelDefinition(

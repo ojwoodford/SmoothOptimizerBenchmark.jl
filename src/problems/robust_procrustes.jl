@@ -303,7 +303,7 @@ function create_robust_procrustes_problem()
                 addcost!(nlls_ovi, ProcrustesOVIResidual(A[:, i], B[:, i]))
             end
             nt = benchmark_numthreads()
-            f_ovi, fdf_ovi!, _, _ = NLLSModel.optimvars(nlls_ovi, nothing, nt)
+            f_ovi, fdf_ovi!, _, _ = NLLSModel.optimvars(nlls_ovi; unfixed=nothing, numthreads=nt)
             nv_ovi = (d * (d - 1)) ÷ 2
             g_ovi = zeros(Float64, nv_ovi)
             H_ovi = zeros(Float64, nv_ovi, nv_ovi)
@@ -324,7 +324,7 @@ function create_robust_procrustes_problem()
             end
             # Buffers of the types NLLSModel's linear system uses: MVector/MMatrix while nvars = d(d-1)/2 <= 16 (d <= 6),
             # Vector/Matrix above, so fdf! writes straight into them at every d
-            f_spec, fdf_spec!, _, H_proto_spec = NLLSModel.optimvars(nlls_spec, nothing, StaticInt(1))
+            f_spec, fdf_spec!, _, H_proto_spec = NLLSModel.optimvars(nlls_spec; unfixed=nothing, numthreads=StaticInt(1))
             H_spec = deepcopy(H_proto_spec)
             g_spec = zero(H_proto_spec[:, 1])
             m_spec = ModelDefinition(

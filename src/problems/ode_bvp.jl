@@ -175,7 +175,7 @@ function create_ode_bvp_problem()
             # Model 1: NLLSModel Problem
             nlls_prob = build_sparse_ode_bvp_nlls(n)
             nt = benchmark_numthreads()
-            f_nlls, fdf_nlls!, x0_nlls, H_proto_nlls = NLLSModel.optimvars(nlls_prob, nothing, nt)
+            f_nlls, fdf_nlls!, x0_nlls, H_proto_nlls = NLLSModel.optimvars(nlls_prob; unfixed=nothing, numthreads=nt)
             g_nlls = zeros(Float64, n)
             H_buf_nlls = H_proto_nlls === nothing ? zeros(Float64, n, n) : deepcopy(H_proto_nlls)
             m_nlls = ModelDefinition(
