@@ -23,7 +23,20 @@ The plot below shows the log-log scaling of **Optimizer Runtime to Convergence**
 
 ---
 
-## 3. Raw Data
+## 3. Single-Threaded Results
+
+The same benchmark with NLLSModel and BLAS on one thread (`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`),
+stored separately from the threaded table. Comparing the two shows what threading gains or costs at each size.
+
+![Sparse Bundle Adjustment Model Evaluation Scaling, 1 thread](../assets/plots/single_threaded/bundle_adjustment_models.png)
+
+![Sparse Bundle Adjustment Optimizer Scaling, 1 thread](../assets/plots/single_threaded/bundle_adjustment_optimizers.png)
+
+- [View Single-Threaded Raw Benchmark Results Data (Markdown Table)](../data/single_threaded/bundle_adjustment.md)
+
+---
+
+## 4. Raw Data
 
 The full numeric benchmark measurements (cost, linear system assembly times, outer iterations, memory, and convergence status across all sizes) are persisted in the streaming Markdown data file:
 
@@ -31,8 +44,8 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ---
 
-## 4. Analysis & Key Takeaways
+## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Cameras Ncam = `256`, **`NLLSModel`** achieves the fastest Cost + Linear System evaluation at **10.99 ms** (76.5 MiB allocated).
-- **Top Converged Optimizer**: At Cameras Ncam = `256` (4/7 solvers converged), **`SecondOrderOptimization (LM)`** is fastest at **1.57 s** (10 iterations, final cost `1.33e-20`).
+- **Model Efficiency**: At Cameras Ncam = `256`, **`NLLSModel`** achieves the fastest Cost + Linear System evaluation at **16.57 ms** (76.5 MiB allocated).
+- **Top Converged Optimizer**: At Cameras Ncam = `256` (4/7 solvers converged), **`SecondOrderOptimization (LM)`** is fastest at **1.61 s** (10 iterations, final cost `1.38e-20`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

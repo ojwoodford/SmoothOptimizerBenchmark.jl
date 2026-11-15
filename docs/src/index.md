@@ -28,6 +28,12 @@ To separate modeling overhead from solver algorithm efficiency, every problem is
    - Solvers that fail to satisfy convergence criteria (e.g., hitting iteration/time limits or stalling) are recorded as `converged = false` in the raw data tables and omitted (`NaN`) from convergence runtime plots.
    - Results stream line-by-line directly to Markdown tables in `docs/src/data/` as each model and optimizer measurement completes.
 
+### Threaded and Single-Threaded Tables
+Every problem is run twice. The **threaded** table uses the thread counts in its data file's header (NLLSModel's
+`numthreads`, Julia's threads and BLAS's threads); the **single-threaded** table runs NLLSModel and BLAS on one thread
+(`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`) and is stored separately, in `docs/src/data/single_threaded/`.
+Each problem page shows both.
+
 ---
 
 ## Benchmark Problem Suite
@@ -36,13 +42,13 @@ To separate modeling overhead from solver algorithm efficiency, every problem is
 |:---|:---|:---|:---|:---|:---|
 | [Sparse Multi-dimensional Rosenbrock](problems/rosenbrock_sparse.md) | `large_sparse` | Variables n | 11 sizes (100 … 75000) | `Standalone (Sparse)` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
 | [Exponential Curve Fitting](problems/curve_fitting.md) | `medium_dense` | Data Points m | 11 sizes (64 … 65536) | `Standalone` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
+| [Ill-Conditioned Polynomial Fitting](problems/polynomial_fitting.md) | `medium_dense` | Data Points m | 11 sizes (60 … 6400) | `Standalone` | SecondOrderOptimization, LeastSquaresOptim, Optim |
 | [Dense Multi-dimensional Rosenbrock](problems/rosenbrock_dense.md) | `small_dense` | Dimension n | 12 sizes (2 … 32) | `Standalone` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
 | [Dense Affine Alignment](problems/affine_alignment.md) | `small_dense` | Dimension n | 12 sizes (1 … 32) | `Standalone` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
 | [Nonlinear 3D Pose Chain](problems/pose_chain.md) | `large_sparse` | Poses N | 11 sizes (50 … 10000) | `NLLSModel (Sparse)` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
 | [1D ODE Boundary Value Problem](problems/ode_bvp.md) | `large_sparse` | Grid Points N | 11 sizes (32 … 32768) | `Standalone (Sparse)` | SecondOrderOptimization, LeastSquaresOptim, Optim, JSOSolvers, Ipopt, MadNLP, NonlinearSolve, CaNNOLeS |
 | [Sparse Bundle Adjustment](problems/bundle_adjustment.md) | `large_sparse` | Cameras Ncam | 12 sizes (4 … 256) | `BundleAdjustmentModels` | SecondOrderOptimization, JSOSolvers, Ipopt, MadNLP, CaNNOLeS |
 | [Robust Procrustes on SO(d)](problems/robust_procrustes.md) | `manifold` | Matrix Dimension d | 11 sizes (3 … 32) | `Manifolds` | SecondOrderOptimization, Manopt |
-| [Ill-Conditioned Polynomial Fitting](problems/polynomial_fitting.md) | `medium_dense` | Data Points m | 11 sizes (60 … 6400) | `Standalone` | SecondOrderOptimization, LeastSquaresOptim, Optim |
 
 ---
 

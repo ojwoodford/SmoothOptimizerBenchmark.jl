@@ -23,7 +23,20 @@ The plot below shows the log-log scaling of **Optimizer Runtime to Convergence**
 
 ---
 
-## 3. Raw Data
+## 3. Single-Threaded Results
+
+The same benchmark with NLLSModel and BLAS on one thread (`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`),
+stored separately from the threaded table. Comparing the two shows what threading gains or costs at each size.
+
+![1D ODE Boundary Value Problem Model Evaluation Scaling, 1 thread](../assets/plots/single_threaded/ode_bvp_models.png)
+
+![1D ODE Boundary Value Problem Optimizer Scaling, 1 thread](../assets/plots/single_threaded/ode_bvp_optimizers.png)
+
+- [View Single-Threaded Raw Benchmark Results Data (Markdown Table)](../data/single_threaded/ode_bvp.md)
+
+---
+
+## 4. Raw Data
 
 The full numeric benchmark measurements (cost, linear system assembly times, outer iterations, memory, and convergence status across all sizes) are persisted in the streaming Markdown data file:
 
@@ -31,8 +44,8 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ---
 
-## 4. Analysis & Key Takeaways
+## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Grid Points N = `32768`, **`NLLSModel (Sparse)`** achieves the fastest Cost + Linear System evaluation at **672.33 μs** (464 B allocated).
-- **Top Converged Optimizer**: At Grid Points N = `32768` (3/13 solvers converged), **`SecondOrderOptimization (Dogleg)`** is fastest at **46.76 ms** (2 iterations, final cost `4.70e+00`).
+- **Model Efficiency**: At Grid Points N = `32768`, **`NLLSModel (Sparse)`** achieves the fastest Cost + Linear System evaluation at **556.04 μs** (64 B allocated).
+- **Top Converged Optimizer**: At Grid Points N = `32768` (3/13 solvers converged), **`SecondOrderOptimization (Dogleg)`** is fastest at **21.51 ms** (2 iterations, final cost `4.70e+00`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

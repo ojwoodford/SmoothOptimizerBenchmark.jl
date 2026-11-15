@@ -23,7 +23,20 @@ The plot below shows the log-log scaling of **Optimizer Runtime to Convergence**
 
 ---
 
-## 3. Raw Data
+## 3. Single-Threaded Results
+
+The same benchmark with NLLSModel and BLAS on one thread (`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`),
+stored separately from the threaded table. Comparing the two shows what threading gains or costs at each size.
+
+![Exponential Curve Fitting Model Evaluation Scaling, 1 thread](../assets/plots/single_threaded/curve_fitting_models.png)
+
+![Exponential Curve Fitting Optimizer Scaling, 1 thread](../assets/plots/single_threaded/curve_fitting_optimizers.png)
+
+- [View Single-Threaded Raw Benchmark Results Data (Markdown Table)](../data/single_threaded/curve_fitting.md)
+
+---
+
+## 4. Raw Data
 
 The full numeric benchmark measurements (cost, linear system assembly times, outer iterations, memory, and convergence status across all sizes) are persisted in the streaming Markdown data file:
 
@@ -31,8 +44,8 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ---
 
-## 4. Analysis & Key Takeaways
+## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Data Points m = `65536`, **`NLLSModel (Static)`** achieves the fastest Cost + Linear System evaluation at **480.67 μs** (576 B allocated).
-- **Top Converged Optimizer**: At Data Points m = `65536` (11/14 solvers converged), **`SecondOrderOptimization (LM)`** is fastest at **2.23 ms** (5 iterations, final cost `1.32e+01`).
+- **Model Efficiency**: At Data Points m = `65536`, **`Standalone`** achieves the fastest Cost + Linear System evaluation at **886.58 μs** (32 B allocated).
+- **Top Converged Optimizer**: At Data Points m = `65536` (11/14 solvers converged), **`SecondOrderOptimization (Dogleg)`** is fastest at **3.63 ms** (5 iterations, final cost `1.32e+01`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.
