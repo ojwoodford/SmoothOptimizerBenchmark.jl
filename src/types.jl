@@ -4,11 +4,15 @@ export ModelEvaluationResult, ModelDefinition, OptimizerResult, OptimizerDefinit
 export SingleSizeBenchmarkResult, ProblemScalingBenchmarkResult
 export OPTIMIZER_STATUSES, skipped_result, error_result
 export set_benchmark_threads!, benchmark_threads, benchmark_numthreads
-export DEFAULT_DOCS_DIR, DEFAULT_DATA_DIR, DEFAULT_PLOTS_DIR
+export DEFAULT_DOCS_DIR, DEFAULT_DATA_DIR, DEFAULT_PLOTS_DIR, SINGLE_THREADED_DATA_DIR, SINGLE_THREADED_PLOTS_DIR
 
 const DEFAULT_DOCS_DIR = normpath(joinpath(@__DIR__, "..", "docs", "src"))
 const DEFAULT_DATA_DIR = joinpath(DEFAULT_DOCS_DIR, "data")
 const DEFAULT_PLOTS_DIR = joinpath(DEFAULT_DOCS_DIR, "assets", "plots")
+# The single-threaded table (NLLSModel and BLAS on one thread) is stored and plotted beside the threaded one, under the
+# same file names
+const SINGLE_THREADED_DATA_DIR = joinpath(DEFAULT_DATA_DIR, "single_threaded")
+const SINGLE_THREADED_PLOTS_DIR = joinpath(DEFAULT_PLOTS_DIR, "single_threaded")
 
 # -----------------------------------------------------------------------------
 # Thread counts (M17)

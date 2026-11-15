@@ -63,7 +63,9 @@ function summarize_solvers(res::ProblemScalingBenchmarkResult)
     return join(pkgs, ", ")
 end
 
-function generate_docs_markdown(results::Vector{ProblemScalingBenchmarkResult}; docs_dir=DEFAULT_DOCS_DIR)
+# `single_threaded`: the same problems run with NLLSModel and BLAS on one thread, stored in `data/single_threaded/` and
+# plotted in `assets/plots/single_threaded/`; each problem page shows them beside the threaded results.
+function generate_docs_markdown(results::Vector{ProblemScalingBenchmarkResult}; single_threaded::Vector{ProblemScalingBenchmarkResult}=ProblemScalingBenchmarkResult[], docs_dir=DEFAULT_DOCS_DIR)
     mkpath(joinpath(docs_dir, "problems"))
     mkpath(joinpath(docs_dir, "assets", "plots"))
     mkpath(joinpath(docs_dir, "data"))
@@ -113,6 +115,12 @@ To separate modeling overhead from solver algorithm efficiency, every problem is
    - Solvers that fail to satisfy convergence criteria (e.g., hitting iteration/time limits or stalling) are recorded as `converged = false` in the raw data tables and omitted (`NaN`) from convergence runtime plots.
    - Results stream line-by-line directly to Markdown tables in `docs/src/data/` as each model and optimizer measurement completes.
 
+### Threaded and Single-Threaded Tables
+Every problem is run twice. The **threaded** table uses the thread counts in its data file's header (NLLSModel's
+`numthreads`, Julia's threads and BLAS's threads); the **single-threaded** table runs NLLSModel and BLAS on one thread
+(`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`) and is stored separately, in `docs/src/data/single_threaded/`.
+Each problem page shows both.
+
 ---
 
 ## Benchmark Problem Suite
@@ -144,14 +152,15 @@ $(suite_table)
     # 2. Generate per-problem pages
     for res in ordered_results
         slug = problem_slug(res.problem)
-        prob_md = generate_problem_markdown(res, slug)
+        st_idx = findfirst(r -> r.problem == res.problem, single_threaded)
+        prob_md = generate_problem_markdown(res, slug; single_threaded = st_idx === nothing ? nothing : single_threaded[st_idx])
         open(joinpath(docs_dir, "problems", "$(slug).md"), "w") do io
             write(io, prob_md)
         end
     end
 end
 
-function generate_problem_markdown(res::ProblemScalingBenchmarkResult, slug::String)
+function generate_problem_markdown(res::ProblemScalingBenchmarkResult, slug::String; single_threaded=nothing)
     target_model_name = isempty(res.size_results) ? "Standard" : first(res.size_results).target_model
     num_sizes = length(res.sizes)
 
@@ -200,6 +209,26 @@ This problem uses `$(target_model_name)` universally across all solvers via its 
 """
     end
 
+    single_threaded_section = if single_threaded === nothing
+        ""
+    else
+        st_phase1 = any(sr -> length(sr.model_results) > 1, single_threaded.size_results)
+        model_plot = st_phase1 ? "\n![$(res.problem) Model Evaluation Scaling, 1 thread](../assets/plots/single_threaded/$(slug)_models.png)\n" : ""
+        """
+## 3. Single-Threaded Results
+
+The same benchmark with NLLSModel and BLAS on one thread (`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`),
+stored separately from the threaded table. Comparing the two shows what threading gains or costs at each size.
+$(model_plot)
+![$(res.problem) Optimizer Scaling, 1 thread](../assets/plots/single_threaded/$(slug)_optimizers.png)
+
+- [View Single-Threaded Raw Benchmark Results Data (Markdown Table)](../data/single_threaded/$(slug).md)
+
+---
+"""
+    end
+    raw_n, analysis_n = single_threaded === nothing ? (3, 4) : (4, 5)
+
     model_summary_line = has_phase1 ? "- **Model Efficiency**: $(model_summary_str)" : "- **Model Architecture**: Handled universally via `$(target_model_name)` with built-in zero-allocation adapters."
 
     md = """
@@ -223,7 +252,8 @@ The plot below shows the log-log scaling of **Optimizer Runtime to Convergence**
 
 ---
 
-## 3. Raw Data
+$(single_threaded_section)
+## $(raw_n). Raw Data
 
 The full numeric benchmark measurements (cost, linear system assembly times, outer iterations, memory, and convergence status across all sizes) are persisted in the streaming Markdown data file:
 
@@ -231,7 +261,7 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ---
 
-## 4. Analysis & Key Takeaways
+## $(analysis_n). Analysis & Key Takeaways
 
 $(model_summary_line)
 - **Top Converged Optimizer**: $(opt_summary_str)

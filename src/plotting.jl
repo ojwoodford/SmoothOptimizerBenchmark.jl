@@ -149,12 +149,13 @@ function compute_mean_ranks(item_names::Vector{String}, sizes, get_time::Functio
 end
 
 """
-    plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR) -> String
+    plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR, title_suffix="") -> String
 
 Generates a log-log scaling plot of model evaluation time vs problem size.
-Saves the plot as a PNG image in `outdir` and returns the file path.
+Saves the plot as a PNG image in `outdir` and returns the file path. `title_suffix` is appended to the title
+(for example `" (1 thread)"` for the single-threaded table).
 """
-function plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR)
+function plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR, title_suffix::AbstractString="")
     mkpath(outdir)
     slug = problem_slug(res.problem)
     filepath = joinpath(outdir, "$(slug)_models.png")
@@ -194,7 +195,7 @@ function plot_model_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_P
     plot_kwargs = small_size_axis(sizes)
 
     p = plot(
-        title = "$(res.problem): Model Evaluation Scaling",
+        title = "$(res.problem): Model Evaluation Scaling$(title_suffix)",
         xlabel = res.size_metric_name * " (log scale)",
         ylabel = "Evaluation Time (μs, log scale)",
         xscale = :log10,
@@ -332,12 +333,13 @@ function optimizer_style(opt_name::String)
 end
 
 """
-    plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR) -> String
+    plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR, title_suffix="") -> String
 
 Generates a log-log scaling plot of optimizer execution time vs problem size.
-Saves the plot as a PNG image in `outdir` and returns the file path.
+Saves the plot as a PNG image in `outdir` and returns the file path. `title_suffix` is appended to the title
+(for example `" (1 thread)"` for the single-threaded table).
 """
-function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR)
+function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR, title_suffix::AbstractString="")
     mkpath(outdir)
     slug = problem_slug(res.problem)
     filepath = joinpath(outdir, "$(slug)_optimizers.png")
@@ -370,7 +372,7 @@ function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAU
     plot_kwargs = small_size_axis(sizes)
 
     p = plot(
-        title = "$(res.problem): Optimizer Convergence Scaling",
+        title = "$(res.problem): Optimizer Convergence Scaling$(title_suffix)",
         xlabel = res.size_metric_name * " (log scale)",
         ylabel = "Runtime (ms, log scale)",
         xscale = :log10,
@@ -424,15 +426,15 @@ function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAU
 end
 
 """
-    generate_all_plots(results::Vector{ProblemScalingBenchmarkResult}; outdir=DEFAULT_PLOTS_DIR) -> Dict{String, Tuple{String, String}}
+    generate_all_plots(results::Vector{ProblemScalingBenchmarkResult}; outdir=DEFAULT_PLOTS_DIR, title_suffix="") -> Dict{String, Tuple{String, String}}
 
 Generates both model and optimizer log-log scaling plots for all benchmarked problems.
 """
-function generate_all_plots(results::Vector{ProblemScalingBenchmarkResult}; outdir=DEFAULT_PLOTS_DIR)
+function generate_all_plots(results::Vector{ProblemScalingBenchmarkResult}; outdir=DEFAULT_PLOTS_DIR, title_suffix::AbstractString="")
     paths = Dict{String, Tuple{String, String}}()
     for res in results
-        m_path = plot_model_scaling(res; outdir=outdir)
-        o_path = plot_optimizer_scaling(res; outdir=outdir)
+        m_path = plot_model_scaling(res; outdir, title_suffix)
+        o_path = plot_optimizer_scaling(res; outdir, title_suffix)
         paths[res.problem] = (m_path, o_path)
     end
     return paths

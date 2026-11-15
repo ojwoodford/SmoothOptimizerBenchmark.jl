@@ -27,6 +27,8 @@ Benchmarks are decoupled into two phases across **10–12 problem sizes** per pr
    - Runs all compatible optimizers on a **standardized baseline model** (`Standalone` `LeastSquaresProblem` for Euclidean problems, `BundleAdjustmentModels` for Bundle Adjustment, and `Manifolds` for Riemannian problems) via cross-framework adapters, alongside full-stack **`NLLSModel + SecondOrderOptimization`** runs (plotted with star markers) evaluated from a cold start on an equal footing with all other solvers.
    - Enforces uniform stopping tolerances (`gtol = 1e-8`, `xtol = 1e-8`, `ftol = 1e-8`, `maxiters = 500`, `maxtime = 30.0s`).
    - Streams each model and optimizer result row immediately to `docs/src/data/<problem>.md` so progress is preserved if interrupted, and omits non-converged solver runs from scaling plots.
+3. **Threaded and single-threaded tables**:
+   - The full run benchmarks every problem twice: at the thread counts Julia was started with (recorded in each data file's header), into `docs/src/data/`, and with NLLSModel and BLAS on one thread (`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`), into `docs/src/data/single_threaded/`, with its plots in `docs/src/assets/plots/single_threaded/`. Each problem page shows both.
 
 ---
 
@@ -72,6 +74,10 @@ results = run_all_scaling_benchmarks()
 
 # Generate log-log model & optimizer scaling plots
 generate_all_plots(results)
+
+# The single-threaded table, stored separately
+results_1t = run_all_scaling_benchmarks(data_dir=SINGLE_THREADED_DATA_DIR, numthreads=1, blas_threads=1)
+generate_all_plots(results_1t; outdir=SINGLE_THREADED_PLOTS_DIR, title_suffix=" (1 thread)")
 
 # Run a single problem at one size
 prob = create_robust_procrustes_problem()
