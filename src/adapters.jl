@@ -399,7 +399,7 @@ Extracts or converts a problem/model into an `NLPModels.AbstractNLPModel`.
 as_nlpmodel(nlp::AbstractNLPModel) = nlp
 as_nlpmodel(bam::BundleAdjustmentModel) = LeastSquaresNLPModel(as_least_squares_problem(bam))
 as_nlpmodel(m::ModelDefinition) = as_nlpmodel(m.model)
-as_nlpmodel(prob::NLLSModel.Model) = NLLSModel.NLPLSModel(prob)
+as_nlpmodel(prob::NLLSModel.Model) = NLLSModel.NLPLSModel(prob; numthreads=benchmark_numthreads())
 as_nlpmodel(lsp::LeastSquaresProblem) = LeastSquaresNLPModel(lsp)
 
 """
@@ -410,7 +410,7 @@ Extracts or converts a problem/model into an `NLPModels.AbstractNLSModel`.
 as_nlsmodel(nls::AbstractNLSModel) = nls
 as_nlsmodel(bam::BundleAdjustmentModel) = bam
 as_nlsmodel(m::ModelDefinition) = as_nlsmodel(m.model)
-as_nlsmodel(prob::NLLSModel.Model) = NLLSModel.NLLSNLSModel(prob)
+as_nlsmodel(prob::NLLSModel.Model) = NLLSModel.NLLSNLSModel(prob; numthreads=benchmark_numthreads())
 as_nlsmodel(lsp::LeastSquaresProblem) = LeastSquaresNLSModel(lsp)
 
 """
@@ -552,20 +552,16 @@ tall_unavailable(err) = err isa ArgumentError && (startswith(err.msg, "formulati
 # Uniform Optimizer Dispatchers
 # -----------------------------------------------------------------------------
 
-# The named termination masks, for the message of a SecondOrderOptimization row. TERMINATION_STALLED is
-# new (SecondOrderOptimization's Q7); include it only when the loaded version defines it.
-const SOO_TERMINATION_NAMES = let names = Pair{String, Int}[
-        "cost_inf" => TERMINATION_COST_INF, "cost_nan" => TERMINATION_COST_NAN,
-        "rel_dcost" => TERMINATION_REL_DCOST, "abs_dcost" => TERMINATION_ABS_DCOST,
-        "step_inf" => TERMINATION_STEP_INF, "step_nan" => TERMINATION_STEP_NAN,
-        "step_size" => TERMINATION_STEP_SIZE, "max_fails" => TERMINATION_MAX_FAILS,
-        "max_iters" => TERMINATION_MAX_ITERS, "max_time" => TERMINATION_MAX_TIME,
-        "start_not_finite" => TERMINATION_START_NOT_FINITE,
-        "grad_not_finite" => TERMINATION_GRAD_NOT_FINITE, "grad_tol" => TERMINATION_GRAD_TOL,
-        "linsolver_failed" => TERMINATION_LINSOLVER_FAILED]
-    isdefined(SecondOrderOptimization, :TERMINATION_STALLED) && push!(names, "stalled" => getfield(SecondOrderOptimization, :TERMINATION_STALLED))
-    Tuple(names)
-end
+# The named termination masks, for the message of a SecondOrderOptimization row
+const SOO_TERMINATION_NAMES = (
+    "cost_inf" => TERMINATION_COST_INF, "cost_nan" => TERMINATION_COST_NAN,
+    "rel_dcost" => TERMINATION_REL_DCOST, "abs_dcost" => TERMINATION_ABS_DCOST,
+    "step_inf" => TERMINATION_STEP_INF, "step_nan" => TERMINATION_STEP_NAN,
+    "step_size" => TERMINATION_STEP_SIZE, "max_fails" => TERMINATION_MAX_FAILS,
+    "max_iters" => TERMINATION_MAX_ITERS, "max_time" => TERMINATION_MAX_TIME,
+    "start_not_finite" => TERMINATION_START_NOT_FINITE,
+    "grad_not_finite" => TERMINATION_GRAD_NOT_FINITE, "grad_tol" => TERMINATION_GRAD_TOL,
+    "linsolver_failed" => TERMINATION_LINSOLVER_FAILED, "stalled" => TERMINATION_STALLED)
 
 soo_termination_message(termination::Integer) =
     join([name for (name, mask) in SOO_TERMINATION_NAMES if termination & mask != 0], ", ")
@@ -682,7 +678,7 @@ function optimize_least_squares(target; method=:dogleg, solution=nothing, gtol=D
     lso_method = (method === :lm || method === :levenbergmarquardt) ? LeastSquaresOptim.LevenbergMarquardt() : LeastSquaresOptim.Dogleg()
 
     if m isa NLLSModel.Model
-        cb = NLLSModel.nls_callbacks(m)
+        cb = NLLSModel.nls_callbacks(m; numthreads=benchmark_numthreads())
         lsp = LeastSquaresProblem(x=copy(cb.x0), y=cb.r0, f! = cb.res!, g! = cb.jac!, J=copy(cb.J0))
         return optimize_least_squares(lsp; method=method, solution=solution, gtol=gtol, xtol=xtol, ftol=ftol, maxiters=maxiters, maxtime=maxtime, time_limit=time_limit, kwargs...)
     end
@@ -854,7 +850,7 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         p = deepcopy(m)
         f, fdf!, x0, H_proto = NLLSModel.optimvars(p; unfixed=nothing, numthreads=benchmark_numthreads())
         if !(x0 isa Vector{Float64})
-            cb = NLLSModel.nls_callbacks(p)
+            cb = NLLSModel.nls_callbacks(p; numthreads=benchmark_numthreads())
             m_len = cb.nequ
             n_len = cb.nvar
             x0_cb = copy(cb.x0)
@@ -1152,7 +1148,7 @@ function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEF
     m = target isa ModelDefinition ? target.model : target
 
     if m isa NLLSModel.Model
-        cb = NLLSModel.nls_callbacks(m)
+        cb = NLLSModel.nls_callbacks(m; numthreads=benchmark_numthreads())
         m_len = cb.nequ
         n_len = cb.nvar
         if cb.J0 isa SparseMatrixCSC && n_len > 25000
