@@ -545,8 +545,9 @@ store_solution!(::Nothing, x) = nothing
 store_solution!(out::Vector{Float64}, x) = (resize!(out, length(x)); copyto!(out, x); nothing)
 
 # A tall run that NLLSModel or SecondOrderOptimization reports as unavailable for this model or size
-# (sparse or too large for a dense Jacobian, elimination, unsupported costs) is a skip, not a failure
-tall_unavailable(err) = err isa ArgumentError && (startswith(err.msg, "formulation = :tall") || startswith(err.msg, "soo_objective_tall"))
+# (sparse or too large for a dense Jacobian, elimination, unsupported costs) is a skip, not a failure. NLLSModel names
+# `formulation = :tall` in each such message, though not always first (its dense-size check starts "A dense ...").
+tall_unavailable(err) = err isa ArgumentError && (occursin("formulation = :tall", err.msg) || startswith(err.msg, "soo_objective_tall"))
 
 # -----------------------------------------------------------------------------
 # Uniform Optimizer Dispatchers
