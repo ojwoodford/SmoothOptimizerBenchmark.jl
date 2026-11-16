@@ -561,7 +561,7 @@ const SOO_TERMINATION_NAMES = (
     "step_size" => TERMINATION_STEP_SIZE, "max_fails" => TERMINATION_MAX_FAILS,
     "max_iters" => TERMINATION_MAX_ITERS, "max_time" => TERMINATION_MAX_TIME,
     "start_not_finite" => TERMINATION_START_NOT_FINITE,
-    "grad_not_finite" => TERMINATION_GRAD_NOT_FINITE, "grad_tol" => TERMINATION_GRAD_TOL,
+    "grad_inf" => TERMINATION_GRAD_INF, "grad_nan" => TERMINATION_GRAD_NAN, "grad_tol" => TERMINATION_GRAD_TOL,
     "linsolver_failed" => TERMINATION_LINSOLVER_FAILED, "stalled" => TERMINATION_STALLED)
 
 soo_termination_message(termination::Integer) =
