@@ -10,7 +10,6 @@ using Printf
 using Statistics
 
 using SecondOrderOptimization
-using BlockLinearSystems
 using NLLSModel
 using Optim
 using LeastSquaresOptim
