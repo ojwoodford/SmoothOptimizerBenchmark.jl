@@ -255,13 +255,25 @@ using SmoothOptimizerBenchmark
             end
         end
 
-        # The tall row is skipped, not failed, where the dense Jacobian is unavailable
+        # The tall row is skipped, not failed, where a dense Jacobian is forced above the cap
         sp = create_rosenbrock_sparse_problem()
         sp_models = sp.generate_models(10)
         sp_nlls = first(filter(m -> m.model isa SmoothOptimizerBenchmark.NLLSModel.Model, sp_models))
-        r_big = optimize_nlls_soo(sp_nlls; method=:lm, formulation=:tall, max_dense_bytes=8)
+        r_big = optimize_nlls_soo(sp_nlls; method=:lm, formulation=:tall, storage=:dense, max_dense_bytes=8)
         @test r_big.status === :skipped
         @test occursin("dense", r_big.message)
+        # U1: under storage = :auto (NLLSModel NTP1) the same run stores J sparse and runs, to the normal row's cost
+        J_auto = last(SmoothOptimizerBenchmark.NLLSModel.optimvars_nls(sp_nlls.model; storage=:auto, max_dense_bytes=8))
+        @test J_auto isa SmoothOptimizerBenchmark.SparseMatrixCSC
+        r_auto = optimize_nlls_soo(sp_nlls; method=:lm, formulation=:tall, storage=:auto, max_dense_bytes=8)
+        @test r_auto.status === :ok
+        @test r_auto.converged
+        r_auto_norm = optimize_nlls_soo(sp_nlls; method=:lm)
+        @test isapprox(r_auto.final_cost, r_auto_norm.final_cost; rtol=1e-8, atol=1e-12)
+        # optimize_soo forwards storage likewise (NLLSModel checks it)
+        @test optimize_soo(sp_nlls; method=:lm, formulation=:tall, storage=:sparse).status === :ok
+        @test_throws ArgumentError optimize_soo(sp_nlls; method=:lm, storage=:bogus)
+        @test_throws ArgumentError optimize_nlls_soo(sp_nlls; method=:lm, storage=:bogus)
         sp_lsp = get_standard_optimizer_model(sp_models, sp.category)
         @test optimize_soo(sp_lsp; method=:lm, formulation=:tall).status === :skipped
 
