@@ -240,7 +240,7 @@ function create_ode_bvp_problem()
 
             return models
         end,
-        get_standard_optimizers(),
+        get_standard_optimizers(; tall=true),
         "Grid Points N"
     )
 end

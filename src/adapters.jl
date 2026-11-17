@@ -1264,8 +1264,9 @@ end
 """
     soo_tall_optimizer() -> OptimizerDefinition
 
-"SecondOrderOptimization (LM, tall)": Levenberg–Marquardt on the residual-and-Jacobian form (QR of a dense `J`), through
-`formulation = :tall`. For the dense problems; a size the tall path does not support is reported as `:skipped`.
+"SecondOrderOptimization (LM, tall)": Levenberg–Marquardt on the residual-and-Jacobian form, through `formulation = :tall`:
+QR of `J`, dense or sparse (SPQR) as NLLSModel's `storage = :auto` chooses from its fill on an `NLLSModel.Model`, dense on
+a `LeastSquaresProblem`. A model or size the tall path does not support is reported as `:skipped`.
 """
 soo_tall_optimizer() = OptimizerDefinition("SecondOrderOptimization (LM, tall)", (m; kwargs...) -> optimize_soo(m; method=:lm, formulation=:tall, kwargs...))
 
@@ -1274,7 +1275,7 @@ soo_tall_optimizer() = OptimizerDefinition("SecondOrderOptimization (LM, tall)",
 
 Returns standard unified optimizer definitions for Euclidean problems on the standardized baseline model (e.g. `LeastSquaresProblem`).
 Includes all solver families configured with universal stopping criteria. `tall = true` adds the
-"SecondOrderOptimization (LM, tall)" row ([`soo_tall_optimizer`](@ref)), for the dense problems.
+"SecondOrderOptimization (LM, tall)" row ([`soo_tall_optimizer`](@ref)).
 """
 function get_standard_optimizers(; tall::Bool=false)
     return OptimizerDefinition[

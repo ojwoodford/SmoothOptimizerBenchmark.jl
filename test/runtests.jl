@@ -255,6 +255,26 @@ using SmoothOptimizerBenchmark
             end
         end
 
+        # T1: the tall row on the sparse problems, at their smallest and largest sizes. NLLSModel's storage = :auto stores J
+        # from its fill: sparse at the largest size; at the smallest it may be dense. Costs agree to rtol = 1e-8, with an
+        # absolute floor of ftol times the start cost, since ODE BVP and sparse Rosenbrock are zero-residual problems whose
+        # final costs are rounding (rules.md 31)
+        for prob in (create_pose_chain_problem(), create_rosenbrock_sparse_problem(), create_ode_bvp_problem())
+            @test any(o -> o.name == tall.name, prob.compatible_optimizers)
+            for sz in (first(prob.default_sizes), last(prob.default_sizes))
+                models = prob.generate_models(sz)
+                md = SmoothOptimizerBenchmark.resolve_optimizer_model(tall, get_standard_optimizer_model(models, prob.category), models)
+                @test md.model isa SmoothOptimizerBenchmark.NLLSModel.Model
+                J = last(SmoothOptimizerBenchmark.NLLSModel.optimvars_nls(md.model))
+                sz == last(prob.default_sizes) && @test J isa SmoothOptimizerBenchmark.SparseMatrixCSC
+                r_tall = tall.optimize(md)
+                r_norm = normal_lm(md)
+                @test r_tall.status === :ok && r_tall.converged
+                @test r_norm.status === :ok
+                @test isapprox(r_tall.final_cost, r_norm.final_cost; rtol=1e-8, atol=SmoothOptimizerBenchmark.DEFAULT_FTOL * r_norm.start_cost)
+            end
+        end
+
         # The tall row is skipped, not failed, where a dense Jacobian is forced above the cap
         sp = create_rosenbrock_sparse_problem()
         sp_models = sp.generate_models(10)
