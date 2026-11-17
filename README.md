@@ -51,6 +51,14 @@ Each problem resides in `src/problems/`, scales across $\ge 11$ problem sizes, a
 
 ## Running the Benchmarks & Generating Documentation
 
+SecondOrderOptimization and NLLSModel are not registered, and `Project.toml` has no `[sources]` block, so the environment does not instantiate from the registry alone. Develop the unregistered packages into the local `Manifest.toml` (which is not committed) from checkouts beside this one, before the first run:
+
+```bash
+julia --project=. -e 'using Pkg; Pkg.develop([PackageSpec(path = "../SecondOrderOptimization.jl"), PackageSpec(path = "../NLLSModel.jl")])'
+```
+
+Do the same for OptimizationVariableInterface or BlockLinearSystems to run against an unregistered version of either. `Pkg.develop` adds a package it develops to `Project.toml`'s `[deps]` if it is not there; do not commit that edit.
+
 To run the full multi-scale benchmark suite, generate all log-log scaling plots in `docs/src/assets/plots/`, and build the `Documenter.jl` HTML site in `docs/build/`:
 
 ```bash

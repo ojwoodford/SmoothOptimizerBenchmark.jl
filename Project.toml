@@ -34,12 +34,6 @@ Static = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
-[sources]
-BlockLinearSystems = {path = "../BlockLinearSystems.jl"}
-NLLSModel = {path = "../NLLSModel.jl"}
-OptimizationVariableInterface = {path = "../OptimizationVariableInterface.jl"}
-SecondOrderOptimization = {path = "../SecondOrderOptimization.jl"}
-
 [compat]
 BlockLinearSystems = "0.1"
 BundleAdjustmentModels = "0.4.1"
