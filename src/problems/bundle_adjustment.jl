@@ -229,6 +229,8 @@ function create_bundle_adjustment_problem()
         [
             OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:levenbergmarquardt_dtd, reduction=:eliminate, kwargs...)),
             OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, reduction=:eliminate, kwargs...)),
+            # QR elimination on the tall path (square-root bundle adjustment), same iterator and reduction as the LM row
+            OptimizerDefinition("SecondOrderOptimization (LM, tall)", (m; kwargs...) -> optimize_soo(m; method=:levenbergmarquardt_dtd, formulation=:tall, reduction=:eliminate, kwargs...)),
             OptimizerDefinition("CaNNOLeS", (m; kwargs...) -> optimize_cannoles(m; kwargs...)),
             OptimizerDefinition("JSOSolvers (trunk)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:trunk, kwargs...)),
             OptimizerDefinition("JSOSolvers (tron)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:tron, kwargs...)),
