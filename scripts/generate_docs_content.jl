@@ -21,6 +21,7 @@ const CANONICAL_PROBLEM_SLUGS = [
     "curve_fitting",
     "polynomial_fitting",
     "rosenbrock_dense",
+    "multilateration",
     "affine_alignment",
     "pose_chain",
     "ode_bvp",
