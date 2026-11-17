@@ -1,6 +1,11 @@
 using Test
 using SmoothOptimizerBenchmark
 
+# Bytes allocated by a call of `f()`, after a warm-up call. Measured behind this function barrier: at a testset's top-level
+# scope Julia 1.10 boxes the returned value (32 bytes for a linear-system closure's tuple), which is the test's
+# allocation, not the closure's
+allocated_bytes(f) = (f(); @allocated f())
+
 @testset "SmoothOptimizerBenchmark Suite" begin
     problems = get_all_problems()
     # 10 distinct problems (9 Euclidean non-manifold + 1 manifold)
@@ -243,8 +248,7 @@ using SmoothOptimizerBenchmark
         linsys = cf.eval_cost_and_linear_system
         @test linsys.g_nlls isa SmoothOptimizerBenchmark.MVector{3, Float64}
         @test linsys.H_nlls isa SmoothOptimizerBenchmark.MMatrix{3, 3, Float64, 9}
-        linsys()
-        @test (@allocated linsys()) == 0
+        @test allocated_bytes(linsys) == 0
         # Procrustes, specialized rotation: nvars = d(d-1)/2 is static, so the system is static while it is <= 16
         # (d <= 6) and dynamic above; the buffers follow it
         for (d, static_sys) in ((4, true), (6, true), (8, false))
@@ -261,8 +265,7 @@ using SmoothOptimizerBenchmark
             ml_linsys = ml.eval_cost_and_linear_system
             @test ml_linsys.g_nlls isa SmoothOptimizerBenchmark.MVector{d, Float64}
             @test ml_linsys.H_nlls isa SmoothOptimizerBenchmark.MMatrix{d, d, Float64, d * d}
-            ml_linsys()
-            @test (@allocated ml_linsys()) == 0
+            @test allocated_bytes(ml_linsys) == 0
         end
         set_benchmark_threads!()
     end
