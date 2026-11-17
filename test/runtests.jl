@@ -393,8 +393,9 @@ allocated_bytes(f) = (f(); @allocated f())
 
             # Step 20: every row on the fudged model, pinned to what step 13 measured: :ok at the native LM cost, or the
             # measured failure (a stop without convergence, at the same minimum)
-            measured_failures = n == 64 ? ("MadNLP", "NonlinearSolve (TrustRegion, fudged)") :
-                ("JSOSolvers (trunk)", "JSOSolvers (tron)", "MadNLP", "NonlinearSolve (TrustRegion, fudged)")
+            # Measured on Julia 1.10 and 1.13 alike, with EXP_OUTLIER_SEED = 4245
+            measured_failures = n == 64 ? ("NonlinearSolve (TrustRegion, fudged)",) :
+                ("JSOSolvers (trunk)", "JSOSolvers (tron)", "NonlinearSolve (TrustRegion, fudged)")
             for o in prob.compatible_optimizers[4:end]
                 m_sa.reset!()
                 r = o.optimize(m_sa)
