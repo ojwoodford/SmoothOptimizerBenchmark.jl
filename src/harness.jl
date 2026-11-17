@@ -118,8 +118,9 @@ end
 """
     resolve_optimizer_model(opt::OptimizerDefinition, target_model::ModelDefinition, all_models::Vector{<:ModelDefinition}) -> ModelDefinition
 
-Selects the model passed to `opt.optimize`:
-Each optimizer is paired with its optimal model formulation to maximize performance:
+Selects the model passed to `opt.optimize`. A row with a `model_name` runs on the model of exactly that name, and an
+`ArgumentError` is thrown if there is none. Otherwise each optimizer is paired, by its name, with its optimal model
+formulation:
 - `SecondOrderOptimization`: uses `NLLSModel` (preferring specialized / static / sparse when present)
 - `LeastSquaresOptim`: uses `Standalone` / `LeastSquaresProblem`
 - `Manopt`: uses `Manifolds`
@@ -127,6 +128,14 @@ Each optimizer is paired with its optimal model formulation to maximize performa
 - Fallback: uses `target_model`
 """
 function resolve_optimizer_model(opt::OptimizerDefinition, target_model::ModelDefinition, all_models::Vector{<:ModelDefinition})
+    # 0. An explicit model for the row (P2a): the model of that exact name, whatever the row's name says
+    if opt.model_name !== nothing
+        idx = findfirst(m -> m.name == opt.model_name, all_models)
+        idx === nothing && throw(ArgumentError("Optimizer row $(repr(opt.name)) asks for the model $(repr(opt.model_name)), " *
+            "which this problem does not have; its models are $(join(repr.(getfield.(all_models, :name)), ", "))"))
+        return all_models[idx]
+    end
+
     name_lower = lowercase(opt.name)
 
     # 1. SecondOrderOptimization: thrives on NLLSModel

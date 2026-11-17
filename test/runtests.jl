@@ -134,6 +134,32 @@ using SmoothOptimizerBenchmark
         @test lr.size_results[1].optimizer_results["B"].status === :not_converged
     end
 
+    @testset "An explicit model for a row (P2a)" begin
+        prob = create_curve_fitting_problem()
+        models = prob.generate_models(64)
+        target = get_standard_optimizer_model(models, prob.category)
+        resolve = SmoothOptimizerBenchmark.resolve_optimizer_model
+        m_nlls = only(filter(m -> m.name == "NLLSModel (Static)", models))
+        m_sa = only(filter(m -> m.name == "Standalone", models))
+        f = (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)
+        # The two-argument constructor sets no model; the name then decides, as before
+        plain = OptimizerDefinition("SecondOrderOptimization (LM)", f)
+        @test plain.model_name === nothing
+        @test resolve(plain, target, models) === m_nlls
+        # A model name wins over a row name that would route elsewhere
+        pinned = OptimizerDefinition("SecondOrderOptimization (LM)", f, "Standalone")
+        @test resolve(pinned, target, models) === m_sa
+        @test pinned.optimize(resolve(pinned, target, models)).status === :ok
+        # A name no model has is an ArgumentError naming the row and the models
+        missing_model = OptimizerDefinition("SecondOrderOptimization (LM)", f, "No such model")
+        err = try resolve(missing_model, target, models); nothing catch e; e end
+        @test err isa ArgumentError
+        @test occursin("SecondOrderOptimization (LM)", err.msg) && occursin("No such model", err.msg)
+        @test occursin("NLLSModel (Static)", err.msg) && occursin("Standalone", err.msg)
+        # Every existing row has no model name
+        @test all(o -> o.model_name === nothing, (o for p in problems for o in p.compatible_optimizers))
+    end
+
     @testset "Cold-Start NLLSModel + SecondOrderOptimization & BAL Equivalence" begin
         # 1. Exponential Curve Fitting (static variable)
         cf_models = create_curve_fitting_problem().generate_models(64)
