@@ -57,7 +57,7 @@ SecondOrderOptimization and NLLSModel are not registered, and `Project.toml` has
 julia --project=. -e 'using Pkg; Pkg.develop([PackageSpec(path = "../SecondOrderOptimization.jl"), PackageSpec(path = "../NLLSModel.jl")])'
 ```
 
-Do the same for OptimizationVariableInterface or BlockLinearSystems to run against an unregistered version of either. `Pkg.develop` adds a package it develops to `Project.toml`'s `[deps]` if it is not there; do not commit that edit.
+Do the same for OptimizationVariableInterface or BlockLinearSystems to run against an unregistered version of either. Since Julia 1.11, `Pkg.develop` also records each path in `Project.toml` (a `[sources]` entry, and the package in `[deps]` if it is not a direct dependency, as BlockLinearSystems is not). Do not commit that edit: restore the file with `git checkout Project.toml`. Packages are loaded from the manifest, which keeps the developed paths.
 
 To run the full multi-scale benchmark suite, generate all log-log scaling plots in `docs/src/assets/plots/`, and build the `Documenter.jl` HTML site in `docs/build/`:
 
