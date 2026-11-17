@@ -401,6 +401,12 @@ allocated_bytes(f) = (f(); @allocated f())
                 r = o.optimize(m_sa)
                 if o.name in measured_failures
                     @test r.status === :not_converged
+                elseif n == 1024 && o.name == "MadNLP"
+                    # MadNLP ends at the minimum in 14 iterations, and whether it then reports SOLVE_SUCCEEDED or
+                    # SEARCH_DIRECTION_BECOMES_TOO_SMALL depends on rounding that changes with what ran earlier in the
+                    # process (measured on Julia 1.10): pinned on cost, either status (maintainer, 2026-11-17)
+                    @test r.status in (:ok, :not_converged)
+                    @test r.final_cost ≈ r_lm.final_cost rtol=1e-6
                 else
                     @test r.status === :ok
                     @test r.final_cost ≈ r_lm.final_cost rtol=1e-6
