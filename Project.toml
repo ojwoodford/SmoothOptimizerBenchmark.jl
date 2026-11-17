@@ -49,7 +49,7 @@ NLLSModel = "0.1"
 NonlinearSolve = "4.19.1"
 OptimizationVariableInterface = "0.3"
 Plots = "1.41.7"
-SecondOrderOptimization = "0.1"
+SecondOrderOptimization = "0.2"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
