@@ -16,6 +16,9 @@ function problem_slug(name::String)
         return "rosenbrock_sparse"
     elseif occursin("dense multi-dimensional rosenbrock", lower)
         return "rosenbrock_dense"
+    elseif occursin("robust exponential curve fitting", lower)
+        # Before the next branch, which matches this name too
+        return "curve_fitting_robust"
     elseif occursin("exponential curve fitting", lower)
         return "curve_fitting"
     elseif occursin("affine alignment", lower)
@@ -276,6 +279,8 @@ Maps an optimizer name to a consistent (color, linestyle, marker) tuple:
   - NLLSModel + SecondOrderOptimization (LM): :dot with :star5
   - NLLSModel + SecondOrderOptimization (Dogleg): :dashdot with :star5
   - SecondOrderOptimization (LM, tall): :dashdotdot with :utriangle, so it is not drawn like the normal-equations row
+  - SecondOrderOptimization (LM, fudged), the control row on rewritten residuals: :dash with :diamond, so it is not drawn
+    like the native LM row
   - LM / trunk / default Newton: :solid with :circle
   - Dogleg / tron / TrustRegion: :dash with :square
   - GaussNewton: :dot with :diamond
@@ -292,6 +297,11 @@ function optimizer_style(opt_name::String)
     # The tall formulation (residual and Jacobian) of SecondOrderOptimization, beside its normal-equations rows
     if (occursin("secondorder", name_lower) || startswith(name_lower, "soo")) && occursin("tall", name_lower)
         return :red, :dashdotdot, :utriangle
+    end
+
+    # SecondOrderOptimization on the rewritten ("fudged") residuals, beside its native rows
+    if (occursin("secondorder", name_lower) || startswith(name_lower, "soo")) && occursin("fudged", name_lower)
+        return :red, :dash, :diamond
     end
 
     # 1. Package color

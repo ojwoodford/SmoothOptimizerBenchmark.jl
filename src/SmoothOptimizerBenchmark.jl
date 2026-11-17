@@ -35,6 +35,7 @@ include("harness.jl")
 include("plotting.jl")
 
 include("problems/curve_fitting.jl")
+include("problems/curve_fitting_robust.jl")
 include("problems/affine_alignment.jl")
 include("problems/rosenbrock_dense.jl")
 include("problems/rosenbrock_sparse.jl")
@@ -47,6 +48,7 @@ include("problems/multilateration.jl")
 
 export get_all_problems
 export create_curve_fitting_problem
+export create_robust_curve_fitting_problem
 export create_affine_alignment_problem
 export create_rosenbrock_dense_problem
 export create_rosenbrock_sparse_problem
@@ -74,6 +76,7 @@ function get_all_problems()
     return ProblemDefinition[
         create_rosenbrock_sparse_problem(),
         create_curve_fitting_problem(),
+        create_robust_curve_fitting_problem(),
         create_polynomial_fitting_problem(),
         create_affine_alignment_problem(),
         create_rosenbrock_dense_problem(),
