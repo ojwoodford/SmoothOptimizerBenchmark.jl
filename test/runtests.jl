@@ -358,6 +358,20 @@ using SmoothOptimizerBenchmark
                 @test opt_load.message == SmoothOptimizerBenchmark.table_message(opt_orig.message)
             end
         end
+        # D3: BlockLinearSystems is no longer recorded, and a header written before then, which names it, still loads
+        @test !occursin("BlockLinearSystems", md_text)
+        old_md = joinpath(tmp_data_dir, "old_header", "rosenbrock_sparse.md")
+        mkpath(dirname(old_md))
+        write(old_md, replace(md_text, "**Dependency Commits**: " => "**Dependency Commits**: BlockLinearSystems d38552c, "))
+        @test occursin("BlockLinearSystems d38552c", read(old_md, String))
+        loaded_old = load_problem_markdown(old_md)
+        @test loaded_old.problem == loaded.problem
+        @test loaded_old.sizes == loaded.sizes
+        @test loaded_old.category == loaded.category
+        for (sr_new, sr_old) in zip(loaded.size_results, loaded_old.size_results)
+            @test keys(sr_old.optimizer_results) == keys(sr_new.optimizer_results)
+            @test keys(sr_old.model_results) == keys(sr_new.model_results)
+        end
         rm(tmp_data_dir; recursive=true, force=true)
 
         # Test Plotting Pipeline

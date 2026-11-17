@@ -22,7 +22,7 @@ end
 get_git_commit() = checkout_commit(normpath(joinpath(@__DIR__, "..")), [".", ":!docs"])
 
 # The sibling packages whose commits every results header records
-const RECORDED_DEPENDENCIES = ("BlockLinearSystems", "OptimizationVariableInterface", "SecondOrderOptimization", "NLLSModel")
+const RECORDED_DEPENDENCIES = ("OptimizationVariableInterface", "SecondOrderOptimization", "NLLSModel")
 
 # The commit of each recorded dependency, from the checkout it was loaded from
 function dependency_commits_line()
