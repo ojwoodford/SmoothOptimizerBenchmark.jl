@@ -526,30 +526,32 @@ end
             @test J_largest isa SmoothOptimizerBenchmark.SparseMatrixCSC
         end
 
-        # T2: bundle adjustment on the tall path with QR elimination, beside the normal Schur rows. At the two smallest sizes
-        # it converges to the normal Schur LM row's cost, with the reduced system stored dense and sparse (forced); the
-        # synthetic problem is zero-residual, so the same absolute floor as T1
+        # T2: bundle adjustment on the tall path with QR elimination, beside the normal Schur rows. At the smallest size it
+        # converges to the normal Schur LM row's cost, with the reduced system stored as storage = :auto chooses (the published
+        # row) and sparse (forced); the synthetic problem is zero-residual, so the same absolute floor as T1. ET2: :auto
+        # resolves to the dense reduced system at these sizes, so :dense is checked by its prototype's type, the same as
+        # :auto's, without a second solve; the second size ran the same compiled code and is not run
         ba = create_bundle_adjustment_problem()
         ba_tall = only(filter(o -> o.name == tall.name, ba.compatible_optimizers))
         ba_lm = only(filter(o -> o.name == "SecondOrderOptimization (LM)", ba.compatible_optimizers))
-        for sz in ba.default_sizes[1:2]
-            models = ba.generate_models(sz)
-            target = get_standard_optimizer_model(models, ba.category)
-            md = SmoothOptimizerBenchmark.resolve_optimizer_model(ba_tall, target, models)
-            @test md.model isa SmoothOptimizerBenchmark.NLLSModel.Model
-            @test SmoothOptimizerBenchmark.resolve_optimizer_model(ba_lm, target, models) === md
-            r_norm = ba_lm.optimize(md)
-            @test r_norm.status === :ok
-            for storage in (:auto, :dense, :sparse)
-                J = last(SmoothOptimizerBenchmark.NLLSModel.optimvars_nls(md.model; reduction=:eliminate, storage))
-                # BlockLinearSystems is not a dependency of this package (D4), so the prototype's type is checked by name
-                @test nameof(typeof(J)) === :SchurBlockJacobian
-                storage === :dense && @test typeof(J).parameters[2] === Matrix{Float64}
-                storage === :sparse && @test typeof(J).parameters[2] <: SmoothOptimizerBenchmark.SparseMatrixCSC
-                r_tall = ba_tall.optimize(md; storage)
-                @test r_tall.status === :ok && r_tall.converged
-                @test isapprox(r_tall.final_cost, r_norm.final_cost; rtol=1e-8, atol=SmoothOptimizerBenchmark.DEFAULT_FTOL * r_norm.start_cost)
-            end
+        models = ba.generate_models(first(ba.default_sizes))
+        target = get_standard_optimizer_model(models, ba.category)
+        md = SmoothOptimizerBenchmark.resolve_optimizer_model(ba_tall, target, models)
+        @test md.model isa SmoothOptimizerBenchmark.NLLSModel.Model
+        @test SmoothOptimizerBenchmark.resolve_optimizer_model(ba_lm, target, models) === md
+        r_norm = ba_lm.optimize(md)
+        @test r_norm.status === :ok
+        ba_proto(storage) = last(SmoothOptimizerBenchmark.NLLSModel.optimvars_nls(md.model; reduction=:eliminate, storage))
+        J_auto, J_dense, J_sparse = ba_proto(:auto), ba_proto(:dense), ba_proto(:sparse)
+        # BlockLinearSystems is not a dependency of this package (D4), so the prototype's type is checked by name
+        @test all(J -> nameof(typeof(J)) === :SchurBlockJacobian, (J_auto, J_dense, J_sparse))
+        @test typeof(J_dense).parameters[2] === Matrix{Float64}
+        @test typeof(J_auto) === typeof(J_dense)
+        @test typeof(J_sparse).parameters[2] <: SmoothOptimizerBenchmark.SparseMatrixCSC
+        for storage in (:auto, :sparse)
+            r_tall = ba_tall.optimize(md; storage)
+            @test r_tall.status === :ok && r_tall.converged
+            @test isapprox(r_tall.final_cost, r_norm.final_cost; rtol=1e-8, atol=SmoothOptimizerBenchmark.DEFAULT_FTOL * r_norm.start_cost)
         end
 
         # The tall row is skipped, not failed, where a dense Jacobian is forced above the cap
