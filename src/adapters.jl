@@ -1296,8 +1296,9 @@ soo_gauss_newton_optimizer(; reduction=:auto) = OptimizerDefinition("SecondOrder
     (m; kwargs...) -> optimize_soo(m; method=:newton, reduction, kwargs...))
 
 # "SecondOrderOptimization (LM, tall, LSMR)" (T3): the tall row with `linsolver = :lsmr`, for the large sparse problems.
-# LSMR comes from SecondOrderOptimization's Krylov extensions (DampedLinearSolve's `KrylovExt`, and BlockLinearSystems'
-# `DampedLinearSolveKrylovExt` for an eliminated system), which load with this package because JSOSolvers brings Krylov.
+# LSMR comes from the Krylov extensions of SecondOrderOptimization's linear-system packages (DampedLinearSolve's
+# `KrylovExt`, and BlockLinearSystems' `KrylovExt` for an eliminated system), which load with this package because
+# JSOSolvers brings Krylov.
 # `method` and `reduction` are the problem's normal rows' (bundle adjustment: `:levenbergmarquardt_dtd`, `:eliminate`,
 # so LSMR runs on the reduced Jacobian)
 soo_tall_lsmr_optimizer(; method=:lm, reduction=:auto) = OptimizerDefinition("SecondOrderOptimization (LM, tall, LSMR)",
