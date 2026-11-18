@@ -48,11 +48,14 @@ function create_curve_fitting_problem()
             p0_static = SVector(1.0, 1.0, 1.0)
             p0_vec = [1.0, 1.0, 1.0]
 
+            # The costs, defined once: the NLLSModel model and the Standalone model are built from the same residuals
+            costs = [ExpFitResidual(t_pts[i], y_data[i]) for i in 1:n_points]
+
             # Model 1: NLLSModel
             nlls_prob = NLLSModel.Model(SVector{3, Float64}, ExpFitResidual)
             addvariable!(nlls_prob, p0_static)
-            for i in 1:n_points
-                addcost!(nlls_prob, ExpFitResidual(t_pts[i], y_data[i]))
+            for c in costs
+                addcost!(nlls_prob, c)
             end
             nt = benchmark_numthreads()
             # Buffers of the types NLLSModel's linear system uses (MVector/MMatrix), so fdf! writes straight into them
@@ -67,25 +70,24 @@ function create_curve_fitting_problem()
                 () -> (nlls_prob.variables[1] = p0_static)
             )
 
-            # Model 2: Standalone
+            # Model 2: Standalone, its residuals and Jacobian filled cost by cost by NLLSModel's computeresidual and
+            # computeresjac (autodiff), in a plain loop (DM3)
+            lsp = standalone_problem((costs,), [p0_static])
+            p_standalone = lsp.x
             r_buf = zeros(Float64, n_points)
             J_buf = zeros(Float64, n_points, 3)
             g_buf = zeros(Float64, 3)
             H_buf = zeros(Float64, 3, 3)
-            p_standalone = copy(p0_vec)
-            f_res!(r, p) = exp_residuals!(r, p, t_pts, y_data)
-            g_jac!(J, p) = exp_jacobian!(J, p, t_pts)
-            lsp = LeastSquaresProblem(x=p_standalone, f! = f_res!, g! = g_jac!, output_length=n_points)
             m_standalone = ModelDefinition(
                 "Standalone",
                 lsp,
                 () -> begin
-                    f_res!(r_buf, p_standalone)
+                    lsp.f!(r_buf, p_standalone)
                     return 0.5 * sum(abs2, r_buf)
                 end,
                 () -> begin
-                    f_res!(r_buf, p_standalone)
-                    g_jac!(J_buf, p_standalone)
+                    lsp.f!(r_buf, p_standalone)
+                    lsp.g!(J_buf, p_standalone)
                     mul!(g_buf, J_buf', r_buf)
                     mul!(H_buf, J_buf', J_buf)
                     return (0.5 * sum(abs2, r_buf), (g_buf, H_buf))
