@@ -103,7 +103,7 @@ const MODELLER_HEADER = ["Feature", "NLLSModel", "JuMP", "LSOptim", "NonlinSolve
 const MODELLER_ROWS = ["**Problem class**", "Least-squares residuals are first class", "General scalar costs",
     "**Variables**", "Manifold variables", "Variable blocks of different types and sizes", "Fix a subset of variables",
     "**Structure**", "Explicit variable-to-cost graph", "Sparse Jacobian or Hessian", "Block-sparse storage",
-    "**Derivatives**", "Automatic, dense", "Automatic, sparse", "Hand-written derivatives", "Exact second derivatives",
+    "**Derivatives**", "Automatic", "Automatic, sparse", "Hand-written derivatives", "Exact second derivatives",
     "Operator products", "**Robust kernels**", "Fixed kernels", "Second-order correction", "Adaptive kernels",
     "**Constraints**", "Bounds on variables", "Equality constraints", "Nonlinear inequality constraints",
     "**Evaluation**", "Multithreaded evaluation", "GPU evaluation"]
