@@ -14,6 +14,7 @@ makedocs(
     warnonly = true,
     pages = [
         "Overview & Summary" => "index.md",
+        "Package Features" => "features.md",
         "Problem Benchmarks" => [
             "Sparse Multi-dimensional Rosenbrock" => "problems/rosenbrock_sparse.md",
             "Exponential Curve Fitting" => "problems/curve_fitting.md",

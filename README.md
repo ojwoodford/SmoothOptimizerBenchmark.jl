@@ -15,6 +15,8 @@ Multi-scale benchmarking suite comparing smooth second-order optimization, nonli
 - **CaNNOLeS.jl** / **BundleAdjustmentModels.jl**
 - **Manopt.jl** / **Manifolds.jl**
 
+What each of these packages supports, and how each model reaches each optimizer, is tabulated on the documentation's "Package Features" page (`docs/src/features.md`).
+
 ---
 
 ## Benchmarking Architecture
