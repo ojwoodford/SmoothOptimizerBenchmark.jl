@@ -129,7 +129,7 @@ Results from running an optimizer on a benchmark model:
 - `converged`: whether the optimizer converged within tolerance (true exactly when `status == :ok`)
 - `status`: one of `OPTIMIZER_STATUSES` (IT4: the harness, not the solver, decides `:ok`):
   - `:ok`: the solver reports convergence and its final cost passes the cost test: at most
-    `max(reference × (1 + 1e-8), 1e-6)`, the reference being the problem's known minimum at that size, or else the lowest
+    `max(reference × (1 + 1e-4), 1e-6)`, the reference being the problem's known minimum at that size, or else the lowest
     final cost of any row at that size in the same table;
   - `:local_minimum`: the solver reports convergence and the cost test fails, but the point is stationary: the cost
     reduction the Gauss–Newton model predicts from it is below `1e-8 ×` its cost. A minimum of the Gauss–Newton model,

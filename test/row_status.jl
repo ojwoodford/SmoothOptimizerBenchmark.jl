@@ -11,7 +11,7 @@ end)
 @testset "A row is ok only if its cost passes the test (IT4)" begin
     SOB = SmoothOptimizerBenchmark
     @test (:local_minimum in OPTIMIZER_STATUSES) && (:above_reference in OPTIMIZER_STATUSES)
-    @test SOB.passes_cost_test(1.0 + 0.5e-8, 1.0) && !SOB.passes_cost_test(1.0 + 2e-8, 1.0)
+    @test SOB.passes_cost_test(1.0 + 0.5e-4, 1.0) && !SOB.passes_cost_test(1.0 + 2e-4, 1.0)
     @test SOB.passes_cost_test(9e-7, 0.0) && !SOB.passes_cost_test(2e-6, 0.0) && !SOB.passes_cost_test(NaN, 0.0)
 
     # The defect: LeastSquaresOptim (Dogleg) on the ODE BVP at 4096 points claims convergence after 2 iterations at

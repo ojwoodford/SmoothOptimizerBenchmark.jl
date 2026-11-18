@@ -1,9 +1,13 @@
 # A row's status, decided by the harness from the evaluated cost (IT4)
 #
-# The maintainer's tests (2026-11-18), not measured: a row that claims convergence is `ok` if its final cost is at most
-# max(reference × (1 + STATUS_COST_RTOL), STATUS_COST_ATOL); otherwise `local_minimum` if the Gauss–Newton model predicts
-# a cost reduction below STATIONARITY_RTOL × its cost from the point, and `above_reference` if not
-const STATUS_COST_RTOL = 1e-8
+# The maintainer's tests (2026-11-18), starting values, not measured: a row that claims convergence is `ok` if its final
+# cost is at most max(reference × (1 + STATUS_COST_RTOL), STATUS_COST_ATOL); otherwise `local_minimum` if the Gauss–Newton
+# model predicts a cost reduction below STATIONARITY_RTOL × its cost from the point, and `above_reference` if not.
+# STATUS_COST_RTOL was 1e-8 and was raised to 1e-4 (maintainer, 2026-11-18): at 1e-8, rows that stop with gtol = 1e-8 a
+# little early (1e-8 to 1e-6 relative above the best row) failed, and on the polynomial fit the Float64 evaluation of the
+# cost alone (3e-8 relative) failed rows at the minimum. In a run of every problem the furthest a converged row stopped
+# above a nonzero reference was 1.2e-6 relative. 1e-4 is also the precision of the costs in the data files
+const STATUS_COST_RTOL = 1e-4
 const STATUS_COST_ATOL = 1e-6
 const STATIONARITY_RTOL = 1e-8
 
