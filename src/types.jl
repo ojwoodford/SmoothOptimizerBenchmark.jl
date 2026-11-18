@@ -234,6 +234,12 @@ Defines a parameterized benchmark problem:
 - `reference_cost`: Function `(size) -> Union{Nothing, Float64}`, the problem's known minimum cost at that size, the
   reference of the cost test that decides a row's status (IT4); `nothing` (the six-argument constructor) where none is
   known, and the lowest final cost of any row at that size is the reference
+- `derivatives`: how every model of the problem that is handed to an optimizer computes its derivatives, one of
+  `:autodiff`, `:analytic` and `:mixed`, set by the required keyword `derivatives` of every constructor. The rule: a
+  problem is `:autodiff` when every cost depends on at most 8 scalar inputs (the total `nvars` of the variables it depends
+  on) at every size of its sweep, so that each cost's Jacobian is computed by NLLSModel's forward-mode automatic
+  differentiation, and `:analytic` otherwise, each cost then having a hand-written Jacobian. `:mixed` is for a problem
+  exempt from the rule, whose models do not share their per-cost derivatives (bundle adjustment).
 """
 struct ProblemDefinition
     name::String
@@ -243,10 +249,18 @@ struct ProblemDefinition
     compatible_optimizers::Vector{OptimizerDefinition}
     size_metric_name::String
     reference_cost::Function
+    derivatives::Symbol
+    function ProblemDefinition(name::String, category::Symbol, default_sizes::Vector{Any}, generate_models::Function,
+                               compatible_optimizers::Vector{OptimizerDefinition}, size_metric_name::String,
+                               reference_cost::Function; derivatives::Symbol)
+        derivatives in DERIVATIVE_MODES || throw(ArgumentError(
+            "Unknown derivative mode $(repr(derivatives)); expected one of :autodiff, :analytic or :mixed"))
+        return new(name, category, default_sizes, generate_models, compatible_optimizers, size_metric_name, reference_cost, derivatives)
+    end
 end
 ProblemDefinition(name::String, category::Symbol, default_sizes::Vector{Any}, generate_models::Function,
-                  compatible_optimizers::Vector{OptimizerDefinition}, size_metric_name::String) =
-    ProblemDefinition(name, category, default_sizes, generate_models, compatible_optimizers, size_metric_name, no_reference_cost)
+                  compatible_optimizers::Vector{OptimizerDefinition}, size_metric_name::String; derivatives::Symbol) =
+    ProblemDefinition(name, category, default_sizes, generate_models, compatible_optimizers, size_metric_name, no_reference_cost; derivatives)
 no_reference_cost(_) = nothing
 
 # Backward-compatible constructor when size_metric_name is omitted
@@ -255,10 +269,21 @@ function ProblemDefinition(
     category::Symbol,
     default_sizes::Vector{Any},
     generate_models::Function,
-    compatible_optimizers::Vector{OptimizerDefinition}
+    compatible_optimizers::Vector{OptimizerDefinition};
+    derivatives::Symbol
 )
-    return ProblemDefinition(name, category, default_sizes, generate_models, compatible_optimizers, "Size")
+    return ProblemDefinition(name, category, default_sizes, generate_models, compatible_optimizers, "Size"; derivatives)
 end
+
+# The derivative modes a problem can declare (DM1); see `ProblemDefinition`
+const DERIVATIVE_MODES = (:autodiff, :analytic, :mixed)
+
+# The largest number of scalar inputs (the total `nvars` of the variables a cost depends on) for which a problem's costs
+# are differentiated automatically; above it, a problem's costs have hand-written Jacobians (DM1). A starting value, not
+# a measured threshold (rules.md 26): on multilateration, in the run of `7209fd6`, NLLSModel's linear-system time was
+# 35 ns × d² up to d = 8, and 47, 74, 91, 112 ns × d² at d = 10, 12, 14, 16, for a reason not yet known. Listed for
+# measurement in `improvements.md` item 27.
+const AUTODIFF_MAX_INPUTS = 8
 
 """
     SingleSizeBenchmarkResult

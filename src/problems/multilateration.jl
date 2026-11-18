@@ -143,6 +143,8 @@ function create_multilateration_problem()
             return [multilateration_nlls_model(Val(d), data), multilateration_standalone_model(data)]
         end,
         get_standard_optimizers(; tall=true),
-        "Dimension d"
+        "Dimension d";
+        # Derivatives (DM1): a cost has up to 16 inputs
+        derivatives = :analytic
     )
 end

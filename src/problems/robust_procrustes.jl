@@ -453,6 +453,8 @@ function create_robust_procrustes_problem()
                     timed_out, message=join(string.(nameof.(typeof.(active))), ", "))
             end)
         ],
-        "Matrix Dimension d"
+        "Matrix Dimension d";
+        # Derivatives (DM1): a cost has d(d − 1)/2 inputs, more than 8 from d = 5
+        derivatives = :analytic
     )
 end

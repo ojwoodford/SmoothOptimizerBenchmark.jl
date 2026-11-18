@@ -154,6 +154,8 @@ function create_polynomial_fitting_problem()
         ],
         "Data Points m",
         # The least-squares minimum in extended precision (IT4)
-        n_points -> Float64(polyfit_reference(n_points).minimum)
+        n_points -> Float64(polyfit_reference(n_points).minimum);
+        # Derivatives (DM1): every cost has 14 inputs
+        derivatives = :analytic
     )
 end

@@ -165,6 +165,8 @@ function create_affine_alignment_problem()
         get_affine_alignment_optimizers(),
         "Dimension n",
         # Zero-residual: the distances are generated from an exact affine map of the points (IT4)
-        _ -> 0.0
+        _ -> 0.0;
+        # Derivatives (DM1): a cost has n(n + 1) inputs, 1056 at n = 32
+        derivatives = :analytic
     )
 end

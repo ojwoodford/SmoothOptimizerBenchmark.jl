@@ -157,6 +157,8 @@ function create_rosenbrock_sparse_problem()
         get_standard_optimizers(; tall=true, lsmr=true),
         "Variables n",
         # The global minimum, x = 1, has zero residuals (IT4)
-        _ -> 0.0
+        _ -> 0.0;
+        # Derivatives (DM1): every cost has at most 2 inputs
+        derivatives = :autodiff
     )
 end

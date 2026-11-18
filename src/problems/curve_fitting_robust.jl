@@ -167,6 +167,8 @@ function create_robust_curve_fitting_problem()
             return [m_nlls, m_standalone]
         end,
         robust_curve_fitting_optimizers(),
-        "Data Points m"
+        "Data Points m";
+        # Derivatives (DM1): every cost has 3 inputs
+        derivatives = :autodiff
     )
 end

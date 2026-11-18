@@ -96,6 +96,8 @@ function create_curve_fitting_problem()
             return [m_nlls, m_standalone]
         end,
         get_standard_optimizers(; tall=true),
-        "Data Points m"
+        "Data Points m";
+        # Derivatives (DM1): every cost has 3 inputs
+        derivatives = :autodiff
     )
 end

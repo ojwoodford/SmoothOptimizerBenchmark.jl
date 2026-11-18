@@ -243,6 +243,8 @@ function create_ode_bvp_problem()
         get_standard_optimizers(; tall=true),
         "Grid Points N",
         # The discretized equations have an exact solution: zero residuals (IT4)
-        _ -> 0.0
+        _ -> 0.0;
+        # Derivatives (DM1): every cost has at most 3 inputs
+        derivatives = :autodiff
     )
 end

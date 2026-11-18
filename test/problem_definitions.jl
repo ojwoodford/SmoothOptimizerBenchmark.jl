@@ -33,4 +33,27 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
             m.reset!()
         end
     end
+
+    # DM1: each problem declares its derivative mode, the one in the specification's table
+    expected_modes = Dict(
+        "Exponential Curve Fitting" => :autodiff, "Robust Exponential Curve Fitting" => :autodiff,
+        "1D ODE Boundary Value Problem" => :autodiff, "Dense Multi-dimensional Rosenbrock" => :autodiff,
+        "Sparse Multi-dimensional Rosenbrock" => :autodiff, "Nonlinear 3D Pose Chain" => :autodiff,
+        "Ill-Conditioned Polynomial Fitting" => :analytic, "Multilateration" => :analytic,
+        "Dense Affine Alignment" => :analytic, "Robust Procrustes on SO(d)" => :analytic,
+        "Sparse Bundle Adjustment" => :mixed)
+    @test Set(p.name for p in problems) == Set(keys(expected_modes))
+    for prob in problems
+        @test prob.derivatives === expected_modes[prob.name]
+    end
+    @test SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS == 8
+    # An unknown mode is refused, by every constructor; the keyword has no default
+    args = ("P", :small_dense, Any[1], n -> ModelDefinition[], OptimizerDefinition[])
+    err = try ProblemDefinition(args..., "n", _ -> nothing; derivatives=:forward); nothing catch e; e end
+    @test err isa ArgumentError && occursin(":autodiff, :analytic or :mixed", err.msg)
+    @test_throws ArgumentError ProblemDefinition(args..., "n"; derivatives=:numeric)
+    @test_throws ArgumentError ProblemDefinition(args...; derivatives=:numeric)
+    @test_throws UndefKeywordError ProblemDefinition(args..., "n")
+    @test ProblemDefinition(args..., "n"; derivatives=:analytic).derivatives === :analytic
+    @test ProblemDefinition(args...; derivatives=:mixed).size_metric_name == "Size"
 end

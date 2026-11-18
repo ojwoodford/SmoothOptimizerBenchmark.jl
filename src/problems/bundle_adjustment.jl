@@ -251,6 +251,8 @@ function create_bundle_adjustment_problem()
         "Cameras Ncam",
         # The synthetic problems' observations are generated without noise: zero residuals at the true scene (IT4). A BAL
         # dataset (a size given by name) has no known minimum
-        sz -> sz isa String ? nothing : 0.0
+        sz -> sz isa String ? nothing : 0.0;
+        # Derivatives (DM1): exempt from the rule: its two models do not share their derivatives
+        derivatives = :mixed
     )
 end

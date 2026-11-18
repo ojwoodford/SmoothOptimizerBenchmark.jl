@@ -120,6 +120,8 @@ function create_pose_chain_problem()
             OptimizerDefinition("NonlinearSolve (TrustRegion)", (m; kwargs...) -> optimize_nonlinearsolve(m; method=:trust_region, kwargs...)),
             OptimizerDefinition("CaNNOLeS", (m; kwargs...) -> optimize_cannoles(m; kwargs...))
         ],
-        "Poses N"
+        "Poses N";
+        # Derivatives (DM1): every cost has at most 6 inputs
+        derivatives = :autodiff
     )
 end
