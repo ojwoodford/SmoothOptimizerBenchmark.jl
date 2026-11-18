@@ -241,6 +241,8 @@ function create_ode_bvp_problem()
             return models
         end,
         get_standard_optimizers(; tall=true),
-        "Grid Points N"
+        "Grid Points N",
+        # The discretized equations have an exact solution: zero residuals (IT4)
+        _ -> 0.0
     )
 end

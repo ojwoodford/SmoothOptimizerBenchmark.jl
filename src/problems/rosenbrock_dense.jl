@@ -141,6 +141,8 @@ function create_rosenbrock_dense_problem()
             return [m_nlls, m_lso, m_nlp]
         end,
         get_standard_optimizers(; tall=true),
-        "Dimension n"
+        "Dimension n",
+        # The global minimum, x = 1, has zero residuals (IT4)
+        _ -> 0.0
     )
 end

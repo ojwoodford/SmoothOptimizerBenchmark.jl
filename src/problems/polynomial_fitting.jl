@@ -152,6 +152,8 @@ function create_polynomial_fitting_problem()
             polyfit_optimizer("LeastSquaresOptim (LM)", (m; kwargs...) -> optimize_least_squares(m; method=:lm, kwargs...)),
             polyfit_optimizer("LeastSquaresOptim (Dogleg)", (m; kwargs...) -> optimize_least_squares(m; method=:dogleg, kwargs...)),
         ],
-        "Data Points m"
+        "Data Points m",
+        # The least-squares minimum in extended precision (IT4)
+        n_points -> Float64(polyfit_reference(n_points).minimum)
     )
 end

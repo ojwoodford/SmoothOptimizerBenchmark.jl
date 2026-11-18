@@ -155,6 +155,8 @@ function create_rosenbrock_sparse_problem()
             return models
         end,
         get_standard_optimizers(; tall=true, lsmr=true),
-        "Variables n"
+        "Variables n",
+        # The global minimum, x = 1, has zero residuals (IT4)
+        _ -> 0.0
     )
 end

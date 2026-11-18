@@ -105,13 +105,16 @@ The problem's own evaluation of a point (IT1), one per problem and size, the sam
 only by where they stopped. Built from the problem's standard model by `point_evaluator`. Internal:
 - `cost`: Function `x -> Float64`, the cost at `x`, a `Vector{Float64}` in the standard model's layout
 - `x0`: the start, in that layout
+- `resjac`: Function `x -> (r, J)`, the residuals and their Jacobian at `x`, with a robust kernel's weights applied, so
+  that `Jᵀr` is the gradient of the cost; for the stationarity test (IT4)
 """
 struct PointEvaluator
     cost::Function
     x0::Vector{Float64}
+    resjac::Function
 end
 
-const OPTIMIZER_STATUSES = (:ok, :not_converged, :timeout, :skipped, :error)
+const OPTIMIZER_STATUSES = (:ok, :local_minimum, :above_reference, :not_converged, :timeout, :skipped, :error)
 
 """
     OptimizerResult
@@ -124,10 +127,18 @@ Results from running an optimizer on a benchmark model:
 - `start_cost`: starting objective cost
 - `final_cost`: final achieved objective cost
 - `converged`: whether the optimizer converged within tolerance (true exactly when `status == :ok`)
-- `status`: one of `OPTIMIZER_STATUSES`:
-  - `:ok`: the solver reports convergence;
-  - `:not_converged`: the solver ran and stopped without converging (iteration limit, stall, failure);
-  - `:timeout`: the solver stopped on the time limit without converging;
+- `status`: one of `OPTIMIZER_STATUSES` (IT4: the harness, not the solver, decides `:ok`):
+  - `:ok`: the solver reports convergence and its final cost passes the cost test: at most
+    `max(reference × (1 + 1e-8), 1e-6)`, the reference being the problem's known minimum at that size, or else the lowest
+    final cost of any row at that size in the same table;
+  - `:local_minimum`: the solver reports convergence and the cost test fails, but the point is stationary: the cost
+    reduction the Gauss–Newton model predicts from it is below `1e-8 ×` its cost. A minimum of the Gauss–Newton model,
+    so a saddle of the true cost would pass;
+  - `:above_reference`: the solver reports convergence, and neither the cost test nor the stationarity test passes: the
+    solver stopped early;
+  - `:not_converged`: the solver ran and stopped without converging (iteration limit, stall, failure); the message
+    ends "cost test passes" when its final cost passes the cost test;
+  - `:timeout`: the solver stopped on the time limit without converging (the same note on the message);
   - `:skipped`: the run was deliberately not attempted (size cut-off, unsupported model or path);
   - `:error`: the adapter or solver threw an exception.
 - `message`: why, in a few words (the solver's own status, the skip reason, or the exception)
@@ -181,6 +192,10 @@ error_result(err) = OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false, :error, sprin
 with_timing(r::OptimizerResult, time_ns, allocs, bytes) =
     OptimizerResult(time_ns, allocs, bytes, r.iterations, r.start_cost, r.final_cost, r.converged, r.status, r.message, r.excess_cost)
 
+# Copy of `r` with its status and message replaced (IT4)
+with_status(r::OptimizerResult, status::Symbol, message::AbstractString) =
+    OptimizerResult(r.time_ns, r.allocs, r.bytes, r.iterations, r.start_cost, r.final_cost, status === :ok, status, message, r.excess_cost)
+
 # Copy of `r` with the start and final costs replaced by the harness's evaluation (IT1)
 with_costs(r::OptimizerResult, start_cost, final_cost) =
     OptimizerResult(r.time_ns, r.allocs, r.bytes, r.iterations, start_cost, final_cost, r.converged, r.status, r.message, r.excess_cost)
@@ -216,6 +231,9 @@ Defines a parameterized benchmark problem:
 - `generate_models`: Function `(size) -> Vector{ModelDefinition}` generating model formulations for given size
 - `compatible_optimizers`: Vector of `OptimizerDefinition` capable of optimizing this problem
 - `size_metric_name`: Human-readable label for the scaling parameter (e.g. "Dimension n", "Data Points m")
+- `reference_cost`: Function `(size) -> Union{Nothing, Float64}`, the problem's known minimum cost at that size, the
+  reference of the cost test that decides a row's status (IT4); `nothing` (the six-argument constructor) where none is
+  known, and the lowest final cost of any row at that size is the reference
 """
 struct ProblemDefinition
     name::String
@@ -224,7 +242,12 @@ struct ProblemDefinition
     generate_models::Function
     compatible_optimizers::Vector{OptimizerDefinition}
     size_metric_name::String
+    reference_cost::Function
 end
+ProblemDefinition(name::String, category::Symbol, default_sizes::Vector{Any}, generate_models::Function,
+                  compatible_optimizers::Vector{OptimizerDefinition}, size_metric_name::String) =
+    ProblemDefinition(name, category, default_sizes, generate_models, compatible_optimizers, size_metric_name, no_reference_cost)
+no_reference_cost(_) = nothing
 
 # Backward-compatible constructor when size_metric_name is omitted
 function ProblemDefinition(

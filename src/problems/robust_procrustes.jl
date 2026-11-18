@@ -286,12 +286,33 @@ struct ProcrustesManifoldsModel{TM, TB}
     p0::Matrix{Float64}
 end
 
-# The standard model's evaluator (IT1): the robust cost at a rotation R, given as vec(R)
+# The standard model's evaluator (IT1): the robust cost at a rotation R, given as vec(R). For the stationarity test
+# (IT4), each correspondence's residual and Jacobian (in the tangent basis at R) are scaled by sqrt(ρ'(‖rᵢ‖²)), so that
+# Jᵀr is the gradient of the robust cost and JᵀJ its reweighted Gauss–Newton Hessian, Σ ρ'ᵢ JᵢᵀJᵢ (the g, H route,
+# solved by QR)
 function point_evaluator(m::ProcrustesManifoldsModel)
     d = size(m.p0, 1)
-    A, B = m.A, m.B
+    A, B, M = m.A, m.B, m.M
     r = zeros(Float64, d)
-    return PointEvaluator(x -> procrustes_robust_cost(A, B, reshape(x, d, d), r), vec(copy(m.p0)))
+    fs, Js = procrustes_block_functors(A, B, M)
+    dim_M = manifold_dimension(M)
+    resjac(x) = begin
+        p = reshape(x, d, d)
+        n = length(fs)
+        rw, Jw = zeros(Float64, d * n), zeros(Float64, d * n, dim_M)
+        J_i = zeros(Float64, d, dim_M)
+        for i in 1:n
+            rows = (d * (i - 1) + 1):(d * i)
+            fs[i](M, r, p)
+            Js[i](M, J_i, p)
+            _, dc, _ = NLLSModel.robustifydcost(procrustes_huber_kernel, sum(abs2, r))
+            w = sqrt(dc)
+            rw[rows] .= w .* r
+            Jw[rows, :] .= w .* J_i
+        end
+        return rw, Jw
+    end
+    return PointEvaluator(x -> procrustes_robust_cost(A, B, reshape(x, d, d), r), vec(copy(m.p0)), resjac)
 end
 
 function get_procrustes_manopt_components(model_def)

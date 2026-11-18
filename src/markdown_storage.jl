@@ -57,6 +57,13 @@ function parse_size_val(s::AbstractString)
     return String(s)
 end
 
+# The stopping tolerances and the status test (IT4), for the header of a results file
+convergence_criteria_line() =
+    "- **Convergence Criteria**: gtol=$(DEFAULT_GTOL), xtol=$(DEFAULT_XTOL), ftol=$(DEFAULT_FTOL), maxiters=$(DEFAULT_MAXITERS), maxtime=$(DEFAULT_MAXTIME)s; " *
+    "a row is ok when the solver reports convergence and its final cost, evaluated by the harness, is at most " *
+    "max(reference × (1 + $(STATUS_COST_RTOL)), $(STATUS_COST_ATOL)), the reference being the known minimum or else the lowest cost of any row at that size; " *
+    "a row that claims convergence and fails is local_minimum if the Gauss–Newton predicted reduction is below $(STATIONARITY_RTOL) × its cost, else above_reference"
+
 # The thread counts in force, for the header of a results file (M17)
 function threads_line()
     t = benchmark_threads()
@@ -76,7 +83,7 @@ function init_problem_markdown(filepath::String, prob_name::String, category::Sy
         println(io, "- **Category**: $(category)")
         println(io, "- **Scaling Metric**: $(size_metric_name)")
         println(io, "- **Optimizer Target Model**: $(target_model_name)")
-        println(io, "- **Convergence Criteria**: gtol=$(DEFAULT_GTOL), xtol=$(DEFAULT_XTOL), ftol=$(DEFAULT_FTOL), maxiters=$(DEFAULT_MAXITERS), maxtime=$(DEFAULT_MAXTIME)s")
+        println(io, convergence_criteria_line())
         println(io, "- **Benchmark Date**: $(Dates.format(Dates.now(), "yyyy-mm-ddTHH:MM:SS"))")
         println(io, "- **Host CPU**: $(Sys.CPU_NAME) ($(Sys.CPU_THREADS) cores)")
         println(io, "- **OS**: $(Sys.KERNEL) ($(Sys.MACHINE))")

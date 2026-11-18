@@ -246,6 +246,9 @@ function create_bundle_adjustment_problem()
             OptimizerDefinition("Ipopt", (m; kwargs...) -> optimize_ipopt(m; kwargs...)),
             OptimizerDefinition("MadNLP", (m; kwargs...) -> optimize_madnlp(m; kwargs...))
         ],
-        "Cameras Ncam"
+        "Cameras Ncam",
+        # The synthetic problems' observations are generated without noise: zero residuals at the true scene (IT4). A BAL
+        # dataset (a size given by name) has no known minimum
+        sz -> sz isa String ? nothing : 0.0
     )
 end

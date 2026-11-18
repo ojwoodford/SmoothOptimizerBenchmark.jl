@@ -185,13 +185,21 @@ The iterations, status and costs reported are the first run's (IT1). Its start a
 the adapter hands back the point it stopped at (the `solution` keyword), and `evaluator`, the problem's
 `point_evaluator` built from its standard model (by default from `target_model`), evaluates the cost there, outside the
 timed region. A row that hands back no point (a skip, an error) has a final cost of `NaN`.
+
+When every row has run, the harness decides each row's status (IT4, `assign_statuses!`): a row the solver says
+converged is `:ok` only if its cost passes the cost test against `reference` (the problem's known minimum at this size,
+`nothing` for the lowest cost of any row here), and `:local_minimum` or `:above_reference` otherwise. Only then is
+`on_result` called, for each row in the order of `optimizers`: so a results file streamed from it holds whole sizes,
+and an interrupted run leaves no row reading `ok` that was not tested.
 """
 function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, target_model::ModelDefinition;
                                  all_models::Vector{<:ModelDefinition}=ModelDefinition[target_model],
                                  max_samples::Int=50, target_total_time_sec::Float64=1.0, samples=nothing,
                                  on_result=nothing, warmed_signatures::Set{Any}=Set{Any}(),
-                                 evaluator=point_evaluator(target_model))
+                                 evaluator=point_evaluator(target_model), reference=nothing)
     results = Dict{String, OptimizerResult}()
+    # The point each row handed back and the model it ran on, for the status test
+    points = Dict{String, Tuple{Vector{Float64}, ModelDefinition}}()
     effective_max = samples !== nothing ? max(1, Int(samples)) : max_samples
 
     for opt in optimizers
@@ -221,23 +229,16 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
         catch err
             @warn "Optimizer $(opt.name) threw on model $(opt_model.name)" exception=(err, catch_backtrace()) maxlog=3
             opt_model.reset!()
-            res = error_result(err)
-            results[opt.name] = res
-            if on_result !== nothing
-                on_result(opt.name, res)
-            end
+            results[opt.name] = error_result(err)
             continue
         end
         t1_wall_ns = Float64(time_ns() - t1_wall_start)
         t1_wall_sec = t1_wall_ns / 1e9
         init_res = evaluated_result(init_res, point, opt_model, evaluator)
+        points[opt.name] = (point, opt_model)
 
         if isnan(init_res.time_ns) || !init_res.converged
-            res = init_res
-            results[opt.name] = res
-            if on_result !== nothing
-                on_result(opt.name, res)
-            end
+            results[opt.name] = init_res
             continue
         end
 
@@ -277,10 +278,12 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
         end
         opt_model.reset!()
 
-        res = sample_err === nothing ? with_timing(init_res, median(times), allocs, bytes) : error_result(sample_err)
-        results[opt.name] = res
-        if on_result !== nothing
-            on_result(opt.name, res)
+        results[opt.name] = sample_err === nothing ? with_timing(init_res, median(times), allocs, bytes) : error_result(sample_err)
+    end
+    assign_statuses!(results, points, evaluator, reference)
+    if on_result !== nothing
+        for opt in optimizers
+            on_result(opt.name, results[opt.name])
         end
     end
     return results
@@ -366,7 +369,8 @@ function run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=
 
     # Phase 2: Optimizers (each on optimal model representation), every row's costs evaluated by the standard model's evaluator
     evaluator = point_evaluator(get_standard_optimizer_model(models, prob.category))
-    optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples, evaluator)
+    optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples, evaluator,
+        reference=prob.reference_cost(size))
 
     return SingleSizeBenchmarkResult(
         prob.name,
@@ -385,7 +389,8 @@ end
 
 Runs the benchmark across all specified problem sizes (collecting at least 10 problem sizes for scaling).
 Performs model evaluation across all sizes, and benchmarks optimizers across all sizes on the standardized baseline model.
-Streams results into `<data_dir>/<slug>.md` after each size finishes.
+Streams results into `<data_dir>/<slug>.md`: the model rows as they finish, each size's optimizer rows when the size
+finishes (their statuses are decided then, IT4).
 
 The thread counts are fixed with [`set_benchmark_threads!`](@ref) before any model is built, and written into the
 file's header: `numthreads` for NLLSModel (at most `Threads.nthreads()`), `blas_threads` for BLAS.
@@ -416,7 +421,7 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
             println(io, "- **Category**: $(prob.category)")
             println(io, "- **Scaling Metric**: $(prob.size_metric_name)")
             println(io, "- **Optimizer Target Model**: $(winning_model_name)")
-            println(io, "- **Convergence Criteria**: gtol=$(DEFAULT_GTOL), xtol=$(DEFAULT_XTOL), ftol=$(DEFAULT_FTOL), maxiters=$(DEFAULT_MAXITERS), maxtime=$(DEFAULT_MAXTIME)s")
+            println(io, convergence_criteria_line())
             println(io, "- **Benchmark Date**: $(Dates.format(Dates.now(), "yyyy-mm-ddTHH:MM:SS"))")
             println(io, "- **Host CPU**: $(Sys.CPU_NAME) ($(Sys.CPU_THREADS) cores)")
             println(io, "- **OS**: $(Sys.KERNEL) ($(Sys.MACHINE))")
@@ -486,6 +491,7 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
         # Run optimizers on target model (routing NLLSModel + ... to NLLSModel), streaming each optimizer result immediately to file
         optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples,
             warmed_signatures=warmed_signatures, evaluator=point_evaluator(get_standard_optimizer_model(models, prob.category)),
+            reference=prob.reference_cost(sz),
             on_result = (opt_name, r) -> append_optimizer_evaluation(data_file, sz, opt_name, r)
         )
 

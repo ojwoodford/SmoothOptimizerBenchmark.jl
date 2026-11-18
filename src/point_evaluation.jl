@@ -18,26 +18,40 @@ function point_evaluator(m::ModelDefinition)
 end
 point_evaluator(::Any) = nothing
 
-# A LeastSquaresProblem (the Standalone models): its own residual function, which every adapter calls on a copy
+# A LeastSquaresProblem (the Standalone models): its own residual and Jacobian functions, which every adapter calls on a
+# copy. On robust curve fitting this is the fudged model, whose residuals and Jacobian carry the kernel's weights
 function point_evaluator(lsp::LeastSquaresProblem)
-    f! = lsp.f!
+    f!, g! = lsp.f!, lsp.g!
     r = zeros(Float64, length(lsp.y))
-    return PointEvaluator(x -> (f!(r, x); 0.5 * sum(abs2, r)), Vector{Float64}(lsp.x))
+    J = deepcopy(lsp.J)
+    return PointEvaluator(x -> (f!(r, x); 0.5 * sum(abs2, r)), Vector{Float64}(lsp.x),
+        x -> (f!(r, x); g!(J, x); (copy(r), copy(J))))
 end
 
-# BundleAdjustmentModels: its residuals, at a vector of the points' coordinates followed by the cameras'
+# BundleAdjustmentModels: its residuals and sparse Jacobian, at a vector of the points' coordinates followed by the
+# cameras'
 function point_evaluator(bam::BundleAdjustmentModel)
     nls = deepcopy(bam)
-    r = zeros(Float64, nls.nls_meta.nequ)
-    return PointEvaluator(x -> (NLPModels.residual!(nls, x, r); 0.5 * sum(abs2, r)), copy(nls.meta.x0))
+    m, n, nnzj = nls.nls_meta.nequ, nls.meta.nvar, nls.nls_meta.nnzj
+    r = zeros(Float64, m)
+    rows, cols, vals = Vector{Int}(undef, nnzj), Vector{Int}(undef, nnzj), zeros(Float64, nnzj)
+    NLPModels.jac_structure_residual!(nls, rows, cols)
+    resjac(x) = begin
+        NLPModels.residual!(nls, x, r)
+        NLPModels.jac_coord_residual!(nls, x, vals)
+        return copy(r), sparse(rows, cols, vals, m, n)
+    end
+    return PointEvaluator(x -> (NLPModels.residual!(nls, x, r); 0.5 * sum(abs2, r)), copy(nls.meta.x0), resjac)
 end
 
-# An NLLSModel (a problem whose only model it is): its flat residual callbacks, on one thread, at the variables
-# flattened in order (`soo_solution`)
+# An NLLSModel (a problem whose only model it is): its flat residual and Jacobian callbacks, on one thread, at the
+# variables flattened in order (`soo_solution`)
 function point_evaluator(m::NLLSModel.Model)
     cb = NLLSModel.nls_callbacks(deepcopy(m); numthreads=static(1))
     r = zeros(Float64, cb.nequ)
-    return PointEvaluator(x -> (cb.res!(r, x); 0.5 * sum(abs2, r)), copy(cb.x0))
+    J = copy(cb.J0)
+    return PointEvaluator(x -> (cb.res!(r, x); 0.5 * sum(abs2, r)), copy(cb.x0),
+        x -> (cb.res!(r, x); cb.jac!(J, x); (copy(r), copy(J))))
 end
 
 # The start and final costs of a row, from the problem's evaluator and the point the row handed back. A row that did

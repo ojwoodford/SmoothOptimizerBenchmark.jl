@@ -20,6 +20,7 @@ const TEST_FILES = [
     ("Plot Styling & Unsupported Sparse Solver Handling", "plot_styling.jl", :serial),
     ("Every SecondOrderOptimization termination mask has a name", "termination_masks.jl", :serial),
     ("Optimizer status (B3)", "optimizer_status.jl", :serial),
+    ("A row is ok only if its cost passes the test (IT4)", "row_status.jl", :serial),
     ("An explicit model for a row (P2a)", "explicit_model.jl", :serial),
     ("Cold-Start NLLSModel + SecondOrderOptimization & BAL Equivalence", "cold_start.jl", :serial),
     ("Thread counts and NLLSModel threading thresholds (M17, F4)", "thread_counts.jl", :threaded),
