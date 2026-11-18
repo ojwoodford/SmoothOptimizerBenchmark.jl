@@ -12,10 +12,22 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     @test dirname(SINGLE_THREADED_PLOTS_DIR) == DEFAULT_PLOTS_DIR
     tmp_root = mktempdir()
     st_dir = joinpath(tmp_root, "single_threaded")
-    run_scaling_benchmark(prob; sizes=Any[4], samples=1, data_dir=tmp_root)
     st_res = run_scaling_benchmark(prob; sizes=Any[4], samples=1, data_dir=st_dir, numthreads=1, blas_threads=1)
     @test occursin("**Threads**: NLLSModel numthreads=1, Julia threads=$(Threads.nthreads()), BLAS threads=1", read(joinpath(st_dir, "rosenbrock_sparse.md"), String))
-    @test length(load_all_problem_markdown(tmp_root)) == 1
+    # The threaded folder's file: the result in hand written with the package's own functions (ET5), not a second run
+    sr = only(st_res.size_results)
+    threaded_md = joinpath(tmp_root, "rosenbrock_sparse.md")
+    init_problem_markdown(threaded_md, st_res.problem, st_res.category, st_res.size_metric_name, sr.target_model)
+    for (name, mr) in sr.model_results
+        append_model_evaluation(threaded_md, sr.size, name, mr)
+    end
+    init_optimizer_section(threaded_md, sr.target_model)
+    for (name, r) in sr.optimizer_results
+        append_optimizer_evaluation(threaded_md, sr.size, name, r)
+    end
+    loaded_all = load_all_problem_markdown(tmp_root)
+    @test length(loaded_all) == 1
+    @test only(loaded_all).problem == prob.name
     st_plot = plot_optimizer_scaling(st_res; outdir=joinpath(tmp_root, "plots"), title_suffix=" (1 thread)")
     @test isfile(st_plot)
     set_benchmark_threads!()
