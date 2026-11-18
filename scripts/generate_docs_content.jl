@@ -163,6 +163,13 @@ $(suite_table)
     end
 end
 
+# What the Gauss-Newton row is against CaNNOLeS (IT2), on the page of every problem that has both
+const GN_ROW_NOTE = raw"""
+- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton` on the normal equations: Gauss–Newton, since the Hessian it is given is ``J^T J``. It takes the full step, with no line search or trust region (a diagonal shift only when the system cannot be solved), so a step that raises the cost is caught only by the stall test, and the row then ends `not_converged`. **`CaNNOLeS`** (`method = :Newton_noFHess`) is Gauss–Newton too, globalized: an ``LDL^T`` factorization of the augmented system ``[\rho I\ \ J^T;\ J\ \ {-I}]``, with ``\rho`` raised from 0 only when the factorization fails or has the wrong inertia, then an Armijo backtracking line search on ``\tfrac12\|F\|^2``.
+"""
+const SOO_ROWS_HEADER = "## The SecondOrderOptimization rows\n\n"
+const SECTION_END = "\n---\n"
+
 # What the tall rows are (T4), on the pages of the problems that have them beyond the dense ones
 const TALL_ROW_NOTE = raw"""
 - **`SecondOrderOptimization (LM, tall)`** is Levenberg–Marquardt on the residual-and-Jacobian form (`formulation = :tall`): each step solves the damped least-squares problem in ``J`` by QR, without forming ``J^T J``, on the `NLLSModel` model. `storage = :auto` stores ``J`` dense or sparse from its fill (sparse at the large sizes), and `linsolver = :auto` factorizes it by dense QR or SPQR. The rows without "tall" solve the normal equations in ``J^T J``.
@@ -173,13 +180,18 @@ const LSMR_ROW_NOTE = raw"""
 
 # Problem-specific text, placed under a problem page's header
 const PROBLEM_NOTES = Dict(
-    "rosenbrock_sparse" => "## The SecondOrderOptimization rows\n\n" * TALL_ROW_NOTE * LSMR_ROW_NOTE * "\n---\n",
-    "pose_chain" => "## The SecondOrderOptimization rows\n\n" * TALL_ROW_NOTE * LSMR_ROW_NOTE * "\n---\n",
-    "ode_bvp" => "## The SecondOrderOptimization rows\n\n" * TALL_ROW_NOTE * "\n---\n",
+    "rosenbrock_sparse" => SOO_ROWS_HEADER * GN_ROW_NOTE * TALL_ROW_NOTE * LSMR_ROW_NOTE * SECTION_END,
+    "pose_chain" => SOO_ROWS_HEADER * GN_ROW_NOTE * TALL_ROW_NOTE * LSMR_ROW_NOTE * SECTION_END,
+    "ode_bvp" => SOO_ROWS_HEADER * GN_ROW_NOTE * TALL_ROW_NOTE * SECTION_END,
+    "curve_fitting" => SOO_ROWS_HEADER * GN_ROW_NOTE * TALL_ROW_NOTE * SECTION_END,
+    "rosenbrock_dense" => SOO_ROWS_HEADER * GN_ROW_NOTE * TALL_ROW_NOTE * SECTION_END,
+    "multilateration" => SOO_ROWS_HEADER * GN_ROW_NOTE * TALL_ROW_NOTE * SECTION_END,
+    "affine_alignment" => SOO_ROWS_HEADER * GN_ROW_NOTE * SECTION_END,
     "bundle_adjustment" => raw"""
 ## The SecondOrderOptimization rows
 
 - **`SecondOrderOptimization (LM)`** and **`(Dogleg)`** solve the normal equations with the points eliminated by a Schur complement (`reduction = :eliminate`); LM uses `:levenbergmarquardt_dtd`, whose damping is scaled by the running maximum of the squared column norms of ``J`` (the diagonal of ``J^T J``).
+- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton`, with the same Schur elimination: the full Gauss–Newton step, with no line search or trust region, so a step that raises the cost is caught only by the stall test. **`CaNNOLeS`** (`method = :Newton_noFHess`, on `BundleAdjustmentModels`) is Gauss–Newton globalized by a regularized ``LDL^T`` factorization of the augmented system and an Armijo backtracking line search.
 - **`SecondOrderOptimization (LM, tall)`** uses the same iterator and `reduction = :eliminate` on the residual-and-Jacobian form (`formulation = :tall`): the points are eliminated by QR of their blocks (square-root bundle adjustment), and the reduced camera system is stored as `storage = :auto` chooses and factorized by QR, without forming ``J^T J``.
 - **`SecondOrderOptimization (LM, tall, LSMR)`** is the tall row with `linsolver = :lsmr`: the reduced least-squares problem is solved iteratively by LSMR (Krylov.jl) instead of by QR.
 
@@ -190,7 +202,7 @@ const PROBLEM_NOTES = Dict(
 
 Exponential curve fitting, ``a e^{-b t} + c - y`` with one `SVector{3}` variable, on curve fitting's data with **30 % of the points moved up by +1** (one-sided outliers, against noise of σ = 0.02), fitted with a **Huber kernel of width 0.05** (2.5σ, `Huber2oKernel`, with the second-order correction).
 
-- **Native rows.** `SecondOrderOptimization` (Dogleg, LM, LM tall) run the `NLLSModel (Static)` model, which declares the kernel.
+- **Native rows.** `SecondOrderOptimization` (Dogleg, LM, Gauss-Newton, LM tall) run the `NLLSModel (Static)` model, which declares the kernel. The Gauss-Newton row is `iterator = :newton`, the full step with no line search or trust region; `CaNNOLeS (fudged)` is Gauss–Newton globalized by a regularized ``LDL^T`` factorization and an Armijo line search.
 - **Every other row runs `Standalone (fudged)`.** That includes the general solvers, whether or not the row's name says "fudged". The residuals are rewritten as ``\tilde r = \operatorname{sign}(r)\sqrt{\rho(r^2)}``, and each row of the Jacobian is scaled by ``\rho'(r^2)\,|r| / \sqrt{\rho(r^2)}``. Then ``\tfrac12\|\tilde r\|^2`` is the robust cost exactly and ``\tilde J^T \tilde r`` its gradient.
   - LeastSquaresOptim, NonlinearSolve and CaNNOLeS have no kernel interface, and their rows are named "fudged".
   - So is the control row, `SecondOrderOptimization (LM, fudged)`: the native LM optimizer on the fudged model.

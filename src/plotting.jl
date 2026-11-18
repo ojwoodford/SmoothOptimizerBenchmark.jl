@@ -284,7 +284,7 @@ Maps an optimizer name to a consistent (color, linestyle, marker) tuple:
     like the native LM row
   - LM / trunk / default Newton: :solid with :circle
   - Dogleg / tron / TrustRegion: :dash with :square
-  - GaussNewton: :dot with :diamond
+  - GaussNewton / Gauss-Newton: :dot with :diamond
 """
 function optimizer_style(opt_name::String)
     name_lower = lowercase(opt_name)
@@ -332,7 +332,7 @@ function optimizer_style(opt_name::String)
     if occursin("dogleg", name_lower) || occursin("trustregion", name_lower) || occursin("trust_region", name_lower) || occursin("tron", name_lower)
         linestyle = :dash
         marker = :square
-    elseif occursin("gaussnewton", name_lower) || occursin("gauss_newton", name_lower)
+    elseif occursin("gaussnewton", name_lower) || occursin("gauss_newton", name_lower) || occursin("gauss-newton", name_lower)
         linestyle = :dot
         marker = :diamond
     else

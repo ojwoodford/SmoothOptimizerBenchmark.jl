@@ -106,6 +106,7 @@ function create_pose_chain_problem()
         [
             OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),
             OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)),
+            soo_gauss_newton_optimizer(),
             soo_tall_optimizer(),
             soo_tall_lsmr_optimizer(),
             OptimizerDefinition("LeastSquaresOptim (Dogleg)", (m; kwargs...) -> optimize_least_squares(m; method=:dogleg, kwargs...)),

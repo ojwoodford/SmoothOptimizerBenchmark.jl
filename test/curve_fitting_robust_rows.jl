@@ -17,7 +17,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         # Measured on Julia 1.10 and 1.13 alike, with EXP_OUTLIER_SEED = 4245
         measured_failures = n == 64 ? ("NonlinearSolve (TrustRegion, fudged)",) :
             ("JSOSolvers (trunk)", "JSOSolvers (tron)", "NonlinearSolve (TrustRegion, fudged)")
-        for o in prob.compatible_optimizers[4:end]
+        for o in prob.compatible_optimizers[5:end]   # after the four native rows
             m_sa.reset!()
             r = o.optimize(m_sa)
             if o.name in measured_failures

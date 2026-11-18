@@ -583,7 +583,8 @@ end
     optimize_soo(model; method=:dogleg, formulation=:normal, reduction=:auto, storage=:auto, numthreads=benchmark_numthreads(), solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `SecondOrderOptimization.jl`.
-Supported methods: `:dogleg`, `:lm` / `:levenbergmarquardt`, `:lm_dtd` / `:levenbergmarquardt_dtd`.
+Supported methods: `:dogleg`, `:lm` / `:levenbergmarquardt`, `:lm_dtd` / `:levenbergmarquardt_dtd`, and `:newton`,
+Gauss–Newton (the Hessian SecondOrderOptimization is given is `JᵀJ`): the full step, with no line search or trust region.
 On an `NLLSModel.Model`, `formulation`, `reduction` and `storage` are forwarded to NLLSModel's `optimize!`; on other
 models they have no counterpart, apart from `formulation`.
 """
@@ -1287,6 +1288,13 @@ a `LeastSquaresProblem`. A model or size the tall path does not support is repor
 """
 soo_tall_optimizer() = OptimizerDefinition("SecondOrderOptimization (LM, tall)", (m; kwargs...) -> optimize_soo(m; method=:lm, formulation=:tall, kwargs...))
 
+# "SecondOrderOptimization (Gauss-Newton)" (IT2): `iterator = :newton` on the normal equations, which is Gauss–Newton
+# because the Hessian SecondOrderOptimization is given is JᵀJ; the like-for-like row beside CaNNOLeS's Newton_noFHess.
+# It takes the full step, with no line search or trust region, so a rise in cost is handled only by the stall test.
+# `reduction` as the problem's other rows (bundle adjustment: `:eliminate`)
+soo_gauss_newton_optimizer(; reduction=:auto) = OptimizerDefinition("SecondOrderOptimization (Gauss-Newton)",
+    (m; kwargs...) -> optimize_soo(m; method=:newton, reduction, kwargs...))
+
 # "SecondOrderOptimization (LM, tall, LSMR)" (T3): the tall row with `linsolver = :lsmr`, for the large sparse problems.
 # LSMR comes from SecondOrderOptimization's Krylov extensions (DampedLinearSolve's `KrylovExt`, and BlockLinearSystems'
 # `DampedLinearSolveKrylovExt` for an eliminated system), which load with this package because JSOSolvers brings Krylov.
@@ -1299,7 +1307,8 @@ soo_tall_lsmr_optimizer(; method=:lm, reduction=:auto) = OptimizerDefinition("Se
     get_standard_optimizers(; tall=false, lsmr=false) -> Vector{OptimizerDefinition}
 
 Returns standard unified optimizer definitions for Euclidean problems on the standardized baseline model (e.g. `LeastSquaresProblem`).
-Includes all solver families configured with universal stopping criteria. `tall = true` adds the
+Includes all solver families configured with universal stopping criteria, and "SecondOrderOptimization (Gauss-Newton)"
+(IT2), the like-for-like row beside CaNNOLeS. `tall = true` adds the
 "SecondOrderOptimization (LM, tall)" row ([`soo_tall_optimizer`](@ref)); `lsmr = true` adds
 "SecondOrderOptimization (LM, tall, LSMR)", the same row with `linsolver = :lsmr`, for the large sparse problems.
 """
@@ -1307,6 +1316,7 @@ function get_standard_optimizers(; tall::Bool=false, lsmr::Bool=false)
     return OptimizerDefinition[
         OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),
         OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)),
+        soo_gauss_newton_optimizer(),
         (tall ? [soo_tall_optimizer()] : OptimizerDefinition[])...,
         (lsmr ? [soo_tall_lsmr_optimizer()] : OptimizerDefinition[])...,
         OptimizerDefinition("LeastSquaresOptim (Dogleg)", (m; kwargs...) -> optimize_least_squares(m; method=:dogleg, kwargs...)),

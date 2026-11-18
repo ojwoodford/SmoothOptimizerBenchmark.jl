@@ -37,10 +37,12 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         abs(r) <= SB.EXP_HUBER_WIDTH && @test scale == 1
     end
 
-    # Rows (step 9): the three native rows, the control row, then the others, the residual-only packages' renamed
+    # Rows (step 9): the four native rows (IT2 added Gauss-Newton), the control row, then the others, the residual-only
+    # packages' renamed
     names = [o.name for o in prob.compatible_optimizers]
-    @test names[1:4] == ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (LM, tall)", "SecondOrderOptimization (LM, fudged)"]
-    @test names[5:end] == ["LeastSquaresOptim (Dogleg, fudged)", "LeastSquaresOptim (LM, fudged)", "Optim (NewtonTrustRegion)", "Optim (Newton)",
+    @test names[1:5] == ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)",
+        "SecondOrderOptimization (LM, tall)", "SecondOrderOptimization (LM, fudged)"]
+    @test names[6:end] == ["LeastSquaresOptim (Dogleg, fudged)", "LeastSquaresOptim (LM, fudged)", "Optim (NewtonTrustRegion)", "Optim (Newton)",
         "JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "NonlinearSolve (LM, fudged)", "NonlinearSolve (TrustRegion, fudged)", "CaNNOLeS (fudged)"]
     @test SB.fudged_name("CaNNOLeS") == "CaNNOLeS (fudged)" && SB.fudged_name("NonlinearSolve (LM)") == "NonlinearSolve (LM, fudged)"
     standard = Dict(o.name => o for o in get_standard_optimizers(; tall=true))
@@ -54,7 +56,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         # Routing: the native rows run Model 1, every other row the fudged model; a renamed row has its original's
         # model and style, and the control row has a style of its own
         for o in prob.compatible_optimizers
-            native = o.name in names[1:3]
+            native = o.name in names[1:4]
             @test resolve(o, target, models) === (native ? m_nlls : m_sa)
             orig = replace(replace(o.name, ", fudged)" => ")"), " (fudged)" => "")
             if o.model_name === nothing && o.name != orig
