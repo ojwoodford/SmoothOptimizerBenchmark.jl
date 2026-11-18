@@ -507,20 +507,23 @@ end
         # from its fill: sparse at the largest size; at the smallest it may be dense. Costs agree to rtol = 1e-8, with an
         # absolute floor of ftol times the start cost, since ODE BVP and sparse Rosenbrock are zero-residual problems whose
         # final costs are rounding (rules.md 31)
-        for prob in (create_pose_chain_problem(), create_rosenbrock_sparse_problem(), create_ode_bvp_problem())
+        # ET1: at the largest size only the prototype's type is checked, on the NLLSModel model built alone (the builder that
+        # generate_models calls), with no solve; the sparse tall solve itself is U1's test below (max_dense_bytes = 8)
+        for (prob, build_nlls) in ((create_pose_chain_problem(), SmoothOptimizerBenchmark.build_chain_nlls),
+                                   (create_rosenbrock_sparse_problem(), SmoothOptimizerBenchmark.build_sparse_nlls),
+                                   (create_ode_bvp_problem(), SmoothOptimizerBenchmark.build_sparse_ode_bvp_nlls))
             @test any(o -> o.name == tall.name, prob.compatible_optimizers)
-            for sz in (first(prob.default_sizes), last(prob.default_sizes))
-                models = prob.generate_models(sz)
-                md = SmoothOptimizerBenchmark.resolve_optimizer_model(tall, get_standard_optimizer_model(models, prob.category), models)
-                @test md.model isa SmoothOptimizerBenchmark.NLLSModel.Model
-                J = last(SmoothOptimizerBenchmark.NLLSModel.optimvars_nls(md.model))
-                sz == last(prob.default_sizes) && @test J isa SmoothOptimizerBenchmark.SparseMatrixCSC
-                r_tall = tall.optimize(md)
-                r_norm = normal_lm(md)
-                @test r_tall.status === :ok && r_tall.converged
-                @test r_norm.status === :ok
-                @test isapprox(r_tall.final_cost, r_norm.final_cost; rtol=1e-8, atol=SmoothOptimizerBenchmark.DEFAULT_FTOL * r_norm.start_cost)
-            end
+            sz = first(prob.default_sizes)
+            models = prob.generate_models(sz)
+            md = SmoothOptimizerBenchmark.resolve_optimizer_model(tall, get_standard_optimizer_model(models, prob.category), models)
+            @test md.model isa SmoothOptimizerBenchmark.NLLSModel.Model
+            r_tall = tall.optimize(md)
+            r_norm = normal_lm(md)
+            @test r_tall.status === :ok && r_tall.converged
+            @test r_norm.status === :ok
+            @test isapprox(r_tall.final_cost, r_norm.final_cost; rtol=1e-8, atol=SmoothOptimizerBenchmark.DEFAULT_FTOL * r_norm.start_cost)
+            J_largest = last(SmoothOptimizerBenchmark.NLLSModel.optimvars_nls(build_nlls(last(prob.default_sizes))))
+            @test J_largest isa SmoothOptimizerBenchmark.SparseMatrixCSC
         end
 
         # T2: bundle adjustment on the tall path with QR elimination, beside the normal Schur rows. At the two smallest sizes
