@@ -239,7 +239,7 @@ function create_bundle_adjustment_problem()
             # Gauss–Newton, like CaNNOLeS's Newton_noFHess (IT2)
             soo_gauss_newton_optimizer(; reduction=:eliminate),
             # QR elimination on the tall path (square-root bundle adjustment), same iterator and reduction as the LM row
-            OptimizerDefinition("SecondOrderOptimization (LM, tall)", (m; kwargs...) -> optimize_soo(m; method=:levenbergmarquardt_dtd, formulation=:tall, reduction=:eliminate, kwargs...)),
+            OptimizerDefinition("SecondOrderOptimization (LM, tall)", (m; kwargs...) -> optimize_soo(m; method=:levenbergmarquardt_dtd, formulation=:jacobian, reduction=:eliminate, kwargs...)),
             # The same with LSMR on the reduced Jacobian (T3)
             soo_tall_lsmr_optimizer(; method=:levenbergmarquardt_dtd, reduction=:eliminate),
             OptimizerDefinition("CaNNOLeS", (m; kwargs...) -> optimize_cannoles(m; kwargs...)),

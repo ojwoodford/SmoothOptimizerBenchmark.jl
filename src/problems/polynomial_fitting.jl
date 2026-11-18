@@ -148,7 +148,7 @@ function create_polynomial_fitting_problem()
         end,
         OptimizerDefinition[
             polyfit_optimizer("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)),
-            polyfit_optimizer("SecondOrderOptimization (LM, tall)", (m; kwargs...) -> optimize_soo(m; method=:lm, formulation=:tall, kwargs...)),
+            polyfit_optimizer("SecondOrderOptimization (LM, tall)", (m; kwargs...) -> optimize_soo(m; method=:lm, formulation=:jacobian, kwargs...)),
             polyfit_optimizer("LeastSquaresOptim (LM)", (m; kwargs...) -> optimize_least_squares(m; method=:lm, kwargs...)),
             polyfit_optimizer("LeastSquaresOptim (Dogleg)", (m; kwargs...) -> optimize_least_squares(m; method=:dogleg, kwargs...)),
         ],

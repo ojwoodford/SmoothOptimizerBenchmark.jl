@@ -17,7 +17,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         @test r_norm.status === :ok
         if r_tall.status === :skipped
             # The tall path does not support this model: reported as a skip with NLLSModel's reason, not a failure
-            @test occursin("formulation = :tall", r_tall.message)
+            @test occursin("formulation = :jacobian", r_tall.message)
             @info "Tall row skipped on $(prob.name)" r_tall.message
         else
             @test r_tall.status === :ok
@@ -101,29 +101,29 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     sp = create_rosenbrock_sparse_problem()
     sp_models = sp.generate_models(10)
     sp_nlls = first(filter(m -> m.model isa SmoothOptimizerBenchmark.NLLSModel.Model, sp_models))
-    r_big = optimize_nlls_soo(sp_nlls; method=:lm, formulation=:tall, storage=:dense, max_dense_bytes=8)
+    r_big = optimize_nlls_soo(sp_nlls; method=:lm, formulation=:jacobian, storage=:dense, max_dense_bytes=8)
     @test r_big.status === :skipped
     @test occursin("dense", r_big.message)
     # U1: under storage = :auto (NLLSModel NTP1) the same run stores J sparse and runs, to the normal row's cost
     J_auto = last(SmoothOptimizerBenchmark.NLLSModel.optimvars_nls(sp_nlls.model; storage=:auto, max_dense_bytes=8))
     @test J_auto isa SmoothOptimizerBenchmark.SparseMatrixCSC
-    r_auto = optimize_nlls_soo(sp_nlls; method=:lm, formulation=:tall, storage=:auto, max_dense_bytes=8)
+    r_auto = optimize_nlls_soo(sp_nlls; method=:lm, formulation=:jacobian, storage=:auto, max_dense_bytes=8)
     @test r_auto.status === :ok
     @test r_auto.converged
     r_auto_norm = optimize_nlls_soo(sp_nlls; method=:lm)
     @test isapprox(r_auto.final_cost, r_auto_norm.final_cost; rtol=1e-8, atol=1e-12)
     # optimize_soo forwards storage likewise (NLLSModel checks it)
-    @test optimize_soo(sp_nlls; method=:lm, formulation=:tall, storage=:sparse).status === :ok
+    @test optimize_soo(sp_nlls; method=:lm, formulation=:jacobian, storage=:sparse).status === :ok
     @test_throws ArgumentError optimize_soo(sp_nlls; method=:lm, storage=:bogus)
     @test_throws ArgumentError optimize_nlls_soo(sp_nlls; method=:lm, storage=:bogus)
     sp_lsp = get_standard_optimizer_model(sp_models, sp.category)
-    @test optimize_soo(sp_lsp; method=:lm, formulation=:tall).status === :skipped
+    @test optimize_soo(sp_lsp; method=:lm, formulation=:jacobian).status === :skipped
 
     # N2: the tall objective of a dense LeastSquaresProblem gives the same minimum as the normal equations
     cf_models = create_curve_fitting_problem().generate_models(256)
     cf_lsp = first(filter(m -> m.name == "Standalone", cf_models))
     x_t, x_n = Float64[], Float64[]
-    r_t = optimize_soo(cf_lsp; method=:lm, formulation=:tall, solution=x_t)
+    r_t = optimize_soo(cf_lsp; method=:lm, formulation=:jacobian, solution=x_t)
     r_n = optimize_soo(cf_lsp; method=:lm, solution=x_n)
     @test r_t.status === :ok && r_n.status === :ok
     @test r_t.final_cost ≈ r_n.final_cost rtol=1e-8
