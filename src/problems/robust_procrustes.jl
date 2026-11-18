@@ -54,9 +54,12 @@ NLLSModel.computeresidual(res::ProcrustesOVIResidual, v::ManifoldVar) = res.a - 
 # Every model of this problem hands back the rotation as vec(R) (IT1)
 flat_point(v::ManifoldVar) = flat_point(v.point)
 
-# Robust cost: each correspondence contributes 0.5 * rho(||a_i - R b_i||^2), with rho the Huber kernel
+# Robust cost: each correspondence contributes 0.5 * rho(||a_i - R b_i||^2), with rho the Huber kernel. HuberKernel, not
+# Huber2oKernel (IT3): the same cost and gradient, but no second-order term in the Gauss–Newton Hessian. At this width
+# nearly every correspondence is in the kernel's linear region, where Huber2oKernel's term (clamped at -rho'/3s) removes a
+# third of the curvature along each residual
 const PROCRUSTES_HUBER_WIDTH = 1e-5
-const procrustes_huber_kernel = NLLSModel.Huber2oKernel(PROCRUSTES_HUBER_WIDTH)
+const procrustes_huber_kernel = NLLSModel.HuberKernel(PROCRUSTES_HUBER_WIDTH)
 NLLSModel.robustkernel(::ProcrustesOVIResidual) = procrustes_huber_kernel
 
 function NLLSModel.computeresjac(::StaticInt{1}, res::ProcrustesOVIResidual, v::ManifoldVar)
@@ -215,8 +218,8 @@ function get_procrustes_dim(model)
 end
 
 # Manopt formulation: one residual block per correspondence, r_i = a_i - p b_i, each with the same
-# Huber robustifier as the NLLSModel residuals. `w ∘ HuberRobustifier()` evaluates w^2 rho(x / w^2),
-# which equals NLLSModel's Huber2oKernel(w), and Manopt's cost is 0.5 * sum_i rho(||r_i||^2).
+# Huber robustifier as the NLLSModel residuals. `w ∘ HuberRobustifier()` evaluates w^2 rho(x / w^2), which has
+# the cost and first derivative of NLLSModel's HuberKernel(w), and Manopt's cost is 0.5 * sum_i rho(||r_i||^2).
 struct ProcrustesBlockResidual
     a::Vector{Float64}
     b::Vector{Float64}
