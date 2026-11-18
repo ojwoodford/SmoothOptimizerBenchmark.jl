@@ -7,6 +7,7 @@
 
 ---
 
+
 ## 1. Model Evaluation Scaling
 
 The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dotted lines) and **Cost + Linear System Assembly** (solid/dash-dot lines) across problem sizes.
@@ -46,6 +47,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Matrix Dimension d = `32`, **`Manifolds`** achieves the fastest Cost + Linear System evaluation at **276.58 ms** (32 B allocated).
-- **Top Converged Optimizer**: At Matrix Dimension d = `32` (4/4 solvers converged), **`Manopt (LevenbergMarquardt)`** is fastest at **2.04 s** (11 iterations, final cost `3.92e-06`).
+- **Model Efficiency**: At Matrix Dimension d = `32`, **`Manifolds`** achieves the fastest Cost + Linear System evaluation at **262.77 ms** (32 B allocated).
+- **Top Converged Optimizer**: At Matrix Dimension d = `32` (4/4 solvers converged), **`Manopt (LevenbergMarquardt)`** is fastest at **2.00 s** (11 iterations, final cost `3.92e-06`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

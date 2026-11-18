@@ -7,6 +7,7 @@
 
 ---
 
+
 ## 1. Model Evaluation Scaling
 
 This problem uses `NLLSModel (Sparse)` universally across all solvers via its built-in adapters; Phase 1 comparative model evaluation is omitted.
@@ -43,5 +44,5 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 ## 5. Analysis & Key Takeaways
 
 - **Model Architecture**: Handled universally via `NLLSModel (Sparse)` with built-in zero-allocation adapters.
-- **Top Converged Optimizer**: At Poses N = `10000` (6/12 solvers converged), **`SecondOrderOptimization (Dogleg)`** is fastest at **26.73 ms** (5 iterations, final cost `5.44e-02`).
+- **Top Converged Optimizer**: At Poses N = `10000` (7/13 solvers converged), **`SecondOrderOptimization (LM)`** is fastest at **23.48 ms** (5 iterations, final cost `5.44e-02`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

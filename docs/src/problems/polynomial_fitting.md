@@ -7,6 +7,7 @@
 
 ---
 
+
 ## 1. Model Evaluation Scaling
 
 The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dotted lines) and **Cost + Linear System Assembly** (solid/dash-dot lines) across problem sizes.
@@ -46,6 +47,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Data Points m = `6400`, **`Standalone`** achieves the fastest Cost + Linear System evaluation at **143.46 μs** (32 B allocated).
-- **Top Converged Optimizer**: At Data Points m = `6400` (3/4 solvers converged), **`LeastSquaresOptim (Dogleg)`** is fastest at **19.96 ms** (24 iterations, final cost `9.70e+01`).
+- **Model Efficiency**: At Data Points m = `6400`, **`Standalone`** achieves the fastest Cost + Linear System evaluation at **144.42 μs** (32 B allocated).
+- **Top Converged Optimizer**: At Data Points m = `6400` (3/4 solvers converged), **`LeastSquaresOptim (Dogleg)`** is fastest at **19.90 ms** (24 iterations, final cost `9.70e+01`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

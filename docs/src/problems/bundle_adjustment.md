@@ -7,6 +7,7 @@
 
 ---
 
+
 ## 1. Model Evaluation Scaling
 
 The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dotted lines) and **Cost + Linear System Assembly** (solid/dash-dot lines) across problem sizes.
@@ -46,6 +47,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Cameras Ncam = `256`, **`NLLSModel`** achieves the fastest Cost + Linear System evaluation at **16.57 ms** (76.5 MiB allocated).
-- **Top Converged Optimizer**: At Cameras Ncam = `256` (4/7 solvers converged), **`SecondOrderOptimization (LM)`** is fastest at **1.61 s** (10 iterations, final cost `1.38e-20`).
+- **Model Efficiency**: At Cameras Ncam = `256`, **`NLLSModel`** achieves the fastest Cost + Linear System evaluation at **16.61 ms** (88.5 MiB allocated).
+- **Top Converged Optimizer**: At Cameras Ncam = `256` (4/8 solvers converged), **`SecondOrderOptimization (LM)`** is fastest at **1.56 s** (10 iterations, final cost `1.38e-20`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.
