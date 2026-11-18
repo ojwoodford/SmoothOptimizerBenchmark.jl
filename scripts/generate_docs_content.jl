@@ -162,6 +162,31 @@ $(suite_table)
     end
 end
 
+# Problem-specific text, placed under a problem page's header
+const PROBLEM_NOTES = Dict(
+    "curve_fitting_robust" => raw"""
+## About this problem
+
+Exponential curve fitting, ``a e^{-b t} + c - y`` with one `SVector{3}` variable, on curve fitting's data with **30 % of the points moved up by +1** (one-sided outliers, against noise of σ = 0.02), fitted with a **Huber kernel of width 0.05** (2.5σ, `Huber2oKernel`, with the second-order correction).
+
+- **Native rows.** `SecondOrderOptimization` (Dogleg, LM, LM tall) run the `NLLSModel (Static)` model, which declares the kernel.
+- **Every other row runs `Standalone (fudged)`.** That includes the general solvers, whether or not the row's name says "fudged". The residuals are rewritten as ``\tilde r = \operatorname{sign}(r)\sqrt{\rho(r^2)}``, and each row of the Jacobian is scaled by ``\rho'(r^2)\,|r| / \sqrt{\rho(r^2)}``. Then ``\tfrac12\|\tilde r\|^2`` is the robust cost exactly and ``\tilde J^T \tilde r`` its gradient.
+  - LeastSquaresOptim, NonlinearSolve and CaNNOLeS have no kernel interface, and their rows are named "fudged".
+  - So is the control row, `SecondOrderOptimization (LM, fudged)`: the native LM optimizer on the fudged model.
+  - Optim, JSOSolvers, Ipopt and MadNLP keep their standard names. They get the exact robust cost and gradient, but their Hessian is ``\tilde J^T \tilde J``.
+
+The weight each form gives an outlier's ``J_i^T J_i`` (``|r| > w``; inliers have weight 1 in all three), **derived from the code, not measured**:
+
+| Form | Weight | Far from the width |
+|---|---|---|
+| Reweighting only (IRLS) | ``w / \lvert r\rvert`` | ``w / \lvert r\rvert`` |
+| NLLSModel, Triggs with its positive-definiteness guard | ``2w / (3\lvert r\rvert)`` | ``\tfrac23 \cdot w / \lvert r\rvert`` |
+| Rewritten residuals, Gauss–Newton | ``w^2 / (2w\lvert r\rvert - w^2)`` | ``\to \tfrac12 \cdot w / \lvert r\rvert`` |
+
+---
+""",
+)
+
 function generate_problem_markdown(res::ProblemScalingBenchmarkResult, slug::String; single_threaded=nothing)
     target_model_name = isempty(res.size_results) ? "Standard" : first(res.size_results).target_model
     num_sizes = length(res.sizes)
@@ -243,6 +268,7 @@ $(model_plot)
 
 ---
 
+$(get(PROBLEM_NOTES, slug, ""))
 $(phase1_section)
 ---
 

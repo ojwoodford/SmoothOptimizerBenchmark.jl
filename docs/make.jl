@@ -17,8 +17,10 @@ makedocs(
         "Problem Benchmarks" => [
             "Sparse Multi-dimensional Rosenbrock" => "problems/rosenbrock_sparse.md",
             "Exponential Curve Fitting" => "problems/curve_fitting.md",
+            "Robust Exponential Curve Fitting" => "problems/curve_fitting_robust.md",
             "Ill-Conditioned Polynomial Fitting" => "problems/polynomial_fitting.md",
             "Dense Multi-dimensional Rosenbrock" => "problems/rosenbrock_dense.md",
+            "Multilateration" => "problems/multilateration.md",
             "Dense Affine Alignment" => "problems/affine_alignment.md",
             "Nonlinear 3D Pose Chain" => "problems/pose_chain.md",
             "1D ODE Boundary Value Problem" => "problems/ode_bvp.md",
