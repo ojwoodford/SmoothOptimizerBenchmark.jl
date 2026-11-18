@@ -20,6 +20,10 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     tall_style = SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (LM, tall)")
     @test tall_style == (:red, :dashdotdot, :utriangle)
     @test tall_style != SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (LM)")
+    # T4: the LSMR row has the tall row's line and a marker of its own
+    lsmr_style = SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (LM, tall, LSMR)")
+    @test lsmr_style == (:red, :dashdotdot, :dtriangle)
+    @test lsmr_style != tall_style
     @test problem_slug(create_polynomial_fitting_problem().name) == "polynomial_fitting"
     @test length(unique(problem_slug(p.name) for p in problems)) == length(problems)
 

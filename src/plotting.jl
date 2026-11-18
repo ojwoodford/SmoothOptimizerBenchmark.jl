@@ -279,6 +279,7 @@ Maps an optimizer name to a consistent (color, linestyle, marker) tuple:
   - NLLSModel + SecondOrderOptimization (LM): :dot with :star5
   - NLLSModel + SecondOrderOptimization (Dogleg): :dashdot with :star5
   - SecondOrderOptimization (LM, tall): :dashdotdot with :utriangle, so it is not drawn like the normal-equations row
+  - SecondOrderOptimization (LM, tall, LSMR): :dashdotdot with :dtriangle, the tall row's line with its own marker
   - SecondOrderOptimization (LM, fudged), the control row on rewritten residuals: :dash with :diamond, so it is not drawn
     like the native LM row
   - LM / trunk / default Newton: :solid with :circle
@@ -296,7 +297,7 @@ function optimizer_style(opt_name::String)
 
     # The tall formulation (residual and Jacobian) of SecondOrderOptimization, beside its normal-equations rows
     if (occursin("secondorder", name_lower) || startswith(name_lower, "soo")) && occursin("tall", name_lower)
-        return :red, :dashdotdot, :utriangle
+        return :red, :dashdotdot, occursin("lsmr", name_lower) ? :dtriangle : :utriangle
     end
 
     # SecondOrderOptimization on the rewritten ("fudged") residuals, beside its native rows

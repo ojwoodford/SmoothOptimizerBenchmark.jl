@@ -162,8 +162,28 @@ $(suite_table)
     end
 end
 
+# What the tall rows are (T4), on the pages of the problems that have them beyond the dense ones
+const TALL_ROW_NOTE = raw"""
+- **`SecondOrderOptimization (LM, tall)`** is Levenberg–Marquardt on the residual-and-Jacobian form (`formulation = :tall`): each step solves the damped least-squares problem in ``J`` by QR, without forming ``J^T J``, on the `NLLSModel` model. `storage = :auto` stores ``J`` dense or sparse from its fill (sparse at the large sizes), and `linsolver = :auto` factorizes it by dense QR or SPQR. The rows without "tall" solve the normal equations in ``J^T J``.
+"""
+const LSMR_ROW_NOTE = raw"""
+- **`SecondOrderOptimization (LM, tall, LSMR)`** is the tall row with `linsolver = :lsmr`: each step's least-squares problem is solved iteratively by LSMR (Krylov.jl) instead of by QR.
+"""
+
 # Problem-specific text, placed under a problem page's header
 const PROBLEM_NOTES = Dict(
+    "rosenbrock_sparse" => "## The SecondOrderOptimization rows\n\n" * TALL_ROW_NOTE * LSMR_ROW_NOTE * "\n---\n",
+    "pose_chain" => "## The SecondOrderOptimization rows\n\n" * TALL_ROW_NOTE * LSMR_ROW_NOTE * "\n---\n",
+    "ode_bvp" => "## The SecondOrderOptimization rows\n\n" * TALL_ROW_NOTE * "\n---\n",
+    "bundle_adjustment" => raw"""
+## The SecondOrderOptimization rows
+
+- **`SecondOrderOptimization (LM)`** and **`(Dogleg)`** solve the normal equations with the points eliminated by a Schur complement (`reduction = :eliminate`); LM uses `:levenbergmarquardt_dtd`, whose damping is scaled by the running maximum of the squared column norms of ``J`` (the diagonal of ``J^T J``).
+- **`SecondOrderOptimization (LM, tall)`** uses the same iterator and `reduction = :eliminate` on the residual-and-Jacobian form (`formulation = :tall`): the points are eliminated by QR of their blocks (square-root bundle adjustment), and the reduced camera system is stored as `storage = :auto` chooses and factorized by QR, without forming ``J^T J``.
+- **`SecondOrderOptimization (LM, tall, LSMR)`** is the tall row with `linsolver = :lsmr`: the reduced least-squares problem is solved iteratively by LSMR (Krylov.jl) instead of by QR.
+
+---
+""",
     "curve_fitting_robust" => raw"""
 ## About this problem
 
