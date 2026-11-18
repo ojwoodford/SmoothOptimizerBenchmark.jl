@@ -6,12 +6,20 @@ using SmoothOptimizerBenchmark
 # allocation, not the closure's
 allocated_bytes(f) = (f(); @allocated f())
 
-@testset "SmoothOptimizerBenchmark Suite" begin
+# ET0: wall time and compile time of each second-level testset, from `@timed` (`compile_time` exists from Julia 1.11;
+# NaN before). One line per testset, `TESTSET-TIME <name> | <total s> | <compile s>`, for the timing tables
+function log_testset_time(name, stats)
+    compile = hasproperty(stats, :compile_time) ? stats.compile_time : NaN
+    println("TESTSET-TIME ", name, " | ", round(stats.time; digits=1), " | ", round(compile; digits=1))
+    return stats.value
+end
+
+@testset verbose = true "SmoothOptimizerBenchmark Suite" begin
     problems = get_all_problems()
     # 11 distinct problems (10 Euclidean non-manifold + 1 manifold)
     @test length(problems) == 11
 
-    @testset "Problem Definition & >=10 Problem Sizes" begin
+    log_testset_time("Problem Definition & >=10 Problem Sizes", @timed @testset "Problem Definition & >=10 Problem Sizes" begin
         for prob in problems
             @test !isempty(prob.name)
             @test prob.category in (:small_dense, :medium_dense, :large_dense, :large_sparse, :manifold)
@@ -42,9 +50,9 @@ allocated_bytes(f) = (f(); @allocated f())
                 m.reset!()
             end
         end
-    end
+    end)
 
-    @testset "Plot Styling & Unsupported Sparse Solver Handling" begin
+    log_testset_time("Plot Styling & Unsupported Sparse Solver Handling", @timed @testset "Plot Styling & Unsupported Sparse Solver Handling" begin
         @test SmoothOptimizerBenchmark.model_style("Manifolds")[1] == :blue
         @test SmoothOptimizerBenchmark.optimizer_style("Manopt (LevenbergMarquardt)")[1] == :blue
         @test SmoothOptimizerBenchmark.optimizer_style("CaNNOLeS")[1] == :chocolate
@@ -80,18 +88,18 @@ allocated_bytes(f) = (f(); @allocated f())
         @test !res_soo_1.converged
         @test res_soo_1.status === :not_converged
         @test occursin("max_iters", res_soo_1.message)
-    end
+    end)
 
-    @testset "Every SecondOrderOptimization termination mask has a name" begin
+    log_testset_time("Every SecondOrderOptimization termination mask has a name", @timed @testset "Every SecondOrderOptimization termination mask has a name" begin
         SOO = SmoothOptimizerBenchmark.SecondOrderOptimization
         exported = Set(getfield(SOO, n) for n in names(SOO) if startswith(String(n), "TERMINATION_"))
         named = Set(mask for (_, mask) in SmoothOptimizerBenchmark.SOO_TERMINATION_NAMES)
         @test named == exported
         @test allunique(first.(SmoothOptimizerBenchmark.SOO_TERMINATION_NAMES))
         @test SmoothOptimizerBenchmark.soo_termination_message(SOO.TERMINATION_GRAD_NAN | SOO.TERMINATION_START_NOT_FINITE) == "start_not_finite, grad_nan"
-    end
+    end)
 
-    @testset "Optimizer status (B3)" begin
+    log_testset_time("Optimizer status (B3)", @timed @testset "Optimizer status (B3)" begin
         @test_throws ArgumentError OptimizerResult(1.0, 0, 0, 1, 1.0, 0.5, true, :not_converged, "")
         @test_throws ArgumentError OptimizerResult(1.0, 0, 0, 1, 1.0, 0.5, false, :failed, "")
         @test OptimizerResult(1.0, 0, 0, 1, 1.0, 0.5, false; timed_out=true).status === :timeout
@@ -137,9 +145,9 @@ allocated_bytes(f) = (f(); @allocated f())
         lr = load_problem_markdown(legacy)
         @test lr.size_results[1].optimizer_results["A"].status === :ok
         @test lr.size_results[1].optimizer_results["B"].status === :not_converged
-    end
+    end)
 
-    @testset "An explicit model for a row (P2a)" begin
+    log_testset_time("An explicit model for a row (P2a)", @timed @testset "An explicit model for a row (P2a)" begin
         prob = create_curve_fitting_problem()
         models = prob.generate_models(64)
         target = get_standard_optimizer_model(models, prob.category)
@@ -164,9 +172,9 @@ allocated_bytes(f) = (f(); @allocated f())
         # Only P2's control row sets a model name; every other row is routed by its name, as before
         @test [(o.name, o.model_name) for p in problems for o in p.compatible_optimizers if o.model_name !== nothing] ==
             [("SecondOrderOptimization (LM, fudged)", "Standalone (fudged)")]
-    end
+    end)
 
-    @testset "Cold-Start NLLSModel + SecondOrderOptimization & BAL Equivalence" begin
+    log_testset_time("Cold-Start NLLSModel + SecondOrderOptimization & BAL Equivalence", @timed @testset "Cold-Start NLLSModel + SecondOrderOptimization & BAL Equivalence" begin
         # 1. Exponential Curve Fitting (static variable)
         cf_models = create_curve_fitting_problem().generate_models(64)
         cf_nlls = first(filter(m -> occursin("nllsmodel", lowercase(m.name)), cf_models))
@@ -221,9 +229,9 @@ allocated_bytes(f) = (f(); @allocated f())
         @test r_ode.converged
         @test r_ode.final_cost < r_ode.start_cost
         @test r_ode.allocs > 0
-    end
+    end)
 
-    @testset "Thread counts and NLLSModel threading thresholds (M17, F4)" begin
+    log_testset_time("Thread counts and NLLSModel threading thresholds (M17, F4)", @timed @testset "Thread counts and NLLSModel threading thresholds (M17, F4)" begin
         @test_throws ArgumentError set_benchmark_threads!(; numthreads=Threads.nthreads() + 1)
         t = set_benchmark_threads!(; numthreads=1, blas_threads=1)
         @test t == (; numthreads=1, julia_threads=Threads.nthreads(), blas_threads=1)
@@ -239,9 +247,9 @@ allocated_bytes(f) = (f(); @allocated f())
         @test r_forced.final_cost ≈ r_default.final_cost rtol=1e-10
         @test r_serial.final_cost ≈ r_default.final_cost rtol=1e-10
         @test_throws TypeError optimize_nlls_soo(cf; method=:lm, min_work="a lot")   # forwarded to optimize!, which types it
-    end
+    end)
 
-    @testset "Single-variable NLLSModel rows use the linear system's own buffer types (M18)" begin
+    log_testset_time("Single-variable NLLSModel rows use the linear system's own buffer types (M18)", @timed @testset "Single-variable NLLSModel rows use the linear system's own buffer types (M18)" begin
         set_benchmark_threads!(; numthreads=1, blas_threads=1)
         # Curve fitting: one SVector{3} variable, so a static system; its g and H are an MVector and an MMatrix, and an
         # fdf! call writes straight into them without allocating
@@ -275,9 +283,9 @@ allocated_bytes(f) = (f(); @allocated f())
         @test rcf_linsys.H_nlls isa SmoothOptimizerBenchmark.MMatrix{3, 3, Float64, 9}
         @test allocated_bytes(rcf_linsys) == 0
         set_benchmark_threads!()
-    end
+    end)
 
-    @testset "Robust exponential curve fitting (P2)" begin
+    log_testset_time("Robust exponential curve fitting (P2)", @timed @testset "Robust exponential curve fitting (P2)" begin
         SB = SmoothOptimizerBenchmark
         norm = SB.norm
         prob = create_robust_curve_fitting_problem()
@@ -414,9 +422,9 @@ allocated_bytes(f) = (f(); @allocated f())
             end
             m_sa.reset!()
         end
-    end
+    end)
 
-    @testset "Multilateration (P1)" begin
+    log_testset_time("Multilateration (P1)", @timed @testset "Multilateration (P1)" begin
         norm = SmoothOptimizerBenchmark.norm
         prob = create_multilateration_problem()
         @test problem_slug(prob.name) == "multilateration"
@@ -470,9 +478,9 @@ allocated_bytes(f) = (f(); @allocated f())
                 @test norm(x - data.xtrue) < 0.05
             end
         end
-    end
+    end)
 
-    @testset "Tall formulation (N1, N2, N5)" begin
+    log_testset_time("Tall formulation (N1, N2, N5)", @timed @testset "Tall formulation (N1, N2, N5)" begin
         # N5: the tall and normal rows reach the same cost on the well-conditioned dense problems
         tall = soo_tall_optimizer()
         @test tall.name == "SecondOrderOptimization (LM, tall)"
@@ -576,9 +584,9 @@ allocated_bytes(f) = (f(); @allocated f())
         @test obj isa SmoothOptimizerBenchmark.SecondOrderOptimization.JacobianObjective
         @test all(iszero, obj.J)
         @test_throws ArgumentError soo_objective_tall(sp_lsp.model)
-    end
+    end)
 
-    @testset "Ill-conditioned polynomial fit: excess cost over the reference minimum (N3, N4)" begin
+    log_testset_time("Ill-conditioned polynomial fit: excess cost over the reference minimum (N3, N4)", @timed @testset "Ill-conditioned polynomial fit: excess cost over the reference minimum (N3, N4)" begin
         prob = create_polynomial_fitting_problem()
         sz = first(prob.default_sizes)
         ref = SmoothOptimizerBenchmark.polyfit_reference(sz)
@@ -605,9 +613,9 @@ allocated_bytes(f) = (f(); @allocated f())
             @test loaded[k].excess_cost ≈ r.excess_cost rtol=1e-3
             @test loaded[k].status === r.status
         end
-    end
+    end)
 
-    @testset "Quick Single-Size Benchmark" begin
+    log_testset_time("Quick Single-Size Benchmark", @timed @testset "Quick Single-Size Benchmark" begin
         for prob in problems
             sz = first(prob.default_sizes)
             res = run_problem_benchmark(prob, sz; samples=1)
@@ -618,9 +626,9 @@ allocated_bytes(f) = (f(); @allocated f())
             @test !isempty(res.optimizer_results)
             @test haskey(res.model_results, res.target_model)
         end
-    end
+    end)
 
-    @testset "Scaling Benchmark, Markdown Serialization & Plotting" begin
+    log_testset_time("Scaling Benchmark, Markdown Serialization & Plotting", @timed @testset "Scaling Benchmark, Markdown Serialization & Plotting" begin
         prob = create_rosenbrock_sparse_problem()
         test_sizes = Any[4, 8]
         tmp_data_dir = mktempdir()
@@ -694,9 +702,9 @@ allocated_bytes(f) = (f(); @allocated f())
         @test isfile(st_plot)
         set_benchmark_threads!()
         rm(tmp_root; recursive=true, force=true)
-    end
+    end)
 
-    @testset "NLPModels Evaluation Recomputation and Cache Invalidation" begin
+    log_testset_time("NLPModels Evaluation Recomputation and Cache Invalidation", @timed @testset "NLPModels Evaluation Recomputation and Cache Invalidation" begin
         prob = create_rosenbrock_sparse_problem()
         models = prob.generate_models(16)
         nlp_m = first(filter(m -> occursin("NLPModels", m.name), models))
@@ -719,5 +727,5 @@ allocated_bytes(f) = (f(); @allocated f())
         # run_model_benchmarks accurately measures recomputed cost
         res = run_model_benchmarks([nlp_m]; samples=3)
         @test res[nlp_m.name].cost_time_ns > 0
-    end
+    end)
 end
