@@ -79,10 +79,11 @@ polyfit_npoints(m::ModelDefinition) = polyfit_npoints(m.model)
 polyfit_npoints(m::LeastSquaresProblem) = length(m.y)
 polyfit_npoints(m::NLLSModel.Model) = NLLSModel.nresiduals(m)
 
-# An optimizer definition whose rows also carry the excess cost over the reference minimum
+# An optimizer definition whose rows also carry the excess cost over the reference minimum, at the point the row hands
+# back through the `solution` keyword: the harness's buffer when it passes one (IT1), else one of its own
 function polyfit_optimizer(name::String, run)
-    return OptimizerDefinition(name, (m; kwargs...) -> begin
-        x = Float64[]
+    return OptimizerDefinition(name, (m; solution=Float64[], kwargs...) -> begin
+        x = solution
         r = run(m; solution=x, kwargs...)
         return with_excess_cost(r, isempty(x) ? NaN : polyfit_excess_cost(polyfit_npoints(m), x))
     end)

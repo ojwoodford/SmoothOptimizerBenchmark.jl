@@ -51,6 +51,8 @@ NLLSModel.nres(res::ProcrustesOVIResidual) = length(res.a)
 NLLSModel.varindices(::ProcrustesOVIResidual) = 1
 NLLSModel.getvars(::ProcrustesOVIResidual, vars::AbstractVector) = (vars[1],)
 NLLSModel.computeresidual(res::ProcrustesOVIResidual, v::ManifoldVar) = res.a - v.point * res.b
+# Every model of this problem hands back the rotation as vec(R) (IT1)
+flat_point(v::ManifoldVar) = flat_point(v.point)
 
 # Robust cost: each correspondence contributes 0.5 * rho(||a_i - R b_i||^2), with rho the Huber kernel
 const PROCRUSTES_HUBER_WIDTH = 1e-5
@@ -116,6 +118,7 @@ end
 struct SpecializedRotation{N, N2, T}
     R::SMatrix{N, N, T, N2}
 end
+flat_point(v::SpecializedRotation) = flat_point(v.R)
 OptimizationVariableInterface.nvars(::SpecializedRotation{N, N2, T}) where {N, N2, T} = StaticInt((N * (N - 1)) ÷ 2)
 @inline function OptimizationVariableInterface.update(var::SpecializedRotation{N, N2, T}, updatevec, start=1) where {N, N2, T}
     C = cayley_rot(updatevec, start, Val(N))
@@ -274,6 +277,23 @@ function procrustes_robust_cost(A, B, p, r = zeros(size(A, 1)))
     return 0.5 * c
 end
 
+# The Manifolds model: the manifold, Manopt's robustified blocks, the data and the start
+struct ProcrustesManifoldsModel{TM, TB}
+    M::TM
+    blocks::TB
+    A::Matrix{Float64}
+    B::Matrix{Float64}
+    p0::Matrix{Float64}
+end
+
+# The standard model's evaluator (IT1): the robust cost at a rotation R, given as vec(R)
+function point_evaluator(m::ProcrustesManifoldsModel)
+    d = size(m.p0, 1)
+    A, B = m.A, m.B
+    r = zeros(Float64, d)
+    return PointEvaluator(x -> procrustes_robust_cost(A, B, reshape(x, d, d), r), vec(copy(m.p0)))
+end
+
 function get_procrustes_manopt_components(model_def)
     m = model_def.model
     if hasproperty(m, :blocks)
@@ -347,7 +367,7 @@ function create_robust_procrustes_problem()
             H_manopt = zeros(Float64, dim_M, dim_M)
             m_manopt = ModelDefinition(
                 "Manifolds",
-                (M = M, blocks = blocks, A = A, B = B, p0 = p0),
+                ProcrustesManifoldsModel(M, blocks, A, B, p0),
                 () -> procrustes_robust_cost(A, B, p_curr, r_i),
                 () -> begin
                     # Robustified Gauss-Newton system, weighted per block as NLLSModel does
@@ -377,7 +397,7 @@ function create_robust_procrustes_problem()
             OptimizerDefinition("SecondOrderOptimization (LM)", (model_def; kwargs...) -> optimize_soo(model_def; method=:lm, kwargs...)),
             soo_tall_optimizer(),
             OptimizerDefinition("SecondOrderOptimization (Dogleg)", (model_def; kwargs...) -> optimize_soo(model_def; method=:dogleg, kwargs...)),
-            OptimizerDefinition("Manopt (LevenbergMarquardt)", (model_def; gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
+            OptimizerDefinition("Manopt (LevenbergMarquardt)", (model_def; solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
                 M, blocks, A, B, p0 = get_procrustes_manopt_components(model_def)
                 start_c = procrustes_robust_cost(A, B, p0)
                 actual_maxiters = (time_limit !== nothing && time_limit <= 1.0) ? min(maxiters, 5) : maxiters
@@ -399,6 +419,7 @@ function create_robust_procrustes_problem()
                 state = timed.value
                 inner = state isa Manopt.DebugSolverState ? state.state : state
                 p_sol = Manopt.get_solver_result(state)
+                store_solution!(solution, vec(p_sol))
                 final_c = procrustes_robust_cost(A, B, p_sol)
                 alloc_cnt = Base.gc_alloc_count(timed.gcstats)
                 active = Manopt.get_active_stopping_criteria(stop_crit)

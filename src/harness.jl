@@ -180,11 +180,17 @@ end
 Runs all compatible optimizers on the target model (routing `NLLSModel + ...` entries to the corresponding `NLLSModel` formulation), returning performance statistics.
 Times the first (non-warmup) run with no run time limits, then calculates the number of further
 samples needed for up to 1s total computation (or up to `max_samples`), collecting at least 1 sample.
+
+The iterations, status and costs reported are the first run's (IT1). Its start and final costs are not the solver's own:
+the adapter hands back the point it stopped at (the `solution` keyword), and `evaluator`, the problem's
+`point_evaluator` built from its standard model (by default from `target_model`), evaluates the cost there, outside the
+timed region. A row that hands back no point (a skip, an error) has a final cost of `NaN`.
 """
 function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, target_model::ModelDefinition;
                                  all_models::Vector{<:ModelDefinition}=ModelDefinition[target_model],
                                  max_samples::Int=50, target_total_time_sec::Float64=1.0, samples=nothing,
-                                 on_result=nothing, warmed_signatures::Set{Any}=Set{Any}())
+                                 on_result=nothing, warmed_signatures::Set{Any}=Set{Any}(),
+                                 evaluator=point_evaluator(target_model))
     results = Dict{String, OptimizerResult}()
     effective_max = samples !== nothing ? max(1, Int(samples)) : max_samples
 
@@ -208,9 +214,10 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
 
         # 1. First (non-warmup) run with standard run time limits
         init_res = nothing
+        point = Float64[]
         t1_wall_start = time_ns()
         try
-            init_res = opt.optimize(opt_model; time_limit=DEFAULT_MAXTIME)
+            init_res = opt.optimize(opt_model; time_limit=DEFAULT_MAXTIME, solution=point)
         catch err
             @warn "Optimizer $(opt.name) threw on model $(opt_model.name)" exception=(err, catch_backtrace()) maxlog=3
             opt_model.reset!()
@@ -223,6 +230,7 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
         end
         t1_wall_ns = Float64(time_ns() - t1_wall_start)
         t1_wall_sec = t1_wall_ns / 1e9
+        init_res = evaluated_result(init_res, point, opt_model, evaluator)
 
         if isnan(init_res.time_ns) || !init_res.converged
             res = init_res
@@ -356,8 +364,9 @@ function run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=
         get_standard_optimizer_model(models, prob.category)
     end
 
-    # Phase 2: Optimizers (each on optimal model representation)
-    optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples)
+    # Phase 2: Optimizers (each on optimal model representation), every row's costs evaluated by the standard model's evaluator
+    evaluator = point_evaluator(get_standard_optimizer_model(models, prob.category))
+    optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples, evaluator)
 
     return SingleSizeBenchmarkResult(
         prob.name,
@@ -476,7 +485,7 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
 
         # Run optimizers on target model (routing NLLSModel + ... to NLLSModel), streaming each optimizer result immediately to file
         optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples,
-            warmed_signatures=warmed_signatures,
+            warmed_signatures=warmed_signatures, evaluator=point_evaluator(get_standard_optimizer_model(models, prob.category)),
             on_result = (opt_name, r) -> append_optimizer_evaluation(data_file, sz, opt_name, r)
         )
 

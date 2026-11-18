@@ -29,6 +29,7 @@ const TEST_FILES = [
     ("Multilateration (P1)", "multilateration.jl", :serial),
     ("Tall formulation (N1, N2, N5)", "tall_formulation.jl", :serial),
     ("Ill-conditioned polynomial fit: excess cost over the reference minimum (N3, N4)", "polynomial_fitting.jl", :integration),
+    ("The harness evaluates every row's cost (IT1)", "point_evaluation.jl", :integration),
     ("Quick Single-Size Benchmark", "quick_benchmark.jl", :integration),
     ("Scaling Benchmark, Markdown Serialization & Plotting", "scaling_markdown_plotting.jl", :serial),
     ("Scaling Benchmark: the single-threaded table", "scaling_single_threaded.jl", :threaded),

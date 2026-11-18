@@ -8,6 +8,7 @@ end
 OptimizationVariableInterface.nvars(::BALPoint) = static(3)
 OptimizationVariableInterface.update(p::BALPoint, step, offset=1) = BALPoint(p.p + SVector(step[offset], step[offset+1], step[offset+2]))
 OptimizationVariableInterface.iseliminable(::Type{<:BALPoint}) = static(true)
+flat_point(p::BALPoint) = collect(Float64, p.p)
 
 struct BALResidual <: NLLSModel.AbstractResidual
     obs::SVector{2, Float64}
@@ -95,12 +96,18 @@ function _make_nlls_ba_model_definition(bam_model::BundleAdjustmentModel)
     g = zeros(Float64, n_tot_vars)
     H = H_proto === nothing ? zeros(Float64, n_tot_vars, n_tot_vars) : deepcopy(H_proto)
 
+    # The variables flattened (cameras, then points) to BundleAdjustmentModels' layout (points, then cameras), for the
+    # point evaluator (IT1)
+    ncam_vars = 9 * bam_model.ncams
+    to_bam_layout(x) = vcat(view(x, ncam_vars+1:length(x)), view(x, 1:ncam_vars))
+
     return ModelDefinition(
         "NLLSModel",
         nlls_prob,
         () -> f(nlls_prob.variables),
         () -> (fdf!(g, H, nlls_prob.variables), H),
-        () -> copyto!(nlls_prob.variables, start_vars)
+        () -> copyto!(nlls_prob.variables, start_vars),
+        to_bam_layout
     )
 end
 

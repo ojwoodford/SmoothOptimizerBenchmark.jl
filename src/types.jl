@@ -82,6 +82,9 @@ Encapsulates a model formulation for a problem:
 - `eval_cost`: In-place function `() -> Float64` computing pure cost (always recomputed, un-cached)
 - `eval_cost_and_linear_system`: In-place function `() -> (cost, linsys)` computing cost + derivatives/linear system
 - `reset!`: Function `() -> nothing` resetting model parameters to initial configuration
+- `to_point`: Function from the point an adapter hands back for this model (the `solution` keyword, a flat
+  `Vector{Float64}` in this model's layout) to the layout of the problem's point evaluator (IT1, `point_evaluator`). `identity`
+  (the five-argument constructor) where the two layouts are the same.
 """
 struct ModelDefinition{T}
     name::String
@@ -89,6 +92,23 @@ struct ModelDefinition{T}
     eval_cost::Function
     eval_cost_and_linear_system::Function
     reset!::Function
+    to_point::Function
+end
+ModelDefinition(name::String, model, eval_cost::Function, eval_cost_and_linear_system::Function, reset!::Function) =
+    ModelDefinition(name, model, eval_cost, eval_cost_and_linear_system, reset!, identity)
+
+# PointEvaluator (internal)
+"""
+    PointEvaluator
+
+The problem's own evaluation of a point (IT1), one per problem and size, the same for every row, so that rows differ
+only by where they stopped. Built from the problem's standard model by `point_evaluator`. Internal:
+- `cost`: Function `x -> Float64`, the cost at `x`, a `Vector{Float64}` in the standard model's layout
+- `x0`: the start, in that layout
+"""
+struct PointEvaluator
+    cost::Function
+    x0::Vector{Float64}
 end
 
 const OPTIMIZER_STATUSES = (:ok, :not_converged, :timeout, :skipped, :error)
@@ -160,6 +180,10 @@ error_result(err) = OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false, :error, sprin
 # Copy of `r` with the timing fields replaced
 with_timing(r::OptimizerResult, time_ns, allocs, bytes) =
     OptimizerResult(time_ns, allocs, bytes, r.iterations, r.start_cost, r.final_cost, r.converged, r.status, r.message, r.excess_cost)
+
+# Copy of `r` with the start and final costs replaced by the harness's evaluation (IT1)
+with_costs(r::OptimizerResult, start_cost, final_cost) =
+    OptimizerResult(r.time_ns, r.allocs, r.bytes, r.iterations, start_cost, final_cost, r.converged, r.status, r.message, r.excess_cost)
 
 # Copy of `r` with the excess cost over the reference minimum set
 with_excess_cost(r::OptimizerResult, excess_cost) =

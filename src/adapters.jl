@@ -536,9 +536,13 @@ function soo_run!(m, opt; formulation=:normal, reduction=:auto, storage=:auto, n
     return SecondOrderOptimization.optimize!(x0, obj, opt), x0
 end
 
-# The solution as a flat Vector{Float64}: an NLLSModel holds it in its variables (written back by optimize!)
+# The solution as a flat Vector{Float64}: an NLLSModel holds it in its variables (written back by optimize!), each
+# flattened by `flat_point` in the order of the model's variables. A variable type that is not a number or an array (a
+# problem's own point or rotation type) has a `flat_point` method beside its definition
 soo_solution(x::AbstractVector) = Vector{Float64}(x)
-soo_solution(m::NLLSModel.Model) = reduce(vcat, [v isa Number ? [Float64(v)] : collect(Float64, vec(v)) for v in m.variables]; init=Float64[])
+soo_solution(m::NLLSModel.Model) = reduce(vcat, [flat_point(v) for v in m.variables]; init=Float64[])
+flat_point(v::Number) = [Float64(v)]
+flat_point(v::AbstractArray) = collect(Float64, vec(v))
 
 # Copy the solution into a caller's buffer (outside the timed region)
 store_solution!(::Nothing, x) = nothing
@@ -672,10 +676,14 @@ function optimize_nlls_soo(target; method=:dogleg, formulation=:normal, reductio
 end
 
 """
-    optimize_least_squares(model; method=:dogleg, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
+    optimize_least_squares(model; method=:dogleg, solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `LeastSquaresOptim.jl`.
 Supported methods: `:dogleg`, `:lm` / `:levenbergmarquardt`.
+
+Every adapter takes `solution`: if it is a `Vector{Float64}`, the point the solver stopped at is copied into it, after the
+timed run, in the layout of the model it ran on (IT1); the harness evaluates the cost there. On the time limit this
+adapter hands back the last point at which the Jacobian was evaluated.
 """
 function optimize_least_squares(target; method=:dogleg, solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
@@ -713,6 +721,8 @@ function optimize_least_squares(target; method=:dogleg, solution=nothing, gtol=D
     deadline = time_ns() + UInt64(round(actual_maxtime * 1e9))
     timed_out = Ref(false)
     last_r = copy(r0)
+    # The last point at which the Jacobian was evaluated, an accepted iterate: the point handed back on the time limit
+    last_x = copy(lsp.x)
     iters_count = Ref(0)
 
     orig_f! = lsp.f!
@@ -733,6 +743,7 @@ function optimize_least_squares(target; method=:dogleg, solution=nothing, gtol=D
             throw(TimeoutException())
         end
         orig_g!(J, x)
+        copyto!(last_x, x)
         iters_count[] += 1
     end
 
@@ -745,6 +756,7 @@ function optimize_least_squares(target; method=:dogleg, solution=nothing, gtol=D
         if err isa TimeoutException || timed_out[]
             t_total = time_ns() - t_start
             final_c = 0.5 * sum(abs2, last_r)
+            store_solution!(solution, last_x)
             return OptimizerResult(Float64(t_total), 0, 0, iters_count[], start_c, final_c, false; timed_out=true, message="time limit")
         else
             rethrow(err)
@@ -755,18 +767,18 @@ function optimize_least_squares(target; method=:dogleg, solution=nothing, gtol=D
 
     final_c = timed_out[] ? 0.5 * sum(abs2, last_r) : res.ssr * 0.5
     converged = timed_out[] ? false : res.converged
-    timed_out[] || store_solution!(solution, res.minimizer)
+    store_solution!(solution, timed_out[] ? last_x : res.minimizer)
     return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.iterations, start_c, final_c, converged;
         timed_out=timed_out[], message=timed_out[] ? "time limit" : converged ? "converged" : "not converged")
 end
 
 """
-    optimize_optim(model; method=:newton_trust_region, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
+    optimize_optim(model; method=:newton_trust_region, solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `Optim.jl`.
 Supported methods: `:newton_trust_region`, `:newton`.
 """
-function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+function optimize_optim(target; method=:newton_trust_region, solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
     optim_method = method === :newton ? Optim.Newton(linesearch=Optim.LineSearches.BackTracking()) : Optim.NewtonTrustRegion()
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
@@ -847,7 +859,7 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         timed = @timed Optim.optimize(td, copy(x0), optim_method, opts)
         t_total = time_ns() - t_start
         res = timed.value
-
+        store_solution!(solution, Optim.minimizer(res))
         return optim_result(t_total, timed, res.iterations, start_c, res.minimum)
 
     elseif m isa NLLSModel.Model
@@ -919,6 +931,7 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
             timed = @timed Optim.optimize(td, copy(x0_cb), optim_method, opts)
             t_total = time_ns() - t_start
             res = timed.value
+            store_solution!(solution, Optim.minimizer(res))
             return optim_result(t_total, timed, Optim.iterations(res), start_c, Optim.minimum(res))
         end
         n = length(x0)
@@ -974,6 +987,7 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         timed = @timed Optim.optimize(td, copy(x0), optim_method, opts)
         t_total = time_ns() - t_start
         res = timed.value
+        store_solution!(solution, Optim.minimizer(res))
         return optim_result(t_total, timed, Optim.iterations(res), start_c, Optim.minimum(res))
 
     elseif m isa AbstractNLPModel
@@ -1021,6 +1035,7 @@ function optimize_optim(target; method=:newton_trust_region, gtol=DEFAULT_GTOL, 
         timed = @timed Optim.optimize(td, copy(x0), optim_method, opts)
         t_total = time_ns() - t_start
         res = timed.value
+        store_solution!(solution, Optim.minimizer(res))
         return optim_result(t_total, timed, Optim.iterations(res), start_c, Optim.minimum(res))
 
     else
@@ -1044,12 +1059,12 @@ function stats_result(t_total, timed, iterations, start_c, final_c, status)
 end
 
 """
-    optimize_jsosolvers(model; solver=:trunk, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
+    optimize_jsosolvers(model; solver=:trunk, solution=nothing, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `JSOSolvers.jl`.
 Supported solvers: `:trunk`, `:tron`.
 """
-function optimize_jsosolvers(target; solver=:trunk, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+function optimize_jsosolvers(target; solver=:trunk, solution=nothing, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
     nlp = try
         as_nlsmodel(m)
@@ -1068,16 +1083,16 @@ function optimize_jsosolvers(target; solver=:trunk, gtol=DEFAULT_GTOL, maxiters=
     end
     t_total = time_ns() - t_start
     res = timed.value
-
+    store_solution!(solution, res.solution)
     return stats_result(t_total, timed, res.iter, start_c, res.objective, res.status)
 end
 
 """
-    optimize_ipopt(model; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, print_level=0, time_limit=nothing, kwargs...) -> OptimizerResult
+    optimize_ipopt(model; solution=nothing, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, print_level=0, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `Ipopt` via `NLPModelsIpopt`.
 """
-function optimize_ipopt(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, print_level=0, time_limit=nothing, kwargs...)
+function optimize_ipopt(target; solution=nothing, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, print_level=0, time_limit=nothing, kwargs...)
     nlp = as_nlpmodel(target)
     NLPModels.reset!(nlp)
     start_c = NLPModels.obj(nlp, nlp.meta.x0)
@@ -1087,7 +1102,7 @@ function optimize_ipopt(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, ma
     timed = @timed NLPModelsIpopt.ipopt(nlp; tol=gtol, dual_inf_tol=gtol, acceptable_tol=gtol, max_iter=maxiters, max_wall_time=actual_maxtime, print_level=print_level, kwargs...)
     t_total = time_ns() - t_start
     res = timed.value
-
+    store_solution!(solution, res.solution)
     return stats_result(t_total, timed, res.iter, start_c, res.objective, res.status)
 end
 
@@ -1119,11 +1134,11 @@ NLPModels.hess_coord!(v::UnconstrainedHessView, x::AbstractVector, y::AbstractVe
     NLPModels.hess_coord!(v.inner, x, vals; obj_weight=Float64(obj_weight))
 
 """
-    optimize_madnlp(model; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
+    optimize_madnlp(model; solution=nothing, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `MadNLP.jl`.
 """
-function optimize_madnlp(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+function optimize_madnlp(target; solution=nothing, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     nlp = as_nlpmodel(target)
     if nlp isa NLPModelsJuMP.MathOptNLSModel && nlp.meta.ncon == 0
         nlp = UnconstrainedHessView(nlp)
@@ -1136,19 +1151,19 @@ function optimize_madnlp(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, m
     timed = @timed MadNLP.madnlp(nlp; tol=gtol, acceptable_tol=gtol, max_iter=maxiters, max_wall_time=actual_maxtime, print_level=MadNLP.ERROR, kwargs...)
     t_total = time_ns() - t_start
     res = timed.value
-
+    store_solution!(solution, res.solution)
     converged = res.status in (MadNLP.SOLVE_SUCCEEDED, MadNLP.SOLVED_TO_ACCEPTABLE_LEVEL)
     return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, res.iter, start_c, res.objective, converged;
         timed_out=res.status == MadNLP.MAXIMUM_WALLTIME_EXCEEDED, message=string(res.status))
 end
 
 """
-    optimize_nonlinearsolve(model; method=:lm, gtol=DEFAULT_GTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
+    optimize_nonlinearsolve(model; method=:lm, solution=nothing, gtol=DEFAULT_GTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `NonlinearSolve.jl`.
 Supported methods: `:lm`, `:trust_region`, `:gauss_newton`.
 """
-function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+function optimize_nonlinearsolve(target; method=:lm, solution=nothing, gtol=DEFAULT_GTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
 
     if m isa NLLSModel.Model
@@ -1183,6 +1198,7 @@ function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEF
         t_start = time_ns()
         timed = @timed solve(prob, solver; abstol=gtol, reltol=ftol, maxiters=maxiters, maxtime=actual_maxtime, kwargs...)
         t_total = time_ns() - t_start
+        store_solution!(solution, timed.value.u)
         return nonlinearsolve_result(t_total, timed, njac[], start_c)
     end
 
@@ -1223,6 +1239,7 @@ function optimize_nonlinearsolve(target; method=:lm, gtol=DEFAULT_GTOL, ftol=DEF
     t_start = time_ns()
     timed = @timed solve(prob, solver; abstol=gtol, reltol=ftol, maxiters=maxiters, maxtime=actual_maxtime, kwargs...)
     t_total = time_ns() - t_start
+    store_solution!(solution, timed.value.u)
     return nonlinearsolve_result(t_total, timed, njac[], start_c)
 end
 
@@ -1237,11 +1254,11 @@ function nonlinearsolve_result(t_total, timed, njac, start_c)
 end
 
 """
-    optimize_cannoles(model; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
+    optimize_cannoles(model; solution=nothing, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `CaNNOLeS.jl`.
 """
-function optimize_cannoles(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, linsolve=:ldlfactorizations, time_limit=nothing, kwargs...)
+function optimize_cannoles(target; solution=nothing, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, linsolve=:ldlfactorizations, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
     nls = as_nlsmodel(m)
     NLPModels.reset!(nls)
@@ -1253,7 +1270,7 @@ function optimize_cannoles(target; gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS,
     timed = @timed CaNNOLeS.cannoles(nls; method=cannoles_method, linsolve=linsolve, atol=gtol, rtol=0.0, max_iter=maxiters, max_time=actual_maxtime, kwargs...)
     t_total = time_ns() - t_start
     stats = timed.value
-
+    store_solution!(solution, stats.solution)
     return stats_result(t_total, timed, stats.iter, start_c, stats.objective, stats.status)
 end
 
