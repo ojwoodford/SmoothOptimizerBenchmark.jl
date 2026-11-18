@@ -76,6 +76,27 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         @test isapprox(r_tall.final_cost, r_norm.final_cost; rtol=1e-8, atol=SmoothOptimizerBenchmark.DEFAULT_FTOL * r_norm.start_cost)
     end
 
+    # T3: the LSMR row on the three large sparse problems (and no other), at the two smallest sizes, reaches the normal
+    # LM row's cost at LSMR's tolerance, rtol = 1e-6; with the absolute floor of ftol times the start cost, as above,
+    # since sparse Rosenbrock and bundle adjustment are zero-residual problems
+    lsmr_name = "SecondOrderOptimization (LM, tall, LSMR)"
+    @test sort([p.name for p in problems if any(o -> o.name == lsmr_name, p.compatible_optimizers)]) ==
+        sort([create_pose_chain_problem().name, create_rosenbrock_sparse_problem().name, ba.name])
+    for prob in (create_pose_chain_problem(), create_rosenbrock_sparse_problem(), ba)
+        lsmr = only(filter(o -> o.name == lsmr_name, prob.compatible_optimizers))
+        lm = only(filter(o -> o.name == "SecondOrderOptimization (LM)", prob.compatible_optimizers))
+        for sz in prob.default_sizes[1:2]
+            models = prob.generate_models(sz)
+            md = SmoothOptimizerBenchmark.resolve_optimizer_model(lsmr, get_standard_optimizer_model(models, prob.category), models)
+            @test md.model isa SmoothOptimizerBenchmark.NLLSModel.Model
+            r_lsmr = lsmr.optimize(md)
+            r_norm = lm.optimize(md)
+            @test r_lsmr.status === :ok
+            @test r_norm.status === :ok
+            @test isapprox(r_lsmr.final_cost, r_norm.final_cost; rtol=1e-6, atol=SmoothOptimizerBenchmark.DEFAULT_FTOL * r_norm.start_cost)
+        end
+    end
+
     # The tall row is skipped, not failed, where a dense Jacobian is forced above the cap
     sp = create_rosenbrock_sparse_problem()
     sp_models = sp.generate_models(10)

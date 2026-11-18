@@ -1270,18 +1270,28 @@ a `LeastSquaresProblem`. A model or size the tall path does not support is repor
 """
 soo_tall_optimizer() = OptimizerDefinition("SecondOrderOptimization (LM, tall)", (m; kwargs...) -> optimize_soo(m; method=:lm, formulation=:tall, kwargs...))
 
+# "SecondOrderOptimization (LM, tall, LSMR)" (T3): the tall row with `linsolver = :lsmr`, for the large sparse problems.
+# LSMR comes from SecondOrderOptimization's Krylov extensions (DampedLinearSolve's `KrylovExt`, and BlockLinearSystems'
+# `DampedLinearSolveKrylovExt` for an eliminated system), which load with this package because JSOSolvers brings Krylov.
+# `method` and `reduction` are the problem's normal rows' (bundle adjustment: `:levenbergmarquardt_dtd`, `:eliminate`,
+# so LSMR runs on the reduced Jacobian)
+soo_tall_lsmr_optimizer(; method=:lm, reduction=:auto) = OptimizerDefinition("SecondOrderOptimization (LM, tall, LSMR)",
+    (m; kwargs...) -> optimize_soo(m; method, formulation=:tall, reduction, linsolver=:lsmr, kwargs...))
+
 """
-    get_standard_optimizers(; tall=false) -> Vector{OptimizerDefinition}
+    get_standard_optimizers(; tall=false, lsmr=false) -> Vector{OptimizerDefinition}
 
 Returns standard unified optimizer definitions for Euclidean problems on the standardized baseline model (e.g. `LeastSquaresProblem`).
 Includes all solver families configured with universal stopping criteria. `tall = true` adds the
-"SecondOrderOptimization (LM, tall)" row ([`soo_tall_optimizer`](@ref)).
+"SecondOrderOptimization (LM, tall)" row ([`soo_tall_optimizer`](@ref)); `lsmr = true` adds
+"SecondOrderOptimization (LM, tall, LSMR)", the same row with `linsolver = :lsmr`, for the large sparse problems.
 """
-function get_standard_optimizers(; tall::Bool=false)
+function get_standard_optimizers(; tall::Bool=false, lsmr::Bool=false)
     return OptimizerDefinition[
         OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),
         OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)),
         (tall ? [soo_tall_optimizer()] : OptimizerDefinition[])...,
+        (lsmr ? [soo_tall_lsmr_optimizer()] : OptimizerDefinition[])...,
         OptimizerDefinition("LeastSquaresOptim (Dogleg)", (m; kwargs...) -> optimize_least_squares(m; method=:dogleg, kwargs...)),
         OptimizerDefinition("LeastSquaresOptim (LM)", (m; kwargs...) -> optimize_least_squares(m; method=:lm, kwargs...)),
         OptimizerDefinition("Optim (NewtonTrustRegion)", (m; kwargs...) -> optimize_optim(m; method=:newton_trust_region, kwargs...)),

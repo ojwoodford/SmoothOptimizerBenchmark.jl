@@ -154,7 +154,7 @@ function create_rosenbrock_sparse_problem()
 
             return models
         end,
-        get_standard_optimizers(; tall=true),
+        get_standard_optimizers(; tall=true, lsmr=true),
         "Variables n"
     )
 end
