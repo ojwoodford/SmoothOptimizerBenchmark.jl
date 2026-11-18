@@ -37,6 +37,7 @@ const TEST_FILES = [
     ("Scaling Benchmark, Markdown Serialization & Plotting", "scaling_markdown_plotting.jl", :serial),
     ("Scaling Benchmark: the single-threaded table", "scaling_single_threaded.jl", :threaded),
     ("NLPModels Evaluation Recomputation and Cache Invalidation", "nlpmodels_cache.jl", :serial),
+    ("The features page: every cell has a state and its evidence (FP3)", "features_page.jl", :serial),
 ]
 const TEST_GROUPS = (:threaded, :integration, :serial)
 
