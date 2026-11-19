@@ -53,7 +53,7 @@ end
 
     # On one small problem per adapter (and each model it is run on), the evaluated cost equals the solver's own at the
     # comparison tolerances: curve fitting (Standalone and NLLSModel (Static)), the ODE BVP (MathOptNLSModel, sparse
-    # Standalone and NLLSModel), the pose chain (every adapter on an NLLSModel), bundle adjustment (BundleAdjustmentModels,
+    # Standalone and NLLSModel), the pose chain (sparse Standalone and NLLSModel), bundle adjustment (BundleAdjustmentModels,
     # and the NLLSModel's own layout) and robust Procrustes (Manopt and the rotation variables)
     @test !isempty(ev.x0)
     checked = Set{Tuple{String, String}}()

@@ -86,7 +86,7 @@ function create_pose_chain_problem()
             link_offsets, lcs = get_chain_measurements(n_poses)
             start_vars = generate_chain_start_vars(n_poses)
 
-            # Universal Model: NLLSModel Sparse Block Tridiagonal with Loop Closures
+            # Model 1: NLLSModel, sparse block tridiagonal with loop closures
             nlls_prob = build_chain_nlls(n_poses, link_offsets, lcs, start_vars)
             nt = benchmark_numthreads()
             f_nlls, fdf_nlls!, x0_nlls, H_proto_chain = NLLSModel.optimvars(nlls_prob; unfixed=nothing, numthreads=nt)
@@ -101,7 +101,32 @@ function create_pose_chain_problem()
                 () -> copyto!(nlls_prob.variables, start_vars)
             )
 
-            return [m_nlls]
+            # Model 2: Standalone (Sparse): the NLLSModel model's own costs, their residuals and Jacobians filled cost by
+            # cost by NLLSModel's computeresidual and computeresjac (autodiff), in a plain loop, into a sparsity pattern
+            # computed once (IND2)
+            lsp = standalone_problem((get(nlls_prob.costs, BenchChainAnchor), get(nlls_prob.costs, BenchChainLink)), start_vars;
+                                     sparse=true)
+            r_buf = zeros(Float64, length(lsp.y))
+            g_buf = zeros(Float64, n_tot_vars)
+            x0_sa = copy(lsp.x)
+            m_lso = ModelDefinition(
+                "Standalone (Sparse)",
+                lsp,
+                () -> begin
+                    lsp.f!(r_buf, lsp.x)
+                    return 0.5 * sum(abs2, r_buf)
+                end,
+                () -> begin
+                    lsp.f!(r_buf, lsp.x)
+                    lsp.g!(lsp.J, lsp.x)
+                    mul!(g_buf, lsp.J', r_buf)
+                    H_sp = lsp.J' * lsp.J
+                    return (0.5 * sum(abs2, r_buf), H_sp)
+                end,
+                () -> copyto!(lsp.x, x0_sa)
+            )
+
+            return [m_nlls, m_lso]
         end,
         [
             OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),

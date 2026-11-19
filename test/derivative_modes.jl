@@ -108,7 +108,7 @@ const DM_MODES = Dict(
     # perturbed point, at the smallest size and a larger one
     for name in ["Exponential Curve Fitting", "1D ODE Boundary Value Problem", "Dense Multi-dimensional Rosenbrock",
                  "Sparse Multi-dimensional Rosenbrock", "Ill-Conditioned Polynomial Fitting", "Multilateration",
-                 "Dense Affine Alignment"]
+                 "Dense Affine Alignment", "Nonlinear 3D Pose Chain"]
         prob = byname[name]
         for sz in prob.default_sizes[[1, 4]]
             models = prob.generate_models(sz)
@@ -193,7 +193,7 @@ const DM_MODES = Dict(
     # Ipopt, MadNLP and CaNNOLeS run on the JuMP model
     for name in ["Exponential Curve Fitting", "Robust Exponential Curve Fitting", "1D ODE Boundary Value Problem",
                  "Dense Multi-dimensional Rosenbrock", "Sparse Multi-dimensional Rosenbrock", "Ill-Conditioned Polynomial Fitting",
-                 "Multilateration", "Dense Affine Alignment"]
+                 "Multilateration", "Dense Affine Alignment", "Nonlinear 3D Pose Chain"]
         prob = byname[name]
         models = prob.generate_models(first(prob.default_sizes))
         nl = dm_nlls(models)

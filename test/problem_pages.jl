@@ -112,7 +112,7 @@ function counted_sizes(slug, prob, sz)
     end
     models = prob.generate_models(sz)
     if slug == "pose_chain"
-        model = only(models).model
+        model = only(filter(m -> m.name == "NLLSModel (Sparse)", models)).model
         # NLLSModel.nresiduals counts the model's scalar residuals (each cost's nres, summed), so it is used here in
         # place of 3 * (N + number of loop closures)
         return 3 * length(model.variables), SmoothOptimizerBenchmark.NLLSModel.nresiduals(model)
@@ -145,8 +145,9 @@ holds_number(cell, n) = occursin(Regex("(?<![0-9])$(n)(?![0-9])"), cell)
         @test occursin("- **Derivatives**: $(line)\n", p)
         @test occursin(text, p)
     end
-    # The pose chain has one model: no Standalone sentence (its "The Problem" section does not mention one either)
-    @test !occursin("Standalone", generate_problem_markdown(empty_result("Nonlinear 3D Pose Chain", :large_sparse), "pose_chain"))
+    # The pose chain has a Standalone model (IND2): its page has the Standalone sentence
+    @test occursin("The `Standalone` model fills its residual vector and Jacobian by calling that same function",
+        generate_problem_markdown(empty_result("Nonlinear 3D Pose Chain", :large_sparse), "pose_chain"))
     @test_throws ArgumentError problem_derivatives("No Such Problem")
 
     # 1. The three dictionaries have the same keys, and every registered problem has a page
