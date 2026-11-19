@@ -172,7 +172,7 @@ function create_robust_curve_fitting_problem()
             # Model 3: JuMP (fudged), as a MathOptNLSModel (IND3c)
             m_jump = jump_model("JuMP (fudged)", build_jump_curve_fitting_robust(t_pts, y_data, p0_vec), p0_vec)
 
-            return [m_nlls, m_standalone, m_jump]
+            return [m_jump, m_nlls, m_standalone]   # alphabetical (IND8)
         end,
         robust_curve_fitting_optimizers(),
         "Data Points m";

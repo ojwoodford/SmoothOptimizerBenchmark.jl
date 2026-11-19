@@ -106,7 +106,7 @@ function create_rosenbrock_dense_problem()
             # Model 3: JuMP, as a MathOptNLSModel
             m_jump = jump_model("JuMP", build_jso_dense(n), x0)
 
-            return [m_nlls, m_lso, m_jump]
+            return [m_jump, m_nlls, m_lso]   # alphabetical (IND8)
         end,
         get_standard_optimizers(ROSENBROCK_DENSE_SOO),
         "Dimension n",

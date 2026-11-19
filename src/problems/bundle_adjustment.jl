@@ -235,15 +235,15 @@ function create_bundle_adjustment_problem()
             end
             m_nlls = _make_nlls_ba_model_definition(bam_model)
             m_bam = _make_bam_model_definition(bam_model)
-            return [m_nlls, m_bam]
+            return [m_bam, m_nlls]   # alphabetical (IND8)
         end,
         [
-            soo_optimizer(BUNDLE_ADJUSTMENT_SOO),
             OptimizerDefinition("CaNNOLeS", (m; kwargs...) -> optimize_cannoles(m; kwargs...)),
-            OptimizerDefinition("JSOSolvers (trunk)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:trunk, kwargs...)),
-            OptimizerDefinition("JSOSolvers (tron)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:tron, kwargs...)),
             OptimizerDefinition("Ipopt", (m; kwargs...) -> optimize_ipopt(m; kwargs...)),
-            OptimizerDefinition("MadNLP", (m; kwargs...) -> optimize_madnlp(m; kwargs...))
+            OptimizerDefinition("JSOSolvers (tron)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:tron, kwargs...)),
+            OptimizerDefinition("JSOSolvers (trunk)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:trunk, kwargs...)),
+            OptimizerDefinition("MadNLP", (m; kwargs...) -> optimize_madnlp(m; kwargs...)),
+            soo_optimizer(BUNDLE_ADJUSTMENT_SOO)
         ],
         "Cameras Ncam",
         # The synthetic problems' observations are generated without noise: zero residuals at the true scene (IT4). A BAL

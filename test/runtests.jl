@@ -22,6 +22,7 @@ const TEST_FILES = [
     ("Optimizer status (B3)", "optimizer_status.jl", :serial),
     ("A row is ok only if its cost passes the test (IT4)", "row_status.jl", :serial),
     ("An explicit model for a row (P2a)", "explicit_model.jl", :serial),
+    ("Alphabetical order of models and optimizers (IND8)", "ordering.jl", :serial),
     ("The Standalone model, built from the costs (DM2)", "standalone.jl", :serial),
     ("One derivative mode per problem (DM11)", "derivative_modes.jl", :serial),
     ("The JuMP models agree with the Standalone models (IND3)", "jump_models.jl", :serial),

@@ -140,8 +140,9 @@ function create_multilateration_problem()
         d -> begin
             data = multilateration_data(d)
             costs = multilateration_costs(Val(d), data)
-            return [multilateration_nlls_model(costs, data), multilateration_standalone_model(costs, data),
-                    jump_model("JuMP", build_jump_multilateration(data), copy(data.x0))]
+            # Alphabetical (IND8)
+            return [jump_model("JuMP", build_jump_multilateration(data), copy(data.x0)),
+                    multilateration_nlls_model(costs, data), multilateration_standalone_model(costs, data)]
         end,
         get_standard_optimizers(MULTILATERATION_SOO),
         "Dimension d";

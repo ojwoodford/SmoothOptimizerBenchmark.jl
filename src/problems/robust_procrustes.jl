@@ -419,10 +419,9 @@ function create_robust_procrustes_problem()
                 () -> copyto!(p_curr, p0)
             )
 
-            return [m_ovi, m_spec, m_manopt]
+            return [m_manopt, m_ovi, m_spec]   # alphabetical (IND8)
         end,
         [
-            soo_optimizer(ROBUST_PROCRUSTES_SOO),
             OptimizerDefinition("Manopt (LevenbergMarquardt)", (model_def; solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
                 M, blocks, A, B, p0 = get_procrustes_manopt_components(model_def)
                 start_c = procrustes_robust_cost(A, B, p0)
@@ -457,7 +456,8 @@ function create_robust_procrustes_problem()
                 timed_out = !converged && any(c -> c isa Manopt.StopAfter, active)
                 return OptimizerResult(Float64(t_total), alloc_cnt, timed.bytes, Manopt.get_count(inner, :Iterations), start_c, final_c, converged;
                     timed_out, message=join(string.(nameof.(typeof.(active))), ", "))
-            end)
+            end),
+            soo_optimizer(ROBUST_PROCRUSTES_SOO)
         ],
         "Matrix Dimension d";
         # Derivatives (DM1): a cost has d(d − 1)/2 inputs, more than 8 from d = 5

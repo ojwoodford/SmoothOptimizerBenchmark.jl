@@ -9,8 +9,8 @@ const DMS = DMB.StaticArrays
 # The Standalone model of a problem's models when it is built by standalone_problem (DM2), else nothing
 dm_standalone(models) = (i = findfirst(m -> m.model isa DMB.LeastSquaresProblem && m.model.f! isa DMB.StandaloneResiduals, models);
                          i === nothing ? nothing : models[i])
-# The NLLSModel model of a problem's models (the first, as the SecondOrderOptimization rows' routing takes), else nothing
-dm_nlls(models) = (i = findfirst(m -> m.model isa DMN.Model, models); i === nothing ? nothing : models[i])
+# The NLLSModel model of a problem's models that the SecondOrderOptimization row runs on (IND1's table), else nothing
+dm_nlls(models) = DMB.first_model(DMB.native_models("SecondOrderOptimization"), models)
 # The costs and variables a problem's models evaluate: the Standalone model's, else the NLLSModel model's
 function dm_costs(models)
     sa = dm_standalone(models)

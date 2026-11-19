@@ -150,7 +150,7 @@ function create_pose_chain_problem()
 
             m_jump = jump_model("JuMP", build_jump_pose_chain(n_poses, link_offsets, lcs, start_vars), x0_sa)
 
-            return [m_nlls, m_lso, m_jump]
+            return [m_jump, m_nlls, m_lso]   # alphabetical (IND8)
         end,
         # The standard rows but Optim (NewtonTrustRegion), which needs a dense Hessian (a feature limit)
         filter(o -> o.name != "Optim (NewtonTrustRegion)", get_standard_optimizers(POSE_CHAIN_SOO)),

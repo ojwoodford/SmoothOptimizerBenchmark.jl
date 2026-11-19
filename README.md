@@ -4,16 +4,16 @@
 [![codecov](https://codecov.io/gh/ojwoodford/SmoothOptimizerBenchmark.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/ojwoodford/SmoothOptimizerBenchmark.jl)
 
 Multi-scale benchmarking suite comparing smooth second-order optimization, nonlinear least-squares, and Riemannian manifold optimization packages across Julia:
-- **SecondOrderOptimization.jl** (`:levenbergmarquardt`, `:dogleg`)
-- **NLLSModel.jl**
-- **LeastSquaresOptim.jl** (`LevenbergMarquardt`, `Dogleg`)
-- **Optim.jl** (`NewtonTrustRegion`, `Newton`)
-- **JSOSolvers.jl** (`trunk`, `tron`) / **NLPModels.jl**
-- **Ipopt.jl** (`NLPModelsIpopt.jl`) / **JuMP.jl**
-- **MadNLP.jl**
-- **NonlinearSolve.jl** (`LevenbergMarquardt`, `TrustRegion`)
 - **CaNNOLeS.jl** / **BundleAdjustmentModels.jl**
+- **Ipopt.jl** (`NLPModelsIpopt.jl`) / **JuMP.jl**
+- **JSOSolvers.jl** (`trunk`, `tron`) / **NLPModels.jl**
+- **LeastSquaresOptim.jl** (`LevenbergMarquardt`, `Dogleg`)
+- **MadNLP.jl**
 - **Manopt.jl** / **Manifolds.jl**
+- **NLLSModel.jl**
+- **NonlinearSolve.jl** (`LevenbergMarquardt`, `TrustRegion`)
+- **Optim.jl** (`NewtonTrustRegion`, `Newton`)
+- **SecondOrderOptimization.jl** (`:levenbergmarquardt`, `:dogleg`)
 
 What each of these packages supports, and how each model reaches each optimizer, is tabulated on the documentation's "Package Features" page (`docs/src/features.md`).
 

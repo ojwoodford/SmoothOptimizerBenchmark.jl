@@ -191,7 +191,7 @@ function create_affine_alignment_problem()
             m_jump = n <= AFFINE_JUMP_MAX_N ? jump_model("JuMP", build_jump_affine_alignment(X, Y, D), copy(start_vec)) :
                 unbuilt_model("JuMP", affine_jump_skip_reason(n))
 
-            return [m_nlls, m_lso, m_jump]
+            return [m_jump, m_nlls, m_lso]   # alphabetical (IND8)
         end,
         get_standard_optimizers(AFFINE_ALIGNMENT_SOO),
         "Dimension n",

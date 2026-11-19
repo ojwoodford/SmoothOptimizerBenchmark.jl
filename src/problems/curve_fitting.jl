@@ -93,7 +93,7 @@ function create_curve_fitting_problem()
             # Model 3: JuMP, as a MathOptNLSModel (IND3b)
             m_jump = jump_model("JuMP", build_jump_curve_fitting(t_pts, y_data, p0_vec), p0_vec)
 
-            return [m_nlls, m_standalone, m_jump]
+            return [m_jump, m_nlls, m_standalone]   # alphabetical (IND8)
         end,
         get_standard_optimizers(CURVE_FITTING_SOO),
         "Data Points m";

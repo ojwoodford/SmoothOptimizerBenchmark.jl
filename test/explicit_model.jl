@@ -67,8 +67,10 @@ function paired_models(prob, sz)
     for o in prob.compatible_optimizers
         push!(get!(groups, SmoothOptimizerBenchmark.resolve_optimizer_model(o, models).name, String[]), o.name)
     end
-    return groups
+    return Dict(k => sort(v) for (k, v) in groups)
 end
+# The pin with each list sorted, so that the comparison does not depend on the order of a problem's rows (IND8)
+pinned_models(name) = Dict(k => sort(v) for (k, v) in PAIRED_MODELS[name])
 
 @testset "An explicit model for a row (P2a)" begin
     SB = SmoothOptimizerBenchmark
@@ -113,7 +115,7 @@ end
     # Every row of every problem, at the smallest size
     @test Set(keys(PAIRED_MODELS)) == Set(p.name for p in problems)
     for p in problems
-        @test paired_models(p, first(p.default_sizes)) == PAIRED_MODELS[p.name]
+        @test paired_models(p, first(p.default_sizes)) == pinned_models(p.name)
     end
     # IND4: one SecondOrderOptimization row per problem, named for the package alone, from the problem's hard-coded
     # configuration: the five choices NLLSModel's recommender made at the problem's largest size
@@ -131,5 +133,5 @@ end
     # The JuMP model is built at every size (decision 18: no build was near its limits, IND3), so the map is the same at
     # the largest size: sparse Rosenbrock's, the largest JuMP model
     sr = create_rosenbrock_sparse_problem()
-    @test paired_models(sr, last(sr.default_sizes)) == PAIRED_MODELS[sr.name]
+    @test paired_models(sr, last(sr.default_sizes)) == pinned_models(sr.name)
 end

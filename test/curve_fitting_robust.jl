@@ -39,9 +39,10 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
 
     # Rows (step 9; IND4c): the one SecondOrderOptimization row, then the others, the residual-only packages' renamed
     names = [o.name for o in prob.compatible_optimizers]
-    @test names[1] == "SecondOrderOptimization"
-    @test names[2:end] == ["LeastSquaresOptim (Dogleg, fudged)", "LeastSquaresOptim (LM, fudged)", "Optim (NewtonTrustRegion)", "Optim (Newton)",
-        "JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "NonlinearSolve (LM, fudged)", "NonlinearSolve (TrustRegion, fudged)", "CaNNOLeS (fudged)"]
+    # (alphabetical, IND8)
+    @test names == ["CaNNOLeS (fudged)", "Ipopt", "JSOSolvers (tron)", "JSOSolvers (trunk)", "LeastSquaresOptim (Dogleg, fudged)",
+        "LeastSquaresOptim (LM, fudged)", "MadNLP", "NonlinearSolve (LM, fudged)", "NonlinearSolve (TrustRegion, fudged)", "Optim (Newton)",
+        "Optim (NewtonTrustRegion)", "SecondOrderOptimization"]
     @test SB.fudged_name("CaNNOLeS") == "CaNNOLeS (fudged)" && SB.fudged_name("NonlinearSolve (LM)") == "NonlinearSolve (LM, fudged)"
     standard = Dict(o.name => o for o in get_standard_optimizers(SB.ROBUST_CURVE_FITTING_SOO))
 
@@ -56,7 +57,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         # is JuMP, the JuMP (fudged) model; every other row the fudged Standalone model. A renamed row has its
         # original's model and style
         for o in prob.compatible_optimizers
-            native = o.name == names[1]
+            native = o.name == "SecondOrderOptimization"
             on_jump = SB.row_package(o.name) in ("JSOSolvers", "Ipopt", "MadNLP", "CaNNOLeS")
             @test resolve(o, models) === (native ? m_nlls : on_jump ? m_jump : m_sa)
             orig = replace(replace(o.name, ", fudged)" => ")"), " (fudged)" => "")

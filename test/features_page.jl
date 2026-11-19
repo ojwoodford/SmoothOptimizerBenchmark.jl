@@ -98,7 +98,8 @@ function unresolved_links(text, root)
     return bad
 end
 
-const MODELLER_HEADER = ["Feature", "NLLSModel", "JuMP", "LSOptim", "NonlinSolve", "Optim", "Manopt", "ADNLP†", "Exa†",
+# The package columns: the benchmarked packages alphabetically by full package name, then the † packages (IND8)
+const MODELLER_HEADER = ["Feature", "JuMP", "LSOptim", "Manopt", "NLLSModel", "NonlinSolve", "Optim", "ADNLP†", "Exa†",
     "Optimization†", "RoME†"]
 const MODELLER_ROWS = ["**Problem class**", "Least-squares residuals are first class", "General scalar costs",
     "**Variables**", "Manifold variables", "Variable blocks of different types and sizes", "Fix a subset of variables",
@@ -107,8 +108,8 @@ const MODELLER_ROWS = ["**Problem class**", "Least-squares residuals are first c
     "Operator products", "**Robust kernels**", "Fixed kernels", "Second-order correction", "Adaptive kernels",
     "**Constraints**", "Bounds on variables", "Equality constraints", "Nonlinear inequality constraints",
     "**Evaluation**", "Multithreaded evaluation", "GPU evaluation"]
-const OPTIMIZER_HEADER = ["Feature", "SOO", "LSOptim", "Optim", "JSO", "Ipopt", "MadNLP", "NonlinSolve", "CaNNOLeS",
-    "Manopt", "LsqFit†", "Percival†", "NLopt†"]
+const OPTIMIZER_HEADER = ["Feature", "CaNNOLeS", "Ipopt", "JSO", "LSOptim", "MadNLP", "Manopt", "NonlinSolve", "Optim",
+    "SOO", "LsqFit†", "NLopt†", "Percival†"]
 const OPTIMIZER_ROWS = ["**Objective**", "General scalar objective", "Least squares from the residual and Jacobian",
     "**Step**", "Newton", "Gauss–Newton, undamped", "Levenberg", "Marquardt", "Dogleg trust region",
     "Other trust region", "Line search", "Quasi-Newton", "Interior point", "Augmented Lagrangian",
@@ -118,10 +119,10 @@ const OPTIMIZER_ROWS = ["**Objective**", "General scalar objective", "Least squa
     "Sparse QR of the Jacobian", "Iterative (Krylov)", "Matrix-free", "Elimination of a block of variables",
     "Choice of linear-solver backend", "**Other**", "GPU", "Element types other than `Float64`",
     "Covariance of the estimate"]
-const MODEL_HEADER = ["Model", "SOO", "LSOptim", "Optim", "JSO", "Ipopt", "MadNLP", "NonlinSolve", "CaNNOLeS", "Manopt"]
-const MODEL_ROWS = ["NLLSModel `Model`, Euclidean variables", "NLLSModel `Model`, manifold variables",
-    "`LeastSquaresProblem` (\"Standalone\")", "JuMP model (`MathOptNLSModel`)", "`BundleAdjustmentModel`",
-    "Manifolds.jl residual blocks"]
+const MODEL_HEADER = ["Model", "CaNNOLeS", "Ipopt", "JSO", "LSOptim", "MadNLP", "Manopt", "NonlinSolve", "Optim", "SOO"]
+# (the models alphabetically, IND8)
+const MODEL_ROWS = ["`BundleAdjustmentModel`", "JuMP model (`MathOptNLSModel`)", "`LeastSquaresProblem` (\"Standalone\")",
+    "Manifolds.jl residual blocks", "NLLSModel `Model`, Euclidean variables", "NLLSModel `Model`, manifold variables"]
 
 @testset "The features page: every cell has a state and its evidence (FP3)" begin
     text = read(joinpath(FEATURES_ROOT, "docs", "src", "features.md"), String)

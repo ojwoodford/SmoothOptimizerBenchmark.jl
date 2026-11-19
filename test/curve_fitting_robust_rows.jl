@@ -17,7 +17,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         # Measured on Julia 1.10 and 1.13 alike, with EXP_OUTLIER_SEED = 4245
         measured_failures = n == 64 ? ("NonlinearSolve (TrustRegion, fudged)",) :
             ("JSOSolvers (trunk)", "JSOSolvers (tron)", "NonlinearSolve (TrustRegion, fudged)")
-        for o in prob.compatible_optimizers[2:end]   # after the native row
+        for o in filter(o -> o.name != "SecondOrderOptimization", prob.compatible_optimizers)   # all but the native row
             m_sa.reset!()
             r = o.optimize(m_sa)
             if o.name in measured_failures

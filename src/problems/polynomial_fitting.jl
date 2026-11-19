@@ -169,7 +169,7 @@ function create_polynomial_fitting_problem()
             # Model 3: JuMP, as a MathOptNLSModel (IND3d)
             m_jump = jump_model("JuMP", build_jump_polynomial_fitting(V, y), p0_vec)
 
-            return [m_nlls, m_standalone, m_jump]
+            return [m_jump, m_nlls, m_standalone]   # alphabetical (IND8)
         end,
         # The standard rows (decision 16, IND3d), each wrapped to record its excess cost
         OptimizerDefinition[polyfit_optimizer(o.name, o.optimize) for o in get_standard_optimizers(POLYNOMIAL_FITTING_SOO)],

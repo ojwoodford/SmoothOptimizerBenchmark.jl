@@ -101,7 +101,7 @@ function create_rosenbrock_sparse_problem()
             # Model 3: JuMP, as a MathOptNLSModel, at every size (its build was measured, IND3, decision 18)
             m_jump = jump_model("JuMP", build_sparse_jso(n), x0)
 
-            return ModelDefinition[m_nlls, m_lso, m_jump]
+            return ModelDefinition[m_jump, m_nlls, m_lso]   # alphabetical (IND8)
         end,
         get_standard_optimizers(ROSENBROCK_SPARSE_SOO),
         "Variables n",

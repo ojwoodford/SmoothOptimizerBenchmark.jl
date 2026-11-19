@@ -51,16 +51,27 @@ function small_size_axis(sizes)
     return (xticks = (ticks, string.(ticks)), xlims = (0.9 * lo, 1.125 * hi))
 end
 
+# The color of each package's models and rows, alphabetically by package (IND8); the colors are as they were (decision 9)
+const MODEL_COLORS = ("BundleAdjustmentModels" => :teal, "JuMP" => :forestgreen, "Manifolds" => :blue, "NLLSModel" => :red,
+                      "Standalone" => :blue)
+const OPTIMIZER_COLORS = ("CaNNOLeS" => :chocolate, "Ipopt" => :purple, "JSOSolvers" => :forestgreen, "LeastSquaresOptim" => :blue,
+                          "MadNLP" => :teal, "Manopt" => :blue, "NonlinearSolve" => :deeppink, "Optim" => :darkorange,
+                          "SecondOrderOptimization" => :red)
+function package_color(colors, package::AbstractString)
+    idx = findfirst(p -> first(p) == package, colors)
+    return idx === nothing ? :black : last(colors[idx])
+end
+
 """
     model_style(m_name::String) -> (Symbol, Symbol, Symbol, Symbol)
 
 Maps a model formulation name to a consistent (color, marker, linsys_style, cost_style) tuple:
-- Specific color for each package:
+- A color for each package, the part of the name before `" ("` (`MODEL_COLORS`; `:black` for any other):
+  - BundleAdjustmentModels: :teal
+  - JuMP: :forestgreen (matches JSOSolvers)
+  - Manifolds: :blue (matches Manopt)
   - NLLSModel: :red (matches SecondOrderOptimization)
   - Standalone: :blue
-  - JuMP: :forestgreen (matches JSOSolvers)
-  - BundleAdjustmentModels: :teal
-  - Manifolds: :blue (matches Manopt)
 - Different flavours within the same package use distinct markers and linestyles:
   - Standard / Static: :circle marker, :solid linsys, :dash cost
   - Specialized: :square marker, :dashdot linsys, :dot cost
@@ -70,20 +81,8 @@ Maps a model formulation name to a consistent (color, marker, linsys_style, cost
 function model_style(m_name::String)
     name_lower = lowercase(m_name)
 
-    # 1. Package color (matching optimizer package where related; Red for NLLSModel, Blue for Standalone)
-    color = if occursin("nllsmodel", name_lower)
-        :red
-    elseif occursin("standalone", name_lower) || occursin("leastsquares", name_lower) || occursin("lso", name_lower)
-        :blue
-    elseif occursin("jump", name_lower)
-        :forestgreen
-    elseif occursin("bundleadjustment", name_lower) || occursin("bam", name_lower)
-        :teal
-    elseif occursin("manifold", name_lower) || occursin("manopt", name_lower)
-        :blue
-    else
-        :black
-    end
+    # 1. Package color, by the model's package
+    color = package_color(MODEL_COLORS, row_package(m_name))
 
     # 2. Flavour point marker and linestyles (linsys_style, cost_style)
     if occursin("specialized", name_lower)
@@ -265,16 +264,17 @@ end
     optimizer_style(opt_name::String) -> (Symbol, Symbol, Symbol)
 
 Maps an optimizer name to a consistent (color, linestyle, marker) tuple:
-- Single color per package across all benchmark problems:
-  - SecondOrderOptimization: :red
-  - LeastSquaresOptim: :blue
-  - Optim: :darkorange
-  - JSOSolvers: :forestgreen
-  - Ipopt: :purple
-  - MadNLP: :teal
-  - NonlinearSolve: :deeppink
+- Single color per package across all benchmark problems, by the row's package (`row_package`, `OPTIMIZER_COLORS`;
+  `:black` for any other):
   - CaNNOLeS: :chocolate
+  - Ipopt: :purple
+  - JSOSolvers: :forestgreen
+  - LeastSquaresOptim: :blue
+  - MadNLP: :teal
   - Manopt: :blue
+  - NonlinearSolve: :deeppink
+  - Optim: :darkorange
+  - SecondOrderOptimization: :red
 - Different flavours (e.g. LM, Dogleg, tron, trunk) use distinct linestyles and markers:
   - LM / trunk / default Newton, and the one SecondOrderOptimization row: :solid with :circle
   - Dogleg / tron / TrustRegion: :dash with :square
@@ -282,28 +282,8 @@ Maps an optimizer name to a consistent (color, linestyle, marker) tuple:
 function optimizer_style(opt_name::String)
     name_lower = lowercase(opt_name)
 
-    # 1. Package color
-    color = if occursin("secondorder", name_lower) || startswith(name_lower, "soo")
-        :red
-    elseif occursin("leastsquares", name_lower) || occursin("lso", name_lower)
-        :blue
-    elseif occursin("nonlinearsolve", name_lower)
-        :deeppink
-    elseif occursin("optim", name_lower) # checked after leastsquaresoptim
-        :darkorange
-    elseif occursin("jsosolvers", name_lower)
-        :forestgreen
-    elseif occursin("ipopt", name_lower)
-        :purple
-    elseif occursin("madnlp", name_lower)
-        :teal
-    elseif occursin("cannoles", name_lower)
-        :chocolate
-    elseif occursin("manopt", name_lower) || occursin("manifold", name_lower)
-        :blue
-    else
-        :black
-    end
+    # 1. Package color, by the row's package
+    color = package_color(OPTIMIZER_COLORS, row_package(opt_name))
 
     # 2. Flavour linestyle & marker
     if occursin("dogleg", name_lower) || occursin("trustregion", name_lower) || occursin("trust_region", name_lower) || occursin("tron", name_lower)
