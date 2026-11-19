@@ -10,8 +10,9 @@
 # sphere, so ‖x − aᵢ‖ ≥ 3 for every iterate of interest and the residuals are smooth there. At the start (x = 0)
 # JᵀJ = Σ uᵢuᵢᵀ ≈ 4I: the problem is well conditioned.
 #
-# Two models: NLLSModel with one static variable (Jacobian by automatic differentiation, as curve fitting), and a
-# Standalone LeastSquaresProblem on a Vector with an analytic Jacobian.
+# A cost has d inputs, up to 16, so the problem is analytic (DM1): each residual has a hand-written Jacobian, (x − aᵢ)ᵀ/‖x − aᵢ‖,
+# `computeresjac` below. Two models, both built from the same residuals and both using that Jacobian: NLLSModel with one
+# static variable, and a Standalone LeastSquaresProblem (`standalone_problem`) that fills r and J cost by cost.
 using Static, StaticArrays, LinearAlgebra, Random
 using SecondOrderOptimization, NLLSModel, LeastSquaresOptim
 
@@ -25,6 +26,13 @@ NLLSModel.varindices(::MultilaterationResidual) = SVector(1)
 NLLSModel.getvars(::MultilaterationResidual{D}, vars::AbstractVector) where {D} = (vars[1]::SVector{D, Float64},)
 NLLSModel.computeresidual(res::MultilaterationResidual, x) = SVector(norm(x - res.anchor) - res.range)
 Base.eltype(::MultilaterationResidual) = Float64
+# The hand-written Jacobian: with δ = x − a and ρ = ‖δ‖, the residual ρ − range and its Jacobian δᵀ/ρ, ρ computed once.
+# Returned as the types NLLSModel's automatic differentiation gives this residual (an SVector{1} and an SMatrix{1, D})
+function NLLSModel.computeresjac(::StaticInt{1}, res::MultilaterationResidual{D}, x::SVector{D, Float64}) where {D}
+    δ = x - res.anchor
+    ρ = norm(δ)
+    return SVector(ρ - res.range), SMatrix{1, D, Float64, D}(Tuple(δ / ρ))
+end
 
 # A random unit vector in R^d
 random_unit_vector(rng, d) = normalize(randn(rng, d))
@@ -45,41 +53,18 @@ function multilateration_data(d::Int)
     return (; anchors, ranges, xtrue, x0 = zeros(d))
 end
 
-function multilateration_residuals!(r, x, anchors, ranges)
-    d = size(anchors, 1)
-    @inbounds for i in eachindex(ranges)
-        s = 0.0
-        for k in 1:d
-            s += abs2(x[k] - anchors[k, i])
-        end
-        r[i] = sqrt(s) - ranges[i]
-    end
-    return r
-end
+# The costs, defined once (both models are built from them), behind a function barrier on the dimension so that the
+# variable and residual types are concrete
+multilateration_costs(::Val{D}, data) where {D} =
+    [MultilaterationResidual{D}(SVector{D, Float64}(view(data.anchors, :, i)), data.ranges[i]) for i in eachindex(data.ranges)]
 
-# Row i of J is (x − aᵢ)ᵀ / ‖x − aᵢ‖
-function multilateration_jacobian!(J, x, anchors)
-    d = size(anchors, 1)
-    @inbounds for i in axes(anchors, 2)
-        s = 0.0
-        for k in 1:d
-            s += abs2(x[k] - anchors[k, i])
-        end
-        inv_dist = 1 / sqrt(s)
-        for k in 1:d
-            J[i, k] = (x[k] - anchors[k, i]) * inv_dist
-        end
-    end
-    return J
-end
-
-# Model 1, behind a function barrier on the dimension so that the variable and residual types are concrete
-function multilateration_nlls_model(::Val{D}, data) where {D}
+# Model 1
+function multilateration_nlls_model(costs::Vector{MultilaterationResidual{D}}, data) where {D}
     x0_static = SVector{D, Float64}(data.x0)
     nlls_prob = NLLSModel.Model(SVector{D, Float64}, MultilaterationResidual{D})
     addvariable!(nlls_prob, x0_static)
-    for i in eachindex(data.ranges)
-        addcost!(nlls_prob, MultilaterationResidual{D}(SVector{D, Float64}(view(data.anchors, :, i)), data.ranges[i]))
+    for c in costs
+        addcost!(nlls_prob, c)
     end
     nt = benchmark_numthreads()
     # Buffers of the types NLLSModel's linear system uses (MVector/MMatrix), so fdf! writes straight into them
@@ -95,28 +80,27 @@ function multilateration_nlls_model(::Val{D}, data) where {D}
     )
 end
 
-# Model 2: Standalone
-function multilateration_standalone_model(data)
-    anchors, ranges, x0 = data.anchors, data.ranges, data.x0
-    m, d = length(ranges), length(x0)
+# Model 2: Standalone, its residuals and Jacobian filled cost by cost by the same computeresidual and computeresjac, in a
+# plain loop (DM9)
+function multilateration_standalone_model(costs::Vector{MultilaterationResidual{D}}, data) where {D}
+    x0 = data.x0
+    m = length(costs)
+    lsp = standalone_problem((costs,), [SVector{D, Float64}(x0)])
+    x_standalone = lsp.x
     r_buf = zeros(Float64, m)
-    J_buf = zeros(Float64, m, d)
-    g_buf = zeros(Float64, d)
-    H_buf = zeros(Float64, d, d)
-    x_standalone = copy(x0)
-    f_res!(r, x) = multilateration_residuals!(r, x, anchors, ranges)
-    g_jac!(J, x) = multilateration_jacobian!(J, x, anchors)
-    lsp = LeastSquaresProblem(x=x_standalone, f! = f_res!, g! = g_jac!, output_length=m)
+    J_buf = zeros(Float64, m, D)
+    g_buf = zeros(Float64, D)
+    H_buf = zeros(Float64, D, D)
     return ModelDefinition(
         "Standalone",
         lsp,
         () -> begin
-            f_res!(r_buf, x_standalone)
+            lsp.f!(r_buf, x_standalone)
             return 0.5 * sum(abs2, r_buf)
         end,
         () -> begin
-            f_res!(r_buf, x_standalone)
-            g_jac!(J_buf, x_standalone)
+            lsp.f!(r_buf, x_standalone)
+            lsp.g!(J_buf, x_standalone)
             mul!(g_buf, J_buf', r_buf)
             mul!(H_buf, J_buf', J_buf)
             return (0.5 * sum(abs2, r_buf), (g_buf, H_buf))
@@ -130,8 +114,8 @@ end
 
 Multilateration in `R^d`: the point whose distances to `m = 4d` anchors best match noisy ranges, at
 `d = 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16`, the sizes of SecondOrderOptimization's static linear system.
-Two models: "NLLSModel (Static)" (one `SVector{d}` variable) and "Standalone" (a `LeastSquaresProblem` with an
-analytic Jacobian). Data from `multilateration_data`.
+Two models, both from the same residuals and their hand-written Jacobian: "NLLSModel (Static)" (one `SVector{d}`
+variable) and "Standalone" (a `LeastSquaresProblem` filled cost by cost). Data from `multilateration_data`.
 """
 function create_multilateration_problem()
     ProblemDefinition(
@@ -140,7 +124,8 @@ function create_multilateration_problem()
         Any[2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16],
         d -> begin
             data = multilateration_data(d)
-            return [multilateration_nlls_model(Val(d), data), multilateration_standalone_model(data)]
+            costs = multilateration_costs(Val(d), data)
+            return [multilateration_nlls_model(costs, data), multilateration_standalone_model(costs, data)]
         end,
         get_standard_optimizers(; tall=true),
         "Dimension d";
