@@ -27,6 +27,11 @@ NLLSModel.varindices(::PolyFitResidual) = SVector(1)
 NLLSModel.getvars(::PolyFitResidual, vars::AbstractVector) = (vars[1]::SVector{POLYFIT_NCOEFFS, Float64},)
 NLLSModel.computeresidual(res::PolyFitResidual, p) = SVector(dot(res.v, p) - res.y)
 Base.eltype(::PolyFitResidual) = Float64
+# The hand-written Jacobian (the problem is analytic, DM1): the residual is linear in the coefficients, so its Jacobian is
+# the row v. Returned as the types NLLSModel's automatic differentiation gives this residual (an SVector{1} and an
+# SMatrix{1, POLYFIT_NCOEFFS}), so the kernels downstream are the same
+NLLSModel.computeresjac(::StaticInt{1}, res::PolyFitResidual, p::SVector{POLYFIT_NCOEFFS, Float64}) =
+    (SVector(dot(res.v, p) - res.y), SMatrix{1, POLYFIT_NCOEFFS, Float64, POLYFIT_NCOEFFS}(Tuple(res.v)))
 
 """
     polyfit_data(n_points) -> (V, y)
@@ -99,11 +104,14 @@ function create_polynomial_fitting_problem()
             p0_static = zero(SVector{POLYFIT_NCOEFFS, Float64})
             p0_vec = zeros(POLYFIT_NCOEFFS)
 
+            # The costs, defined once: both models are built from the same residuals
+            costs = [PolyFitResidual(SVector{POLYFIT_NCOEFFS}(view(V, i, :)), y[i]) for i in 1:n_points]
+
             # Model 1: NLLSModel
             nlls_prob = NLLSModel.Model(SVector{POLYFIT_NCOEFFS, Float64}, PolyFitResidual)
             addvariable!(nlls_prob, p0_static)
-            for i in 1:n_points
-                addcost!(nlls_prob, PolyFitResidual(SVector{POLYFIT_NCOEFFS}(view(V, i, :)), y[i]))
+            for c in costs
+                addcost!(nlls_prob, c)
             end
             nt = benchmark_numthreads()
             # Buffers of the types NLLSModel's linear system uses (MVector/MMatrix), so fdf! writes straight into them
@@ -118,25 +126,24 @@ function create_polynomial_fitting_problem()
                 () -> (nlls_prob.variables[1] = p0_static)
             )
 
-            # Model 2: Standalone
+            # Model 2: Standalone, its residuals and Jacobian filled cost by cost by the same computeresidual and the
+            # hand-written computeresjac, in a plain loop (DM8)
+            lsp = standalone_problem((costs,), [p0_static])
+            p_standalone = lsp.x
             r_buf = zeros(Float64, n_points)
             J_buf = zeros(Float64, n_points, POLYFIT_NCOEFFS)
             g_buf = zeros(Float64, POLYFIT_NCOEFFS)
             H_buf = zeros(Float64, POLYFIT_NCOEFFS, POLYFIT_NCOEFFS)
-            p_standalone = copy(p0_vec)
-            f_res!(r, p) = (mul!(r, V, p); r .-= y; r)
-            g_jac!(J, p) = copyto!(J, V)
-            lsp = LeastSquaresProblem(x=p_standalone, f! = f_res!, g! = g_jac!, J=zeros(Float64, n_points, POLYFIT_NCOEFFS), output_length=n_points)
             m_standalone = ModelDefinition(
                 "Standalone",
                 lsp,
                 () -> begin
-                    f_res!(r_buf, p_standalone)
+                    lsp.f!(r_buf, p_standalone)
                     return 0.5 * sum(abs2, r_buf)
                 end,
                 () -> begin
-                    f_res!(r_buf, p_standalone)
-                    g_jac!(J_buf, p_standalone)
+                    lsp.f!(r_buf, p_standalone)
+                    lsp.g!(J_buf, p_standalone)
                     mul!(g_buf, J_buf', r_buf)
                     mul!(H_buf, J_buf', J_buf)
                     return (0.5 * sum(abs2, r_buf), (g_buf, H_buf))
