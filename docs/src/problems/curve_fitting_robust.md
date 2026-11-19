@@ -3,16 +3,49 @@
 - **Category**: `medium_dense`
 - **Scaling Metric**: Data Points m
 - **Problem Sizes Evaluated**: 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536 (11 sizes)
-- **Standard Baseline Model for Solvers**: `Standalone (fudged)`
+- **Standard Baseline Model for Optimizers**: `Standalone (fudged)`
 - **Derivatives**: autodiff
 
 **Derivatives: automatic.** Every cost of this problem depends on at most 8 scalar inputs, so its costs are differentiated by forward-mode automatic differentiation: the `NLLSModel (Static)` model, which the native SecondOrderOptimization rows run on, computes each cost's Jacobian with NLLSModel's `computeresjac`. The `Standalone (fudged)` model, which every other row runs on, does not use that code yet: its rewritten residuals have a hand-written Jacobian (the exponential model's derivative, each row scaled as described below).
 
 ---
 
-## About this problem
+## The Problem
 
-Exponential curve fitting, ``a e^{-b t} + c - y`` with one `SVector{3}` variable, on curve fitting's data with **30 % of the points moved up by +1** (one-sided outliers, against noise of σ = 0.02), fitted with a **Huber kernel of width 0.05** (2.5σ, `Huber2oKernel`, with the second-order correction).
+The same decay curve as [Exponential Curve Fitting](curve_fitting.md), ``a\,e^{-b t} + c``, fitted to the same data, except that **30 % of the measurements are wrong**: each of those has been moved up by 1, fifty times the noise level of 0.02. Ordinary least squares squares every gap, so those points would drag the curve up towards them. A *robust* fit limits their pull: a gap is squared only while it is small, and counted in proportion to its size once it is large. With ``r_i = a\,e^{-b t_i} + c - y_i``, the optimizer minimizes
+
+```math
+f(a, b, c) = \tfrac12 \sum_{i=1}^{m} \rho\bigl(r_i^2\bigr), \qquad
+\rho(s) = \begin{cases} s & s \le w^2 \\ 2w\sqrt{s} - w^2 & s > w^2 \end{cases}
+```
+
+where ``\rho`` is the Huber kernel and ``w = 0.05`` its width (2.5 times the noise level). The optimizers start from ``(1, 1, 1)``; a good fit recovers values close to the true ``(2, 1.5, 0.5)`` in spite of the bad points.
+
+### Where it is used
+
+Wherever some of the data cannot be trusted and it is not known which: wrongly matched image features in computer vision, reflected signals in satellite positioning, glitches in a sensor log, the occasional bad reading in a laboratory series. Robust kernels are standard in 3D reconstruction, robot mapping and robust regression in statistics.
+
+### Similar problems
+
+In size and structure it is the plain curve fit: three unknowns, a 3 × 3 system, and time dominated by the pass over the data. What it adds is the kernel, which is the same ingredient that large problems such as bundle adjustment and pose-graph optimization use, here on a problem small enough to see its effect alone. The kernel changes how each residual is weighted, and packages differ in whether they support one at all (see "How each row gets the robust cost" below).
+
+### How it scales
+
+The size is the number of data points, ``m``, of which ``\operatorname{round}(0.3\,m)`` are outliers. The sizes are those of the plain curve fit, and the work per iteration is proportional to ``m``.
+
+| | In terms of the size | Smallest | Largest |
+|:---|:---|---:|---:|
+| Size | ``m`` | 64 | 65536 |
+| Variables | 1, of size 3 | 1 | 1 |
+| Unknowns in total | 3 | 3 | 3 |
+| Costs | ``m``, each one residual with a Huber kernel, depending on the whole variable | 64 | 65536 |
+| Residuals in total | ``m`` | 64 | 65536 |
+| Jacobian | ``m \times 3``, dense | 64 × 3 | 65536 × 3 |
+| Hessian ``J^T J`` | ``3 \times 3``, dense | 3 × 3 | 3 × 3 |
+
+---
+
+## How each row gets the robust cost
 
 - **Native rows.** `SecondOrderOptimization` (Dogleg, LM, Gauss-Newton, LM tall) run the `NLLSModel (Static)` model, which declares the kernel. The Gauss-Newton row is `iterator = :newton`, the full step with no line search or trust region; `CaNNOLeS (fudged)` is Gauss–Newton globalized by a regularized ``LDL^T`` factorization and an Armijo line search.
 - **Every other row runs `Standalone (fudged)`.** That includes the general solvers, whether or not the row's name says "fudged". The residuals are rewritten as ``\tilde r = \operatorname{sign}(r)\sqrt{\rho(r^2)}``, and each row of the Jacobian is scaled by ``\rho'(r^2)\,|r| / \sqrt{\rho(r^2)}``. Then ``\tfrac12\|\tilde r\|^2`` is the robust cost exactly and ``\tilde J^T \tilde r`` its gradient.

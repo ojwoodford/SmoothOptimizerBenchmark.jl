@@ -3,10 +3,44 @@
 - **Category**: `large_sparse`
 - **Scaling Metric**: Cameras Ncam
 - **Problem Sizes Evaluated**: 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256 (12 sizes)
-- **Standard Baseline Model for Solvers**: `BundleAdjustmentModels`
+- **Standard Baseline Model for Optimizers**: `BundleAdjustmentModels`
 - **Derivatives**: mixed
 
 **Derivatives: mixed, exempt from the rule.** Each observation depends on a camera and a point, 12 scalar inputs, but this problem is exempt from the rule: its two models are separate formulations of the problem, not two uses of the same per-cost code, so no equivalent pair of rows is being compared. The `NLLSModel` model differentiates each observation automatically (NLLSModel's `computeresjac`); `BundleAdjustmentModels` evaluates its own Jacobian.
+
+---
+
+## The Problem
+
+Take many photographs of a scene from different places. Bundle adjustment works out, at the same time, where every camera was and where every visible point of the scene is in 3D, by making them agree with where each point actually appears in each photograph. For each observation of a point in a photograph there is a prediction (project the 3D point through the camera) and a measurement (the pixel where it was seen); their difference is the *reprojection error*, two numbers, and the optimizer minimizes the sum of the squares of all of them:
+
+```math
+f(\text{cameras}, \text{points}) = \tfrac12 \sum_{(c,\,p)\ \text{observed}} \bigl\lVert \pi(\text{camera}_c, \text{point}_p) - z_{cp} \bigr\rVert^2 .
+```
+
+A camera has 9 unknowns (3 for its orientation, 3 for its position, its focal length and 2 lens-distortion coefficients, the model of the "Bundle Adjustment in the Large" data sets); a point has 3. The scenes here are synthetic: ``N_{cam}`` cameras in a row, ``5 N_{cam}`` points, each point seen by a run of neighbouring cameras, 30 % of them (and at least 3). The observations are exact, so the minimum is zero; the optimizers start from the true scene with the points and the cameras' orientations and positions slightly perturbed.
+
+### Where it is used
+
+Photogrammetry and 3D reconstruction from photographs (structure from motion), mapping from aerial and street-level imagery, visual SLAM in robotics and augmented reality, camera tracking for film visual effects, and multi-camera calibration.
+
+### Similar problems
+
+Problems with two kinds of unknown, a few large ones and many small ones, where each measurement involves one of each: SLAM with landmarks, calibrating a sensor network against targets, and matrix factorization. That structure allows the standard trick of this field: the points can be eliminated exactly (the Schur complement), leaving a much smaller system in the cameras alone, of side ``9 N_{cam}``. Here two cameras share points when they are within about ``0.3\,N_{cam}`` of each other in the row, so that reduced system is banded and about half full.
+
+### How it scales
+
+The size is the number of cameras, ``N_{cam}``. The unknowns grow in proportion to it. The observations grow faster, as ``N_{cam}^2``, because each point is seen by a fixed fraction of the cameras; in real data sets a point is typically seen by a bounded number of cameras, and observations grow in proportion to the scene.
+
+| | In terms of the size | Smallest | Largest |
+|:---|:---|---:|---:|
+| Size | ``N_{cam}`` | 4 | 256 |
+| Variables | ``N_{cam}`` cameras of size 9 and ``5 N_{cam}`` points of size 3 | 4 and 20 | 256 and 1280 |
+| Unknowns in total | ``24\,N_{cam}`` | 96 | 6144 |
+| Costs | one per observation, each of 2 residuals depending on one camera and one point (12 unknowns): about ``1.5\,N_{cam}^2`` (``15\,N_{cam}`` at the two smallest sizes) | 60 | 98304 |
+| Residuals in total | about ``3\,N_{cam}^2`` | 120 | 196608 |
+| Jacobian | residuals × unknowns, sparse: 24 non-zeros per observation | 120 × 96 | 196608 × 6144 |
+| Hessian ``J^T J`` | ``24 N_{cam} \times 24 N_{cam}``, block-sparse: a 9 × 9 block per camera, a 3 × 3 block per point, a 9 × 3 block per observation; ``9 N_{cam} \times 9 N_{cam}`` once the points are eliminated | 96 × 96 | 6144 × 6144 |
 
 ---
 

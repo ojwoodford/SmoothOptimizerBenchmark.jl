@@ -3,10 +3,44 @@
 - **Category**: `small_dense`
 - **Scaling Metric**: Dimension n
 - **Problem Sizes Evaluated**: 2, 3, 4, 5, 6, 8, 10, 14, 18, 22, 26, 32 (12 sizes)
-- **Standard Baseline Model for Solvers**: `Standalone`
+- **Standard Baseline Model for Optimizers**: `Standalone`
 - **Derivatives**: autodiff
 
 **Derivatives: automatic.** Every cost of this problem depends on at most 8 scalar inputs, so each cost's Jacobian is computed by forward-mode automatic differentiation, with NLLSModel's `computeresjac`. The `Standalone` model fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, so every model evaluates a cost with the same code; what differs between rows is how the linear system is assembled and how the optimizer uses it. The `NLPModels (MathOptNLSModel)` model is differentiated by JuMP's own automatic differentiation.
+
+---
+
+## The Problem
+
+A Rosenbrock-style test function (a minimum at the bottom of a curved valley) in which **every pair** of unknowns is coupled, not only neighbours. Each of the ``n`` unknowns is pulled towards 1, and for every pair ``j < k`` the later one is pulled onto the parabola ``x_k = x_j^2``:
+
+```math
+f(x) = \tfrac12 \sum_{k=1}^{n} \bigl(1.2\,(x_k - 1)\bigr)^2 + \tfrac12 \sum_{j < k} \bigl(x_k - x_j^2\bigr)^2 .
+```
+
+Every term is zero at ``x = (1, \dots, 1)``, which is the minimum. The optimizers start from the classic Rosenbrock starting values, alternating ``-1.2`` and ``1``.
+
+### Where it is used
+
+Nowhere directly: it is a synthetic test function. It is the dense counterpart of the [sparse Rosenbrock problem](rosenbrock_sparse.md): the same kind of nonlinearity, but with no sparsity to exploit.
+
+### Similar problems
+
+Small problems in which everything interacts with everything else: calibrating a set of coupled parameters, or estimating ``n`` quantities from a measurement between every pair of them (clock offsets in a network, ratings from all-play-all results). Each residual touches only one or two unknowns, so the Jacobian is mostly zeros, but the matrix ``J^T J`` is completely full. A dense factorization is the right tool at these sizes.
+
+### How it scales
+
+The size is the number of unknowns, ``n``. The number of residuals grows with the number of pairs, as ``n^2 / 2``; assembling the dense system costs in proportion to ``n^2`` and factorizing it to ``n^3``.
+
+| | In terms of the size | Smallest | Largest |
+|:---|:---|---:|---:|
+| Size | ``n`` | 2 | 32 |
+| Variables | ``n``, each a scalar | 2 | 32 |
+| Unknowns in total | ``n`` | 2 | 32 |
+| Costs | ``n(n+1)/2``, each one residual: ``n`` depend on one variable, ``n(n-1)/2`` on two | 3 | 528 |
+| Residuals in total | ``n(n+1)/2`` | 3 | 528 |
+| Jacobian | ``n(n+1)/2 \times n``, with ``n^2`` non-zeros | 3 × 2 | 528 × 32 |
+| Hessian ``J^T J`` | ``n \times n``, dense | 2 × 2 | 32 × 32 |
 
 ---
 

@@ -3,10 +3,44 @@
 - **Category**: `large_sparse`
 - **Scaling Metric**: Variables n
 - **Problem Sizes Evaluated**: 100, 250, 500, 1000, 2500, 5000, 10000, 20000, 35000, 50000, 75000 (11 sizes)
-- **Standard Baseline Model for Solvers**: `Standalone (Sparse)`
+- **Standard Baseline Model for Optimizers**: `Standalone (Sparse)`
 - **Derivatives**: autodiff
 
 **Derivatives: automatic.** Every cost of this problem depends on at most 8 scalar inputs, so each cost's Jacobian is computed by forward-mode automatic differentiation, with NLLSModel's `computeresjac`. The `Standalone` model fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, so every model evaluates a cost with the same code; what differs between rows is how the linear system is assembled and how the optimizer uses it. The `NLPModels (MathOptNLSModel)` model is differentiated by JuMP's own automatic differentiation.
+
+---
+
+## The Problem
+
+The Rosenbrock function is the classic test of an optimizer: its minimum lies at the bottom of a long, curved valley that is easy to reach and slow to follow. This problem chains ``n`` unknowns together. Each unknown is pulled towards 1, and each neighbouring pair is pulled onto the parabola ``x_{k+1} = x_k^2``:
+
+```math
+f(x) = \tfrac12 \sum_{k=1}^{n} \bigl(10\,(x_k - 1)\bigr)^2 + \tfrac12 \sum_{k=1}^{n-1} \bigl(10\,(x_{k+1} - x_k^2)\bigr)^2 .
+```
+
+Every term is zero at ``x = (1, \dots, 1)``, which is the minimum. The optimizers start from ``x_k = 0.5``.
+
+### Where it is used
+
+Nowhere directly: it is a synthetic test function. It is in the benchmark because it is nonlinear, has a known answer, and can be made as large as wanted with no data to load, so it shows how a package's cost grows with the number of unknowns when the structure is as simple as a sparse problem gets.
+
+### Similar problems
+
+Any problem in which the unknowns form a chain and each is tied only to its neighbours: smoothing or denoising a sampled signal, estimating a scalar state over time (a Kalman smoother), and differential equations discretized on a line, such as this benchmark's [ODE boundary value problem](ode_bvp.md). In all of these the matrix the optimizer factorizes is tridiagonal, and a sparse direct solver handles it in time proportional to ``n``.
+
+### How it scales
+
+The size is the number of unknowns, ``n``. Everything grows in proportion to it.
+
+| | In terms of the size | Smallest | Largest |
+|:---|:---|---:|---:|
+| Size | ``n`` | 100 | 75000 |
+| Variables | ``n``, each a scalar | 100 | 75000 |
+| Unknowns in total | ``n`` | 100 | 75000 |
+| Costs | ``2n - 1``, each one residual: ``n`` depend on one variable, ``n - 1`` on two | 199 | 149999 |
+| Residuals in total | ``2n - 1`` | 199 | 149999 |
+| Jacobian | ``(2n - 1) \times n``, with ``3n - 2`` non-zeros (two per row at most) | 298 non-zeros | 224998 non-zeros |
+| Hessian ``J^T J`` | ``n \times n``, tridiagonal | 298 non-zeros | 224998 non-zeros |
 
 ---
 

@@ -3,10 +3,44 @@
 - **Category**: `small_dense`
 - **Scaling Metric**: Dimension n
 - **Problem Sizes Evaluated**: 1, 2, 3, 4, 6, 8, 12, 16, 20, 24, 28, 32 (12 sizes)
-- **Standard Baseline Model for Solvers**: `Standalone`
+- **Standard Baseline Model for Optimizers**: `Standalone`
 - **Derivatives**: analytic
 
 **Derivatives: analytic, not yet in place.** A cost of this problem depends on more than 8 scalar inputs (all ``n(n+1)`` of the affine map's), so by the benchmark's rule its costs are to have hand-written Jacobians shared by every model. They do not yet: the problem has one model, `Standalone`, which computes the Jacobian of the whole residual vector by LeastSquaresOptim's forward-mode automatic differentiation (`autodiff = :forward`), and every row, SecondOrderOptimization's included, runs on it.
+
+---
+
+## The Problem
+
+Two clouds of points in ``n`` dimensions, ``x_1, \dots, x_{2n}`` and ``y_1, \dots, y_{2n}``. The first cloud is to be moved by an unknown *affine map*, ``x \mapsto M x + t``: a matrix ``M`` that can rotate, stretch and shear it, and a shift ``t``. What is known is a table of distances ``D_{ij}``, from each moved point of the first cloud to each point of the second. The optimizer looks for the map that reproduces the whole table:
+
+```math
+f(M, t) = \tfrac12 \sum_{i=1}^{2n} \sum_{j=1}^{2n} \bigl(D_{ij} - \lVert M x_i + t - y_j \rVert\bigr)^2 .
+```
+
+The table is generated from a true map (``M`` close to the identity, ``t`` random) with no noise, so the minimum is zero. The optimizers start from ``M = I``, ``t = 0``.
+
+### Where it is used
+
+It is a synthetic problem, modelled on registration from range measurements: working out how one set of devices or landmarks sits relative to another when only the distances between them can be measured, as with radio ranging between two groups of sensors, or when fitting a shape to distance data in chemistry and statistics (distance geometry, multidimensional scaling).
+
+### Similar problems
+
+Dense problems in which every residual depends on every unknown, so there is no structure to exploit: fitting a small neural network or another model with a few hundred to a thousand parameters, estimating one global transformation from many measurements, calibrating all the parameters of an instrument at once. It is the largest dense problem in the benchmark: at the top size the Jacobian has over four million entries, and the time is spent in dense linear algebra (matrix products and factorizations), which is where the choice of linear-algebra library and its threading show.
+
+### How it scales
+
+The size is the dimension, ``n``. The unknowns (the ``n^2`` entries of ``M`` and the ``n`` of ``t``) and the residuals (one per pair of points) both grow as ``n^2``, so the Jacobian grows as ``n^4``, and assembling and factorizing ``J^T J`` as ``n^6``.
+
+| | In terms of the size | Smallest | Largest |
+|:---|:---|---:|---:|
+| Size | ``n`` | 1 | 32 |
+| Variables | 1, of size ``n(n+1)`` | 1 | 1 |
+| Unknowns in total | ``n(n+1)`` | 2 | 1056 |
+| Costs | ``(2n)^2`` residuals, one per pair of points, each depending on the whole variable | 4 | 4096 |
+| Residuals in total | ``4n^2`` | 4 | 4096 |
+| Jacobian | ``4n^2 \times n(n+1)``, dense | 4 × 2 | 4096 × 1056 |
+| Hessian ``J^T J`` | ``n(n+1) \times n(n+1)``, dense | 2 × 2 | 1056 × 1056 |
 
 ---
 

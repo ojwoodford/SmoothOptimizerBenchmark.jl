@@ -3,10 +3,44 @@
 - **Category**: `medium_dense`
 - **Scaling Metric**: Data Points m
 - **Problem Sizes Evaluated**: 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536 (11 sizes)
-- **Standard Baseline Model for Solvers**: `Standalone`
+- **Standard Baseline Model for Optimizers**: `Standalone`
 - **Derivatives**: autodiff
 
 **Derivatives: automatic.** Every cost of this problem depends on at most 8 scalar inputs, so each cost's Jacobian is computed by forward-mode automatic differentiation, with NLLSModel's `computeresjac`. The `Standalone` model fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, so every model evaluates a cost with the same code; what differs between rows is how the linear system is assembled and how the optimizer uses it.
+
+---
+
+## The Problem
+
+Given ``m`` noisy measurements ``y_i`` taken at times ``t_i``, find the exponential decay curve that passes closest to them. The curve has three unknown numbers: its height ``a``, its decay rate ``b`` and the level ``c`` it settles to. The optimizer minimizes the sum of squared gaps between curve and data:
+
+```math
+f(a, b, c) = \tfrac12 \sum_{i=1}^{m} \bigl(a\,e^{-b t_i} + c - y_i\bigr)^2 .
+```
+
+The data are generated from ``a = 2``, ``b = 1.5``, ``c = 0.5`` at evenly spaced times in ``[0, 2]``, with Gaussian noise of standard deviation 0.02. The optimizers start from ``(1, 1, 1)``.
+
+### Where it is used
+
+Fitting a decay curve is everyday work in the experimental sciences: radioactive decay, the discharge of a capacitor, a cooling object, the concentration of a drug in the blood, fluorescence lifetimes. More widely, it stands for nonlinear regression: a model with a few parameters fitted to many measurements.
+
+### Similar problems
+
+Any fit of a handful of parameters to a large data set: calibrating a sensor against reference readings, dose–response curves, fitting a peak to a spectrum. The linear system is tiny (3 × 3) and solving it costs nothing; nearly all the time goes into evaluating the model and its derivatives at every data point and summing them. It is the opposite regime to the sparse problems of this benchmark, where the linear solve dominates.
+
+### How it scales
+
+The size is the number of data points, ``m``. The number of unknowns is fixed; only the amount of data grows, so the work per iteration is proportional to ``m``.
+
+| | In terms of the size | Smallest | Largest |
+|:---|:---|---:|---:|
+| Size | ``m`` | 64 | 65536 |
+| Variables | 1, of size 3 | 1 | 1 |
+| Unknowns in total | 3 | 3 | 3 |
+| Costs | ``m``, each one residual depending on the whole variable | 64 | 65536 |
+| Residuals in total | ``m`` | 64 | 65536 |
+| Jacobian | ``m \times 3``, dense | 64 × 3 | 65536 × 3 |
+| Hessian ``J^T J`` | ``3 \times 3``, dense | 3 × 3 | 3 × 3 |
 
 ---
 
