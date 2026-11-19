@@ -44,6 +44,7 @@ Benchmarks cost and cost+linear-system evaluation across all provided model impl
 function run_model_benchmarks(models::Vector{<:ModelDefinition}; samples=5, evals=1)
     results = Dict{String, ModelEvaluationResult}()
     for m in models
+        is_built(m) || continue
         m.reset!()
         reset_nlp_cache!(m.model)
         c_res = benchmark_eval(() -> begin
@@ -97,6 +98,11 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
 
     for opt in optimizers
         opt_model = resolve_optimizer_model(opt, all_models)
+        # A model not built at this size (decision 18): the row is skipped with its reason
+        if !is_built(opt_model)
+            results[opt.name] = skipped_result(opt_model.model.reason)
+            continue
+        end
         # Ensure this concrete (optimizer, model-type) specialization is JIT-compiled before timing
         sig = (opt.name, typeof(opt_model.model))
         if !(sig in warmed_signatures)
@@ -198,6 +204,7 @@ function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model
 
         # Warmup models
         for m in models
+            is_built(m) || continue
             try
                 m.reset!()
                 reset_nlp_cache!(m.model)
@@ -223,6 +230,7 @@ function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model
 
         for opt in prob.compatible_optimizers
             opt_model = resolve_optimizer_model(opt, models)
+            is_built(opt_model) || continue
             push!(warmed_signatures, (opt.name, typeof(opt_model.model)))
             try
                 opt_model.reset!()
@@ -301,7 +309,7 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
     standard_m = get_standard_optimizer_model(sample_models)
     winning_model_name = target_model_name !== nothing ? target_model_name : standard_m.name
 
-    has_phase1_models = length(sample_models) > 1
+    has_phase1_models = count(is_built, sample_models) > 1
 
     if has_phase1_models
         # Initialize markdown file with metadata and Model Evaluation table header
@@ -344,6 +352,7 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
         m_results = Dict{String, ModelEvaluationResult}()
         if has_phase1_models
             for m in models
+                is_built(m) || continue
                 m.reset!()
                 reset_nlp_cache!(m.model)
                 c_res = benchmark_eval(() -> begin

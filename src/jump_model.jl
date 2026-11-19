@@ -35,3 +35,20 @@ function jump_model(name::String, nls, x0::Vector{Float64})
         end
     )
 end
+
+# A model a problem does not build at a size (decision 18: a JuMP model whose build takes over 300 s or 8 GB there,
+# measured): the rows paired with it are skipped with its reason, and the model benchmark passes over it. Internal
+struct UnbuiltModel
+    reason::String
+end
+
+"""
+    unbuilt_model(name, reason) -> ModelDefinition
+
+The placeholder for the model `name`, not built at this size for `reason` (decision 18). The pairing still finds it, so
+its rows are `:skipped` with `reason` rather than run on another model; phase 1 does not measure it.
+"""
+unbuilt_model(name::String, reason::String) =
+    ModelDefinition(name, UnbuiltModel(reason), () -> NaN, () -> (NaN, nothing), () -> nothing)
+
+is_built(m::ModelDefinition) = !(m.model isa UnbuiltModel)

@@ -4,9 +4,10 @@
 # target points Y[:, j] match given distances D[i, j]: residuals D[i, j] − ‖M·X[:, i] + t − Y[:, j]‖. The unknown is one
 # vector of length n(n + 1), M[k, c] = x[(c − 1)n + k] and t[k] = x[n² + k], and every residual depends on all of it, so a
 # cost has n(n + 1) inputs (1056 at n = 32) and the problem is analytic (DM1): one cost per source point, its 2n residuals
-# with a hand-written Jacobian (`AffinePointResidual`, DM10). Two models, built from separate copies of those costs (each
-# cost owns its buffers): "NLLSModel", which the SecondOrderOptimization rows run on, and "Standalone"
-# (`standalone_problem`), which every other row runs on.
+# with a hand-written Jacobian (`AffinePointResidual`, DM10). Three models: two built from separate copies of those costs
+# (each cost owns its buffers), "NLLSModel", which the SecondOrderOptimization rows run on, and "Standalone"
+# (`standalone_problem`), which LeastSquaresOptim, NonlinearSolve and Optim run on; and "JuMP", the residuals as JuMP
+# expressions, which JSOSolvers, Ipopt, MadNLP and CaNNOLeS run on and JuMP differentiates itself.
 using Distances, LinearAlgebra, Random, Static, StaticArrays
 using NLLSModel, LeastSquaresOptim, SecondOrderOptimization
 
@@ -107,6 +108,27 @@ end
 # The costs of one model, one per source point (each model has its own, since each cost owns its buffers)
 affine_costs(X, Y, D) = [AffinePointResidual(X, Y, D, i) for i in axes(X, 2)]
 
+# Model 3: JuMP (IND3f). The unknowns in the Standalone model's order, M by columns then t (M[k, c] = x[(c − 1)n + k],
+# t[k] = x[n² + k]); the transformed source points w[k, i] = Σ_c M[k, c]·X[c, i] + t[k] as JuMP subexpressions, and one
+# residual per pair of points, D[i, j] − √(Σ_k (w[k, i] − Y[k, j])²). JuMP differentiates it itself; its derivative is
+# not finite at a zero distance, and that is not special-cased (the hand-written Jacobian sets the row to zero there)
+# Decision 18, measured 2026-11-19 (Julia 1.13.3, one thread): the JuMP model's build took 16 s at n = 12 and 189 s at
+# n = 16 (2.2 GB more peak memory), and had not finished after 330 s at n = 20, over the 300 s limit. It is built up to
+# n = 16 and not above; there its rows are skipped
+const AFFINE_JUMP_MAX_N = 16
+affine_jump_skip_reason(n) = "the JuMP model is not built at n = $n: its build takes over 300 s from n = 20 (decision 18)"
+
+function build_jump_affine_alignment(X::Matrix{Float64}, Y::Matrix{Float64}, D::Matrix{Float64})
+    n, m = size(X)
+    x0 = zeros(n * n + n)
+    x0[1:n+1:n*n] .= 1.0
+    model = JuMP.Model()
+    @variable(model, x[l = 1:(n * n + n)], start = x0[l])
+    @NLexpression(model, w[k = 1:n, i = 1:m], sum(x[(c - 1) * n + k] * X[c, i] for c in 1:n) + x[n * n + k])
+    F = [@NLexpression(model, D[i, j] - sqrt(sum((w[k, i] - Y[k, j])^2 for k in 1:n))) for i in 1:m for j in 1:size(Y, 2)]
+    return MathOptNLSModel(model, F)
+end
+
 function get_affine_alignment_optimizers()
     return OptimizerDefinition[
         OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),
@@ -181,7 +203,10 @@ function create_affine_alignment_problem()
                 () -> copyto!(x_lso, start_vec)
             )
 
-            return [m_nlls, m_lso]
+            m_jump = n <= AFFINE_JUMP_MAX_N ? jump_model("JuMP", build_jump_affine_alignment(X, Y, D), copy(start_vec)) :
+                unbuilt_model("JuMP", affine_jump_skip_reason(n))
+
+            return [m_nlls, m_lso, m_jump]
         end,
         get_affine_alignment_optimizers(),
         "Dimension n",

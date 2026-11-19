@@ -8,6 +8,7 @@ const JUMP_MODEL_NAMES = Dict(
     "Robust Exponential Curve Fitting" => "JuMP (fudged)",
     "Ill-Conditioned Polynomial Fitting" => "JuMP",
     "Multilateration" => "JuMP",
+    "Dense Affine Alignment" => "JuMP",
     "1D ODE Boundary Value Problem" => "JuMP",
     "Dense Multi-dimensional Rosenbrock" => "JuMP",
     "Sparse Multi-dimensional Rosenbrock" => "JuMP",
@@ -42,4 +43,27 @@ jm_rel(a, b) = SmoothOptimizerBenchmark.norm(a - b) / max(SmoothOptimizerBenchma
             @test jm.model.meta.x0 == x0
         end
     end
+end
+
+# Decision 18 (IND3f): affine alignment's JuMP model is not built above AFFINE_JUMP_MAX_N, where its build was measured
+# over the limits. Its rows are skipped with the reason there, not moved to the Standalone model, and phase 1 passes over it
+@testset "A JuMP model not built at a size is a skip (decision 18)" begin
+    SB = SmoothOptimizerBenchmark
+    p = create_affine_alignment_problem()
+    @test SB.AFFINE_JUMP_MAX_N in p.default_sizes
+    sz = first(filter(n -> n > SB.AFFINE_JUMP_MAX_N, p.default_sizes))
+    models = p.generate_models(sz)
+    jm = only(filter(m -> m.name == "JuMP", models))
+    @test !SB.is_built(jm)
+    @test all(SB.is_built, filter(m -> m !== jm, models))
+    rows = filter(o -> SB.resolve_optimizer_model(o, models) === jm, p.compatible_optimizers)
+    @test sort([o.name for o in rows]) == ["CaNNOLeS", "Ipopt", "JSOSolvers (tron)", "JSOSolvers (trunk)", "MadNLP"]
+    res = run_optimizer_benchmarks(rows, get_standard_optimizer_model(models); all_models=models, samples=1)
+    for o in rows
+        @test res[o.name].status === :skipped
+        @test occursin("JuMP model is not built", res[o.name].message)
+    end
+    @test !haskey(run_model_benchmarks(models; samples=1), "JuMP")
+    # Below the limit it is built (the agreement test above runs it at the two smallest sizes)
+    @test SB.is_built(only(filter(m -> m.name == "JuMP", p.generate_models(first(p.default_sizes)))))
 end
