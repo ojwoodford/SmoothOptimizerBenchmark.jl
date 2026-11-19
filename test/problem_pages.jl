@@ -169,6 +169,20 @@ holds_number(cell, n) = occursin(Regex("(?<![0-9])$(n)(?![0-9])"), cell)
             @test isempty(check_baseline_label(page))
             @test isempty(check_header_order(lines))
 
+            # IND9: the section on which model each row runs on and how it stops: one line per row, with the model the
+            # pairing gives it and its package's criteria, then the SecondOrderOptimization configuration; no section on
+            # the removed SecondOrderOptimization rows
+            @test occursin("\n## Which model each row runs on, and how it stops\n", page)
+            @test !occursin("## The SecondOrderOptimization rows", page)
+            models = prob.generate_models(first(prob.default_sizes))
+            for o in prob.compatible_optimizers
+                m = SmoothOptimizerBenchmark.resolve_optimizer_model(o, models)
+                @test occursin("| `$(o.name)` | `$(m.name)` | ", page)
+            end
+            c = SOO_CONFIGS[slug]
+            @test occursin("`iterator = $(repr(c.iterator))`, `linsolver = $(repr(c.linsolver))`, `formulation = $(repr(c.formulation))`", page)
+            @test occursin("model is built up to", page) == (slug == "affine_alignment")   # decision 18
+
             # The numbers: (a) the sizes are the first and last default sizes
             small, u_small, r_small, large, u_large, r_large = PAGE_COUNTS[slug]
             @test first(prob.default_sizes) == small

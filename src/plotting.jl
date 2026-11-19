@@ -368,7 +368,7 @@ function plot_optimizer_scaling(res::ProblemScalingBenchmarkResult; outdir=DEFAU
         if any(!isnan, run_times)
             plotted_count += 1
             c_color, l_style, m_shape = optimizer_style(opt_name)
-            m_size = m_shape === :star5 ? 7 : 5
+            m_size = 5
             plot!(
                 p, sizes, run_times,
                 label = opt_name,

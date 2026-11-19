@@ -234,7 +234,8 @@ Defines a parameterized benchmark problem:
 - `reference_cost`: Function `(size) -> Union{Nothing, Float64}`, the problem's known minimum cost at that size, the
   reference of the cost test that decides a row's status (IT4); `nothing` (the six-argument constructor) where none is
   known, and the lowest final cost of any row at that size is the reference
-- `derivatives`: how every model of the problem that is handed to an optimizer computes its derivatives, one of
+- `derivatives`: how the problem's NLLSModel and Standalone models compute their derivatives (a package's native model,
+  JuMP's for instance, differentiates itself, as part of the package under test: item 27 as restated 2026-11-19), one of
   `:autodiff`, `:analytic` and `:mixed`, set by the required keyword `derivatives` of every constructor. The rule: a
   problem is `:autodiff` when every cost depends on at most 8 scalar inputs (the total `nvars` of the variables it depends
   on) at every size of its sweep, so that each cost's Jacobian is computed by NLLSModel's forward-mode automatic

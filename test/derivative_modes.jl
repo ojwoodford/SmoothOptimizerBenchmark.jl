@@ -188,9 +188,18 @@ const DM_MODES = Dict(
         @test all(isfinite, J)
     end
 
-    # Routing: on every problem with both models the SecondOrderOptimization rows (those without an explicit model) run
-    # on the NLLSModel model and LeastSquaresOptim's on the Standalone one; on the ODE BVP and the Rosenbrocks, JSOSolvers,
-    # Ipopt, MadNLP and CaNNOLeS run on the JuMP model
+    # The mode is the NLLSModel and Standalone models' (item 27, restated 2026-11-19): a JuMP model is differentiated by
+    # JuMP whatever the mode, so the analytic problems have JuMP models too, and no JuMP model calls the problem's
+    # computeresjac (it holds no NLLSModel costs)
+    for name in ["Ill-Conditioned Polynomial Fitting", "Multilateration", "Dense Affine Alignment"]
+        models = byname[name].generate_models(first(byname[name].default_sizes))
+        jm = only(filter(m -> m.name == "JuMP", models))
+        @test jm.model isa DMB.NLPModelsJuMP.MathOptNLSModel
+    end
+
+    # Routing: on every problem with both models the SecondOrderOptimization row runs on the NLLSModel model and
+    # LeastSquaresOptim's on the Standalone one; where there is a JuMP model, JSOSolvers, Ipopt, MadNLP and CaNNOLeS run
+    # on it
     for name in ["Exponential Curve Fitting", "Robust Exponential Curve Fitting", "1D ODE Boundary Value Problem",
                  "Dense Multi-dimensional Rosenbrock", "Sparse Multi-dimensional Rosenbrock", "Ill-Conditioned Polynomial Fitting",
                  "Multilateration", "Dense Affine Alignment", "Nonlinear 3D Pose Chain"]
@@ -212,7 +221,7 @@ const DM_MODES = Dict(
                 @test got === models[jump]
             end
         end
-        if name in ("1D ODE Boundary Value Problem", "Dense Multi-dimensional Rosenbrock", "Sparse Multi-dimensional Rosenbrock")
+        if name != "Robust Exponential Curve Fitting"   # whose JuMP model is "JuMP (fudged)"
             @test jump !== nothing
         end
     end

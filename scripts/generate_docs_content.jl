@@ -39,60 +39,79 @@ function sort_results_canonically(results::Vector{ProblemScalingBenchmarkResult}
 end
 
 function summarize_solvers(res::ProblemScalingBenchmarkResult)
-    pkgs = String[]
-    seen = Set{String}()
-    order = [
-        ("secondorder", "SecondOrderOptimization"),
-        ("leastsquares", "LeastSquaresOptim"),
-        ("optim (", "Optim"),
-        ("jsosolvers", "JSOSolvers"),
-        ("ipopt", "Ipopt"),
-        ("madnlp", "MadNLP"),
-        ("nonlinearsolve", "NonlinearSolve"),
-        ("cannoles", "CaNNOLeS"),
-        ("manopt", "Manopt")
-    ]
-    all_names = String[]
-    for sr in res.size_results
-        append!(all_names, keys(sr.optimizer_results))
-    end
-    for (needle, label) in order
-        if any(n -> occursin(needle, lowercase(n)), all_names) && !(label in seen)
-            push!(pkgs, label)
-            push!(seen, label)
-        end
-    end
-    return join(pkgs, ", ")
+    # The packages of the rows in the results, alphabetically (IND8)
+    names = String[n for sr in res.size_results for n in keys(sr.optimizer_results)]
+    return join(sort(unique(SmoothOptimizerBenchmark.row_package.(names)); by=lowercase), ", ")
 end
 
-# The derivative mode a problem declares (DM12): from its definition, looked up by name among the registered problems,
-# not from the results
-function problem_derivatives(problem_name::AbstractString)
+# The problem's registered definition, by name (from the code, not from the results)
+function registered_problem(problem_name::AbstractString)
     probs = get_all_problems()
     i = findfirst(p -> p.name == problem_name, probs)
     i === nothing && throw(ArgumentError("No registered problem is named $(repr(problem_name))"))
-    return probs[i].derivatives
+    return probs[i]
 end
 
+# The names of a problem's models at its smallest size, as the code builds them (alphabetical, IND8)
+problem_models(problem_name::AbstractString) =
+    [m.name for m in registered_problem(problem_name).generate_models(first(registered_problem(problem_name).default_sizes))]
+
+# The derivative mode a problem declares (DM12): from its definition, looked up by name among the registered problems,
+# not from the results
+problem_derivatives(problem_name::AbstractString) = registered_problem(problem_name).derivatives
+
 const DERIV_AUTODIFF = "**Derivatives: automatic.** Every cost of this problem depends on at most $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) scalar inputs, so each cost's Jacobian is computed by forward-mode automatic differentiation, with NLLSModel's `computeresjac`."
-const DERIV_AUTODIFF_STANDALONE = " The `Standalone` model fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, so every model evaluates a cost with the same code; what differs between rows is how the linear system is assembled and how the optimizer uses it."
-const DERIV_JUMP = " The `JuMP` model is differentiated by JuMP's own automatic differentiation."
-const DERIV_ANALYTIC = "**Derivatives: analytic.** A cost of this problem depends on more than $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) scalar inputs, so each cost has a hand-written Jacobian. NLLSModel calls it through `computeresjac`, and the `Standalone` model fills its residual vector and Jacobian by calling the same function for each cost in a plain single-threaded loop, so every model evaluates a cost with the same code."
+const DERIV_AUTODIFF_STANDALONE = " The `Standalone` model fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, so the NLLSModel and Standalone models evaluate a cost with the same code; what differs between their rows is how the linear system is assembled and how the optimizer uses it."
+const DERIV_JUMP = " The mode applies to the NLLSModel and Standalone models. The `JuMP` model, the native model of JSOSolvers, Ipopt, MadNLP and CaNNOLeS, is differentiated by JuMP's own automatic differentiation, exactly and with exact second derivatives, whatever the problem's mode: a native model's derivatives are part of the package under test."
+const DERIV_ANALYTIC = "**Derivatives: analytic.** A cost of this problem depends on more than $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) scalar inputs, so each cost has a hand-written Jacobian. NLLSModel calls it through `computeresjac`, and the `Standalone` model fills its residual vector and Jacobian by calling the same function for each cost in a plain single-threaded loop, so the NLLSModel and Standalone models evaluate a cost with the same code."
 
 # The paragraph under each problem page's header: what its derivative mode means on that problem, by what its models are
 const DERIVATIVES_NOTES = Dict(
-    "curve_fitting" => DERIV_AUTODIFF * DERIV_AUTODIFF_STANDALONE,
+    "curve_fitting" => DERIV_AUTODIFF * DERIV_AUTODIFF_STANDALONE * DERIV_JUMP,
     "ode_bvp" => DERIV_AUTODIFF * DERIV_AUTODIFF_STANDALONE * DERIV_JUMP,
     "rosenbrock_dense" => DERIV_AUTODIFF * DERIV_AUTODIFF_STANDALONE * DERIV_JUMP,
     "rosenbrock_sparse" => DERIV_AUTODIFF * DERIV_AUTODIFF_STANDALONE * DERIV_JUMP,
-    "pose_chain" => DERIV_AUTODIFF * DERIV_AUTODIFF_STANDALONE,
-    "curve_fitting_robust" => DERIV_AUTODIFF * " The `Standalone (fudged)` model, which every row but the native SecondOrderOptimization ones runs on, fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, then rewrites each residual and scales its row as described below, so every model evaluates a cost with the same code.",
-    "polynomial_fitting" => DERIV_ANALYTIC,
-    "multilateration" => DERIV_ANALYTIC,
-    "affine_alignment" => DERIV_ANALYTIC,
+    "pose_chain" => DERIV_AUTODIFF * DERIV_AUTODIFF_STANDALONE * DERIV_JUMP,
+    "curve_fitting_robust" => DERIV_AUTODIFF * " The `Standalone (fudged)` model, which LeastSquaresOptim, NonlinearSolve and Optim run on, fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, then rewrites each residual and scales its row as described below, so the NLLSModel and Standalone models evaluate a cost with the same code. The mode applies to those two models. The `JuMP (fudged)` model, the same rewritten residuals as JuMP expressions and the native model of JSOSolvers, Ipopt, MadNLP and CaNNOLeS, is differentiated by JuMP's own automatic differentiation, exactly and with exact second derivatives: a native model's derivatives are part of the package under test.",
+    "polynomial_fitting" => DERIV_ANALYTIC * DERIV_JUMP,
+    "multilateration" => DERIV_ANALYTIC * DERIV_JUMP,
+    "affine_alignment" => DERIV_ANALYTIC * DERIV_JUMP,
     "robust_procrustes" => "**Derivatives: analytic.** Each correspondence's residual depends on the rotation, ``d(d-1)/2`` scalar inputs (more than $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) from ``d = 5``), and every model has a hand-written Jacobian. `NLLSModel (ManifoldVar)` computes each correspondence's Jacobian in the orthonormal tangent basis of `Manifolds.jl`, through `computeresjac`; `NLLSModel (Specialized)` does the same for its own rotation type, with a specialized kernel; and the `Manifolds` model's per-correspondence Jacobian blocks, ``-\\mathbf{R}\\,\\mathbf{E}_l \\mathbf{b}_i`` with the products ``\\mathbf{E}_l \\mathbf{b}_i`` precomputed, are hand-written as well (the Manopt row builds the same blocks).",
     "bundle_adjustment" => "**Derivatives: mixed, exempt from the rule.** Each observation depends on a camera and a point, 12 scalar inputs, but this problem is exempt from the rule: its two models are separate formulations of the problem, not two uses of the same per-cost code, so no equivalent pair of rows is being compared. The `NLLSModel` model differentiates each observation automatically (NLLSModel's `computeresjac`); `BundleAdjustmentModels` evaluates its own Jacobian.",
 )
+
+# The stopping criteria each package is given (IND5): the benchmark's gradient, step and relative cost-change tolerances
+# wherever the package offers them, and what each is called there. A package's own other criteria are at its defaults
+const STOPPING_GIVEN = (
+    "CaNNOLeS" => ("`atol = gtol`, `rtol = 0`", "—", "—", "Its residual tolerances (`Fatol`, `Frtol`) at their defaults."),
+    "Ipopt" => ("`tol`, `dual_inf_tol`", "`tiny_step_tol`", "`acceptable_obj_change_tol`", "The change is tested inside Ipopt's acceptable test (`acceptable_iter = 1`, `acceptable_tol = 1e20`) and scaled by ``\\max(1, \\lvert f \\rvert)``; the acceptable and tiny-step stops count as converged."),
+    "JSOSolvers" => ("`atol = gtol`, `rtol = 0`", "—", "—", ""),
+    "LeastSquaresOptim" => ("`g_tol`", "`x_tol`", "`f_tol`", ""),
+    "MadNLP" => ("`tol` (KKT residual)", "—", "—", ""),
+    "Manopt" => ("`StopWhenGradientNormLess`", "`StopWhenChangeLess`", "—", "Manopt 0.6.15's cost-change criteria are absolute below a cost of 1 (`StopWhenCostChangeLess`, `StopWhenRelativeAPosterioriCostChangeLessOrEqual`), so neither is given."),
+    "NonlinearSolve" => ("—", "—", "—", "None of the three: its default termination mode tests the residual norm, and stalls of the residual and of the step against that same tolerance, so it runs on its own defaults."),
+    "Optim" => ("`g_abstol`", "`x_abstol`", "`f_reltol`", ""),
+    "SecondOrderOptimization" => ("`gtol`", "`dstep`", "`reldcost`", ""),
+)
+# The criteria a package is given, as one line for a problem page's row table
+function stopping_given(package::AbstractString)
+    idx = findfirst(p -> first(p) == package, STOPPING_GIVEN)
+    idx === nothing && throw(ArgumentError("No stopping criteria are listed for the package $(repr(package))"))
+    g, x, f, _ = last(STOPPING_GIVEN[idx])
+    given = [name for (name, v) in (("gradient", g), ("step", x), ("relative cost change", f)) if v != "—"]
+    return isempty(given) ? "its own defaults" : join(given, ", ")
+end
+
+function stopping_table()
+    rows = ["| $(pkg) | $(g) | $(x) | $(f) | $(note) |" for (pkg, (g, x, f, note)) in STOPPING_GIVEN]
+    return "| Package | Gradient (`gtol`) | Step (`xtol`) | Relative cost change (`ftol`) | Note |\n|:---|:---|:---|:---|:---|\n" * join(rows, "\n")
+end
+
+function pairing_table()
+    rows = ["| $(pkg) | $(isempty(models) ? "none: the Standalone model" : join(["`$(m)`" for m in models], ", ")) |"
+            for (pkg, models) in SmoothOptimizerBenchmark.NATIVE_MODELS]
+    return "| Package | Native model (the first that the problem has) |\n|:---|:---|\n" * join(rows, "\n")
+end
 
 # `single_threaded`: the same problems run with NLLSModel and BLAS on one thread, stored in `data/single_threaded/` and
 # plotted in `assets/plots/single_threaded/`; each problem page shows them beside the multi-threaded results.
@@ -110,7 +129,8 @@ function generate_docs_markdown(results::Vector{ProblemScalingBenchmarkResult}; 
         sz_range = isempty(res.sizes) ? "-" : "$(first(res.sizes)) … $(last(res.sizes))"
         target_m = isempty(res.size_results) ? "Standard" : first(res.size_results).target_model
         solvers_str = summarize_solvers(res)
-        push!(suite_rows, "| [$(res.problem)](problems/$(slug).md) | `$(res.category)` | $(res.size_metric_name) | $(n_sz) sizes ($(sz_range)) | `$(target_m)` | $(problem_derivatives(res.problem)) | $(solvers_str) |")
+        models_str = join(["`$(m)`" for m in problem_models(res.problem)], ", ")
+        push!(suite_rows, "| [$(res.problem)](problems/$(slug).md) | `$(res.category)` | $(res.size_metric_name) | $(n_sz) sizes ($(sz_range)) | $(models_str) | `$(target_m)` | $(problem_derivatives(res.problem)) | $(solvers_str) |")
     end
     suite_table = join(suite_rows, "\n")
 
@@ -140,17 +160,25 @@ What each package supports (variables, derivatives, robust kernels, constraints,
 To separate modeling overhead from solver algorithm efficiency, every problem is benchmarked in two phases:
 
 1. **Phase 1 — Model Evaluation Scaling**:
-   Benchmarks pure **Cost Evaluation** (\$f(x) = \\frac{1}{2}\\|r(x)\\|_2^2\$) and **Cost + Linear System Assembly** (\$g = J^T r\$ and \$H = J^T J\$ or exact Hessian) across competing model representations (`NLLSModel`, `Standalone` `LeastSquaresProblem`, `NLPModels` / `JuMP`, `BundleAdjustmentModels`, and `Manifolds`).
-2. **Phase 2 — Peak Solver Throughput Scaling (Each Optimizer on Optimal Model)**:
-   Every optimizer is benchmarked on its natural, optimal model representation (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` / `BundleAdjustmentModels` for JSO and interior-point solvers, and `Manifolds` for `Manopt`) under identical universal stopping criteria (`gtol = $(DEFAULT_GTOL)`, `xtol = $(DEFAULT_XTOL)`, `ftol = $(DEFAULT_FTOL)`, `maxiters = $(DEFAULT_MAXITERS)`, `maxtime = $(DEFAULT_MAXTIME)s`).
-   - Every optimizer appears as **exactly one curve**, comparing solvers at their peak practical throughput from a fair cold start without wrapper penalties or duplicate entries.
+   Benchmarks pure **Cost Evaluation** (\$f(x) = \\frac{1}{2}\\|r(x)\\|_2^2\$) and **Cost + Linear System Assembly** (\$g = J^T r\$ and \$H = J^T J\$ or exact Hessian) across the problem's model representations (`BundleAdjustmentModels`, `JuMP`, `Manifolds`, `NLLSModel` and the `Standalone` `LeastSquaresProblem`).
+2. **Phase 2 — Optimizer Scaling**:
+   Each optimizer runs on its package's native model, and on the problem's `Standalone` model if its package has none or the problem has none of them. A row's package is the part of its name before " (". The native models, in order of preference:
+
+$(pairing_table())
+
+   So each row measures a package end to end on its own model, with the stopping criteria below, `maxiters = $(DEFAULT_MAXITERS)` and `maxtime = $(DEFAULT_MAXTIME)s`. Each problem page has a table of its rows with the model each runs on. SecondOrderOptimization has one row per problem: the configuration (iterator, linear solver, formulation, reduction, storage) that NLLSModel's `recommendoptimizer` chooses at the problem's largest size, evaluated once and fixed in the problem's code; the page states it.
+   - **Stopping criteria.** Every optimizer is given the benchmark's gradient, step and relative cost-change tolerances (`gtol = $(DEFAULT_GTOL)`, `xtol = $(DEFAULT_XTOL)`, `ftol = $(DEFAULT_FTOL)`) wherever it offers that criterion; where it does not, it runs with what it has. The definitions differ between packages (norms, absolute or relative):
+
+$(stopping_table())
+
+   - A row that ends `timeout` at one size is not run at the larger sizes of that table: it is recorded `timeout` there, "timed out at size N". There are no size limits otherwise.
    - Every concrete `(optimizer, model-type)` specialization is pre-warmed prior to timing so LLVM JIT compilation is excluded.
    - Every row's final cost is evaluated by the harness at the point the solver returned, not taken from the solver. A row's status is decided by the harness too: `ok` when the solver reports convergence **and** the final cost is at most ``\\max(c_{\\text{ref}}(1 + 10^{-4}), 10^{-6})``, with ``c_{\\text{ref}}`` the problem's known minimum at that size (0 for affine alignment, both Rosenbrocks, the ODE BVP and bundle adjustment; the extended-precision minimum for the polynomial fit), or else the lowest final cost of any row at that size in the same table. A row whose solver claims convergence but fails that test is `local_minimum` if the cost reduction the Gauss–Newton model predicts from its point is below ``10^{-8}`` × its cost (a minimum of the Gauss–Newton model: a saddle of the true cost would pass), and `above_reference` otherwise. Rows that stop on the iteration or time limit or stall are `not_converged` or `timeout` (the message says when the cost test passes anyway).
    - Only `ok` rows are plotted (`converged = true` in the raw data tables); every other status is omitted (`NaN`) from the runtime plots, `local_minimum` included, since its time is the time to a different optimum.
    - Results stream line-by-line directly to Markdown tables in `docs/src/data/` as each model and optimizer measurement completes.
 
 ### Derivatives
-Each problem has one derivative mode, which every model handed to an optimizer follows, and which its page states. A problem is **automatic** when every cost depends on at most $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) scalar inputs at every size: each cost's Jacobian is then computed by NLLSModel's forward-mode automatic differentiation. Otherwise it is **analytic**, and each cost has a hand-written Jacobian. Either way the `Standalone` model fills its residuals and Jacobian by calling the same per-cost functions in a plain single-threaded loop, so the rows differ by how the linear system is assembled and how it is solved, not by how a cost is differentiated; bundle adjustment, whose two models are separate formulations, is exempt (**mixed**).
+Each problem has one derivative mode, which its NLLSModel and Standalone models follow, and which its page states. A problem is **automatic** when every cost depends on at most $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) scalar inputs at every size: each cost's Jacobian is then computed by NLLSModel's forward-mode automatic differentiation. Otherwise it is **analytic**, and each cost has a hand-written Jacobian. Either way the `Standalone` model fills its residuals and Jacobian by calling the same per-cost functions in a plain single-threaded loop, so their rows differ by how the linear system is assembled and how it is solved, not by how a cost is differentiated; bundle adjustment, whose two models are separate formulations, is exempt (**mixed**). A package's native model differentiates itself, as part of the package under test: JuMP its own expressions, exactly and with exact second derivatives, on every problem, the analytic ones included; `BundleAdjustmentModels` its own Jacobian; the `Manifolds` model its hand-written blocks.
 
 ### Multi-Threaded and Single-Threaded Tables
 Every problem is run twice. The **multi-threaded** table runs Julia, NLLSModel and BLAS on the thread counts in its data
@@ -162,8 +190,8 @@ Each problem page shows both.
 
 ## Benchmark Problem Suite
 
-| Problem | Category | Scaling Metric | Sizes Tested | Baseline Model | Derivatives | Tested Solver Packages |
-|:---|:---|:---|:---|:---|:---|:---|
+| Problem | Category | Scaling Metric | Sizes Tested | Models | Baseline Model | Derivatives | Tested Solver Packages |
+|:---|:---|:---|:---|:---|:---|:---|:---|
 $(suite_table)
 
 ---
@@ -175,7 +203,7 @@ $(suite_table)
    - Hand-specialized manifold residuals (`NLLSModel (Specialized)`) on \$SO(d)\$ eliminate tangent-basis allocation overhead relative to generic `Manifolds.jl` / `ManifoldVar` representations.
 
 2. **Optimizer Efficiency & Scaling**:
-   - **`SecondOrderOptimization.jl` (LM & Dogleg)**: Consistently delivers the lowest latency on small-to-medium dense problems and scales linearly on banded/tridiagonal sparse problems via direct sparse `LDL` factorizations.
+   - **`SecondOrderOptimization.jl`**: Consistently delivers the lowest latency on small-to-medium dense problems and scales linearly on banded/tridiagonal sparse problems via direct sparse `LDL` factorizations.
    - **`CaNNOLeS.jl` & `MadNLP.jl`**: Excel on large-scale sparse Bundle Adjustment, where augmented KKT / interior-point sparse factorizations avoid dense fill-in from high-degree camera columns in \$J^T J\$.
    - **`Optim.jl` (`Newton` / `NewtonTrustRegion`)**: Strong performance on dense problems and sparse line-search Newton; `NewtonTrustRegion` requires dense eigendecompositions and is inapplicable to sparse Hessians.
    - **`JSOSolvers.jl` (`trunk` / `tron`)**: Matrix-free Krylov trust-region methods (`hprod!`) scale well on well-conditioned sparse problems (such as Sparse Rosenbrock) with minimal memory footprint, though unpreconditioned CG struggles on ill-conditioned Bundle Adjustment and long Pose Chains.
@@ -197,48 +225,72 @@ $(suite_table)
     end
 end
 
-# What the Gauss-Newton row is against CaNNOLeS (IT2), on the page of every problem that has both
-const GN_ROW_NOTE = raw"""
-- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton` on the normal equations: Gauss–Newton, since the Hessian it is given is ``\mathbf{J}^T \mathbf{J}``. It takes the full step, with no line search or trust region (a diagonal shift only when the system cannot be solved), so a step that raises the cost is caught only by the stall test, and the row then ends `not_converged`. **`CaNNOLeS`** (`method = :Newton_noFHess`) is Gauss–Newton too, globalized: an ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization of the augmented system ``[\mu \mathbf{I}\ \ \mathbf{J}^T;\ \mathbf{J}\ \ {-\mathbf{I}}]``, with ``\mu`` raised from 0 only when the factorization fails or has the wrong inertia, then an Armijo backtracking line search on ``\tfrac12\lVert\boldsymbol{\epsilon}\rVert^2``.
-"""
-const SOO_ROWS_HEADER = "## The SecondOrderOptimization rows\n\n"
-const SECTION_END = "\n---\n"
+# The SecondOrderOptimization configuration each problem hard-codes (IND4)
+const SOO_CONFIGS = Dict(
+    "affine_alignment" => SmoothOptimizerBenchmark.AFFINE_ALIGNMENT_SOO, "bundle_adjustment" => SmoothOptimizerBenchmark.BUNDLE_ADJUSTMENT_SOO,
+    "curve_fitting" => SmoothOptimizerBenchmark.CURVE_FITTING_SOO, "curve_fitting_robust" => SmoothOptimizerBenchmark.ROBUST_CURVE_FITTING_SOO,
+    "multilateration" => SmoothOptimizerBenchmark.MULTILATERATION_SOO, "ode_bvp" => SmoothOptimizerBenchmark.ODE_BVP_SOO,
+    "polynomial_fitting" => SmoothOptimizerBenchmark.POLYNOMIAL_FITTING_SOO, "pose_chain" => SmoothOptimizerBenchmark.POSE_CHAIN_SOO,
+    "robust_procrustes" => SmoothOptimizerBenchmark.ROBUST_PROCRUSTES_SOO, "rosenbrock_dense" => SmoothOptimizerBenchmark.ROSENBROCK_DENSE_SOO,
+    "rosenbrock_sparse" => SmoothOptimizerBenchmark.ROSENBROCK_SPARSE_SOO)
 
-# What the tall rows are (T4), on the pages of the problems that have them beyond the dense ones
-const TALL_ROW_NOTE = raw"""
-- **`SecondOrderOptimization (LM, tall)`** is Levenberg–Marquardt on the residual-and-Jacobian form (`formulation = :jacobian`): each step solves the damped least-squares problem in ``\mathbf{J}`` by QR, without forming ``\mathbf{J}^T \mathbf{J}``, on the `NLLSModel` model. `storage = :auto` stores ``\mathbf{J}`` dense or sparse from its fill (sparse at the large sizes), and `linsolver = :auto` factorizes it by dense QR or SPQR. The rows without "tall" solve the normal equations in ``\mathbf{J}^T \mathbf{J}``.
-"""
-const LSMR_ROW_NOTE = raw"""
-- **`SecondOrderOptimization (LM, tall, LSMR)`** is the tall row with `linsolver = :lsmr`: each step's least-squares problem is solved iteratively by LSMR (Krylov.jl) instead of by QR.
-"""
+# Sizes at which a model is not built (decision 18), with the reason, per problem
+const UNBUILT_NOTES = Dict(
+    "affine_alignment" => "The `JuMP` model is built up to ``n = $(SmoothOptimizerBenchmark.AFFINE_JUMP_MAX_N)`` and not above: its build took 16 s at ``n = 12``, 189 s at ``n = 16`` and over 300 s at ``n = 20`` (measured 2026-11-19), so at ``n = 20`` and above the rows that run on it (CaNNOLeS, Ipopt, JSOSolvers, MadNLP) are `skipped`, with that reason in the data.")
 
-# Problem-specific text, placed under a problem page's header
+"""
+    rows_section(problem_name, slug) -> String
+
+The section of a problem page that says which model each row runs on (the pairing, IND1) and which stopping criteria
+its package is given (IND5), from the problem's own definition at its smallest size, and SecondOrderOptimization's
+hard-coded configuration (IND4).
+"""
+function rows_section(problem_name::AbstractString, slug::AbstractString)
+    prob = registered_problem(problem_name)
+    models = prob.generate_models(first(prob.default_sizes))
+    rows = map(prob.compatible_optimizers) do o
+        m = SmoothOptimizerBenchmark.resolve_optimizer_model(o, models)
+        "| `$(o.name)` | `$(m.name)` | $(stopping_given(SmoothOptimizerBenchmark.row_package(o.name))) |"
+    end
+    c = SOO_CONFIGS[slug]
+    soo_line = "The `SecondOrderOptimization` row runs `iterator = $(repr(c.iterator))`, `linsolver = $(repr(c.linsolver))`, " *
+        "`formulation = $(repr(c.formulation))`, `reduction = $(repr(c.reduction))`, `storage = $(repr(c.storage))`: the " *
+        "configuration NLLSModel's `recommendoptimizer` chose for this problem at its largest size, " *
+        "$(prob.size_metric_name) = $(last(prob.default_sizes)), with one thread (evaluated 2026-11-19, then fixed in the " *
+        "problem's code, the same at every size)."
+    unbuilt = haskey(UNBUILT_NOTES, slug) ? "\n\n" * UNBUILT_NOTES[slug] : ""
+    return """
+## Which model each row runs on, and how it stops
+
+Each row runs on its package's native model, or on the `Standalone` model if its package has none here (see the overview). The criteria are the benchmark's gradient, step and relative cost-change tolerances, as far as the package offers them; the overview's table says what each is called in each package.
+
+| Row | Model | Stopping criteria given |
+|:---|:---|:---|
+$(join(rows, "\n"))
+
+$(soo_line)$(unbuilt)
+
+---
+"""
+end
+
+# Problem-specific text, placed under a problem page's rows section
 const PROBLEM_NOTES = Dict(
-    "rosenbrock_sparse" => SOO_ROWS_HEADER * GN_ROW_NOTE * TALL_ROW_NOTE * LSMR_ROW_NOTE * SECTION_END,
-    "pose_chain" => SOO_ROWS_HEADER * GN_ROW_NOTE * TALL_ROW_NOTE * LSMR_ROW_NOTE * SECTION_END,
-    "ode_bvp" => SOO_ROWS_HEADER * GN_ROW_NOTE * TALL_ROW_NOTE * SECTION_END,
-    "curve_fitting" => SOO_ROWS_HEADER * GN_ROW_NOTE * TALL_ROW_NOTE * SECTION_END,
-    "rosenbrock_dense" => SOO_ROWS_HEADER * GN_ROW_NOTE * TALL_ROW_NOTE * SECTION_END,
-    "multilateration" => SOO_ROWS_HEADER * GN_ROW_NOTE * TALL_ROW_NOTE * SECTION_END,
-    "affine_alignment" => SOO_ROWS_HEADER * GN_ROW_NOTE * SECTION_END,
     "bundle_adjustment" => raw"""
-## The SecondOrderOptimization rows
+## Bundle adjustment's rows
 
-- **`SecondOrderOptimization (LM)`** and **`(Dogleg)`** solve the normal equations with the points eliminated by a Schur complement (`reduction = :eliminate`); LM uses `:levenbergmarquardt_dtd`, whose damping is scaled by the running maximum of the squared column norms of ``\mathbf{J}`` (the diagonal of ``\mathbf{J}^T \mathbf{J}``).
-- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton`, with the same Schur elimination: the full Gauss–Newton step, with no line search or trust region, so a step that raises the cost is caught only by the stall test. **`CaNNOLeS`** (`method = :Newton_noFHess`, on `BundleAdjustmentModels`) is Gauss–Newton globalized by a regularized ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization of the augmented system and an Armijo backtracking line search.
-- **`SecondOrderOptimization (LM, tall)`** uses the same iterator and `reduction = :eliminate` on the residual-and-Jacobian form (`formulation = :jacobian`): the points are eliminated by QR of their blocks (square-root bundle adjustment), and the reduced camera system is stored as `storage = :auto` chooses and factorized by QR, without forming ``\mathbf{J}^T \mathbf{J}``.
-- **`SecondOrderOptimization (LM, tall, LSMR)`** is the tall row with `linsolver = :lsmr`: the reduced least-squares problem is solved iteratively by LSMR (Krylov.jl) instead of by QR.
+- **`SecondOrderOptimization`** eliminates the points by QR of their blocks on the residual-and-Jacobian form (`formulation = :jacobian`, `reduction = :eliminate`: square-root bundle adjustment), and factorizes the reduced camera system by sparse QR, without forming ``\mathbf{J}^T \mathbf{J}``; its iterator, `:levenbergmarquardt_dtd`, scales the damping by the running maximum of the squared column norms of ``\mathbf{J}`` (the diagonal of ``\mathbf{J}^T \mathbf{J}``).
+- **`CaNNOLeS`** (`method = :Newton_noFHess`, on `BundleAdjustmentModels`) is Gauss–Newton globalized by a regularized ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization of the augmented system and an Armijo backtracking line search.
 
 ---
 """,
     "curve_fitting_robust" => raw"""
 ## How each row gets the robust cost
 
-- **Native rows.** `SecondOrderOptimization` (Dogleg, LM, Gauss-Newton, LM tall) run the `NLLSModel (Static)` model, which declares the kernel. The Gauss-Newton row is `iterator = :newton`, the full step with no line search or trust region; `CaNNOLeS (fudged)` is Gauss–Newton globalized by a regularized ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization and an Armijo line search.
-- **Every other row runs `Standalone (fudged)`.** That includes the general solvers, whether or not the row's name says "fudged". Each residual ``\epsilon`` is rewritten as ``\tilde\epsilon = \operatorname{sign}(\epsilon)\sqrt{\rho(\epsilon^2)}``, and its row of the Jacobian is scaled by ``\rho'(\epsilon^2)\,|\epsilon| / \sqrt{\rho(\epsilon^2)}``. Then ``\tfrac12\lVert\tilde{\boldsymbol{\epsilon}}\rVert^2`` is the robust cost exactly and ``\tilde{\mathbf{J}}^T \tilde{\boldsymbol{\epsilon}}`` its gradient.
-  - LeastSquaresOptim, NonlinearSolve and CaNNOLeS have no kernel interface, and their rows are named "fudged".
-  - So is the control row, `SecondOrderOptimization (LM, fudged)`: the native LM optimizer on the fudged model.
-  - Optim, JSOSolvers, Ipopt and MadNLP keep their standard names. They get the exact robust cost and gradient, but their Hessian is ``\tilde{\mathbf{J}}^T \tilde{\mathbf{J}}``.
+- **`SecondOrderOptimization`** runs the `NLLSModel (Static)` model, which declares the kernel.
+- **Every other row runs a rewritten ("fudged") model.** Each residual ``\epsilon`` is rewritten as ``\tilde\epsilon = \operatorname{sign}(\epsilon)\sqrt{\rho(\epsilon^2)}``, and its row of the Jacobian is scaled by ``\rho'(\epsilon^2)\,|\epsilon| / \sqrt{\rho(\epsilon^2)}``. Then ``\tfrac12\lVert\tilde{\boldsymbol{\epsilon}}\rVert^2`` is the robust cost exactly and ``\tilde{\mathbf{J}}^T \tilde{\boldsymbol{\epsilon}}`` its gradient.
+  - JSOSolvers, Ipopt, MadNLP and CaNNOLeS run `JuMP (fudged)`, the rewritten residuals as JuMP expressions (for the Huber kernel, ``\tilde\epsilon = \epsilon`` within the width and ``\operatorname{sign}(\epsilon)\sqrt{2w|\epsilon| - w^2}`` beyond it). JuMP differentiates them itself, so these rows get the exact Hessian of the rewritten cost. CaNNOLeS has no kernel interface, and its row is named "fudged"; the others keep their standard names.
+  - LeastSquaresOptim, NonlinearSolve and Optim run `Standalone (fudged)`. LeastSquaresOptim and NonlinearSolve have no kernel interface, and their rows are named "fudged". Optim keeps its standard names: it gets the exact robust cost and gradient, but its Hessian is ``\tilde{\mathbf{J}}^T \tilde{\mathbf{J}}``.
 
 The weight each form gives an outlier's ``\mathbf{j}_i \mathbf{j}_i^T``, with ``\mathbf{j}_i^T`` its row of the Jacobian (``|\epsilon| > w``; inliers have weight 1 in all three), **derived from the code, not measured**:
 
@@ -701,13 +753,14 @@ $(DERIVATIVES_NOTES[slug])
 $(PROBLEM_DESCRIPTIONS[slug])
 ---
 
+$(rows_section(res.problem, slug))
 $(get(PROBLEM_NOTES, slug, ""))
 $(phase1_section)
 ---
 
 ## 2. Optimizer Evaluation Scaling
 
-The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, where each solver is evaluated on its optimal problem representation (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` for JSO/interior-point solvers, and `Manifolds` for `Manopt`). Non-converged runs are omitted.
+The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, each on the model given in the table above (its package's native model, or the `Standalone` model). Only `ok` rows are plotted.
 
 ![$(res.problem) Optimizer Scaling](../assets/plots/$(slug)_optimizers.png)
 
