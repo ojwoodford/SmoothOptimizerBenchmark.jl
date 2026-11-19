@@ -5,6 +5,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
 # The problems with a JuMP model (IND3) and its name
 const JUMP_MODEL_NAMES = Dict(
     "Exponential Curve Fitting" => "JuMP",
+    "Robust Exponential Curve Fitting" => "JuMP (fudged)",
     "1D ODE Boundary Value Problem" => "JuMP",
     "Dense Multi-dimensional Rosenbrock" => "JuMP",
     "Sparse Multi-dimensional Rosenbrock" => "JuMP",

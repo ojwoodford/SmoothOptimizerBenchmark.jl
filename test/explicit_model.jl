@@ -17,7 +17,8 @@ const PAIRED_MODELS = Dict(
     ),
     "Robust Exponential Curve Fitting" => Dict(
         "NLLSModel (Static)" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)"],
-        "Standalone (fudged)" => ["SecondOrderOptimization (LM, fudged)", "LeastSquaresOptim (Dogleg, fudged)", "LeastSquaresOptim (LM, fudged)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "NonlinearSolve (LM, fudged)", "NonlinearSolve (TrustRegion, fudged)", "CaNNOLeS (fudged)"],
+        "JuMP (fudged)" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS (fudged)"],
+        "Standalone (fudged)" => ["SecondOrderOptimization (LM, fudged)", "LeastSquaresOptim (Dogleg, fudged)", "LeastSquaresOptim (LM, fudged)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM, fudged)", "NonlinearSolve (TrustRegion, fudged)"],
     ),
     "Ill-Conditioned Polynomial Fitting" => Dict(
         "NLLSModel (Static)" => ["SecondOrderOptimization (LM)", "SecondOrderOptimization (LM, tall)"],

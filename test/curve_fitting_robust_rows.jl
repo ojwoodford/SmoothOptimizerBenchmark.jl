@@ -35,5 +35,20 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
             end
         end
         m_sa.reset!()
+
+        # IND3c: the rows whose package's native model is JuMP, on the model they are paired with, JuMP (fudged): ok at
+        # the native LM cost, or the measured failure at 1024 points (trunk ends on not_desc, tron on small_step, at the
+        # same minimum). Measured on Julia 1.10 and 1.13 alike, 2026-11-19
+        m_jump = only(filter(m -> m.name == "JuMP (fudged)", models))
+        jump_failures = n == 64 ? () : ("JSOSolvers (trunk)", "JSOSolvers (tron)")
+        jump_rows = filter(o -> SmoothOptimizerBenchmark.resolve_optimizer_model(o, models) === m_jump, prob.compatible_optimizers)
+        @test sort([o.name for o in jump_rows]) == ["CaNNOLeS (fudged)", "Ipopt", "JSOSolvers (tron)", "JSOSolvers (trunk)", "MadNLP"]
+        for o in jump_rows
+            m_jump.reset!()
+            r = o.optimize(m_jump)
+            @test r.status === (o.name in jump_failures ? :not_converged : :ok)
+            @test r.final_cost ≈ r_lm.final_cost rtol=1e-6
+        end
+        m_jump.reset!()
     end
 end

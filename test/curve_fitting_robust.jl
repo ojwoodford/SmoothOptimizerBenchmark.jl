@@ -51,16 +51,19 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         models = prob.generate_models(n)
         m_nlls = only(filter(m -> m.name == "NLLSModel (Static)", models))
         m_sa = only(filter(m -> m.name == "Standalone (fudged)", models))
+        m_jump = only(filter(m -> m.name == "JuMP (fudged)", models))
         target = get_standard_optimizer_model(models)
         @test target === m_sa
-        # Routing: the native rows run Model 1, every other row the fudged model; a renamed row has its original's
-        # model and style, and the control row has a style of its own
+        # Routing (IND1, IND3c): the native rows run Model 1; JSOSolvers, Ipopt, MadNLP and CaNNOLeS, whose native model
+        # is JuMP, the JuMP (fudged) model; every other row the fudged Standalone model. A renamed row has its
+        # original's model and style, and the control row has a style of its own
         for o in prob.compatible_optimizers
             native = o.name in names[1:4]
-            @test resolve(o, models) === (native ? m_nlls : m_sa)
+            on_jump = SB.row_package(o.name) in ("JSOSolvers", "Ipopt", "MadNLP", "CaNNOLeS")
+            @test resolve(o, models) === (native ? m_nlls : on_jump ? m_jump : m_sa)
             orig = replace(replace(o.name, ", fudged)" => ")"), " (fudged)" => "")
             if o.model_name === nothing && o.name != orig
-                @test resolve(standard[orig], models) === m_sa
+                @test resolve(standard[orig], models) === resolve(o, models)
                 @test SB.optimizer_style(o.name) == SB.optimizer_style(orig)
             end
         end
