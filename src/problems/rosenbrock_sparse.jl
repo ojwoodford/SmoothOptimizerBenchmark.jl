@@ -30,37 +30,6 @@ NLLSModel.varindices(res::RosenOffDiagSparse) = res.varind
 NLLSModel.getvars(res::RosenOffDiagSparse, vars::AbstractVector) = (vars[res.varind[1]]::Float64, vars[res.varind[2]]::Float64)
 NLLSModel.computeresidual(res::RosenOffDiagSparse, x, y) = res.weight * (y - x^2)
 
-function rosenbrock_sparse_res!(out, x)
-    n = length(x)
-    @inbounds for k in 1:n-1
-        out[2*k - 1] = rosen_diag_w_sparse * (x[k] - 1.0)
-        out[2*k]     = rosen_offdiag_w_sparse * (x[k+1] - x[k]^2)
-    end
-    out[2*n - 1] = rosen_diag_w_sparse * (x[n] - 1.0)
-    return out
-end
-
-function rosenbrock_sparse_jac!(out, x)
-    n = length(x)
-    @inbounds for k in 1:n-1
-        out.nzval[3*k - 2] = rosen_diag_w_sparse
-        out.nzval[3*k - 1] = -2.0 * rosen_offdiag_w_sparse * x[k]
-        out.nzval[3*k]     = rosen_offdiag_w_sparse
-    end
-    out.nzval[end] = rosen_diag_w_sparse
-    return out
-end
-
-function build_sparse_lso(n::Int)
-    len = 2 * n - 1
-    x0 = rosen_sparse_startpoint(n)
-    rows = vcat(collect(Iterators.flatten([(2*k-1, 2*k, 2*k) for k in 1:(n-1)])), len)
-    cols = vcat(collect(Iterators.flatten([(k, k, k+1) for k in 1:(n-1)])), n)
-    J = SparseArrays.sparse(rows, cols, ones(3*n - 2), len, n)
-    rosenbrock_sparse_jac!(J, x0)
-    return LeastSquaresProblem(x=x0, f! = rosenbrock_sparse_res!, g! = rosenbrock_sparse_jac!, J=J, output_length=len)
-end
-
 function build_sparse_nlls(n::Int)
     costs = NLLSModel.CostStruct{Union{RosenDiagSparse, RosenOffDiagSparse}}()
     append!(get(costs, RosenDiagSparse), [RosenDiagSparse(rosen_diag_w_sparse, k) for k in 1:n])
@@ -100,28 +69,28 @@ function create_rosenbrock_sparse_problem()
                 () -> copyto!(nlls_prob.variables, x0)
             )
 
-            # Model 2: Standalone Sparse
-            lsp = build_sparse_lso(n)
+            # Model 2: Standalone (Sparse): the NLLSModel model's own costs, their residuals and Jacobians filled cost by
+            # cost by NLLSModel's computeresidual and computeresjac (autodiff), in a plain loop, into a sparsity pattern
+            # computed once (DM7)
+            lsp = standalone_problem((get(nlls_prob.costs, RosenDiagSparse), get(nlls_prob.costs, RosenOffDiagSparse)), x0;
+                                     sparse=true)
             r_buf = zeros(Float64, len)
             g_buf = zeros(Float64, n)
             m_lso = ModelDefinition(
                 "Standalone (Sparse)",
                 lsp,
                 () -> begin
-                    rosenbrock_sparse_res!(r_buf, lsp.x)
+                    lsp.f!(r_buf, lsp.x)
                     return 0.5 * sum(abs2, r_buf)
                 end,
                 () -> begin
-                    rosenbrock_sparse_res!(r_buf, lsp.x)
-                    rosenbrock_sparse_jac!(lsp.J, lsp.x)
+                    lsp.f!(r_buf, lsp.x)
+                    lsp.g!(lsp.J, lsp.x)
                     mul!(g_buf, lsp.J', r_buf)
                     H_sp = lsp.J' * lsp.J
                     return (0.5 * sum(abs2, r_buf), H_sp)
                 end,
-                () -> begin
-                    copyto!(lsp.x, x0)
-                    rosenbrock_sparse_jac!(lsp.J, x0)
-                end
+                () -> copyto!(lsp.x, x0)
             )
 
             # Model 3: NLPModels Sparse (up to 32k to avoid JuMP AST memory overhead)
