@@ -229,4 +229,11 @@ sa_allocated_g(lsp, J, x) = (lsp.g!(J, x); @allocated lsp.g!(J, x))
     @test sa_allocated_g(flsp, fJ, fx) == 0
     @test sa_allocated_f(dlsp, dr, dx) == 0
     @test sa_allocated_g(dlsp, dJ, dx) == 0
+    # ... and on affine alignment (DM10), whose costs own their buffers
+    for n in (1, 4)
+        alsp = only(filter(m -> m.name == "Standalone", create_affine_alignment_problem().generate_models(n))).model
+        ax = alsp.x .+ 0.01
+        @test sa_allocated_f(alsp, zeros(length(alsp.y)), ax) == 0
+        @test sa_allocated_g(alsp, copy(alsp.J), ax) == 0
+    end
 end

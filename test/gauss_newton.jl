@@ -33,6 +33,14 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
                 # count, the Julia version and what ran earlier in the process. Pinned on both outcomes
                 failed = r_gn.status === :not_converged && occursin("max_fails", r_gn.message) && r_gn.final_cost ≈ r_gn.start_cost
                 @test reached || failed
+            elseif prob.name == create_affine_alignment_problem().name && sz == 1
+                # At n = 1 each residual D[i, j] − |w_i − Y_j| is piecewise linear, with a kink where w_i = Y_j. Whether
+                # the first full Gauss–Newton step lands on a kink (two residuals equal, their Jacobian rows opposite,
+                # so Jᵀr ≈ 0 at a non-minimum and grad_tol fires) depends on rounding: measured 2026-11-19 on the
+                # NLLSModel model (DM10), it converges on 1.13's data and stops on grad_tol at cost 1.27, which the
+                # harness labels local_minimum, on 1.10's. Pinned on both outcomes (maintainer, 2026-11-19)
+                kink = r_gn.status === :local_minimum && occursin("grad_tol", r_gn.message)
+                @test reached || kink
             else
                 @test reached
             end

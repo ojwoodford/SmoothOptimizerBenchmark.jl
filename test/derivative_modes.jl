@@ -71,7 +71,7 @@ const DM_MODES = Dict(
     # built directly: its largest size also builds a JuMP model)
     rule_problems = ["Exponential Curve Fitting", "Robust Exponential Curve Fitting", "1D ODE Boundary Value Problem",
         "Dense Multi-dimensional Rosenbrock", "Sparse Multi-dimensional Rosenbrock", "Ill-Conditioned Polynomial Fitting",
-        "Multilateration"]
+        "Multilateration", "Dense Affine Alignment"]
     for name in rule_problems
         prob = byname[name]
         sz = last(prob.default_sizes)
@@ -83,8 +83,7 @@ const DM_MODES = Dict(
         end
         @test (DMB.max_cost_inputs(Tuple(costs), vars) <= DMB.AUTODIFF_MAX_INPUTS) == (prob.derivatives === :autodiff)
     end
-    # Affine alignment's one variable has n(n + 1) inputs (its Standalone model is not built by standalone_problem: DM10
-    # was not committed); robust Procrustes' rotation has d(d − 1)/2
+    # Affine alignment's one variable has n(n + 1) inputs; robust Procrustes' rotation has d(d − 1)/2
     @test last(byname["Dense Affine Alignment"].default_sizes)^2 + last(byname["Dense Affine Alignment"].default_sizes) > DMB.AUTODIFF_MAX_INPUTS
     dmax = last(byname["Robust Procrustes on SO(d)"].default_sizes)
     @test dmax * (dmax - 1) ÷ 2 > DMB.AUTODIFF_MAX_INPUTS
@@ -108,7 +107,8 @@ const DM_MODES = Dict(
     # The models agree: the cost, Jᵀr and JᵀJ of the NLLSModel model and of the Standalone model, at the start and at a
     # perturbed point, at the smallest size and a larger one
     for name in ["Exponential Curve Fitting", "1D ODE Boundary Value Problem", "Dense Multi-dimensional Rosenbrock",
-                 "Sparse Multi-dimensional Rosenbrock", "Ill-Conditioned Polynomial Fitting", "Multilateration"]
+                 "Sparse Multi-dimensional Rosenbrock", "Ill-Conditioned Polynomial Fitting", "Multilateration",
+                 "Dense Affine Alignment"]
         prob = byname[name]
         for sz in prob.default_sizes[[1, 4]]
             models = prob.generate_models(sz)
@@ -166,13 +166,34 @@ const DM_MODES = Dict(
         @test e <= 1e-7
         @test r0 isa DMS.SVector{1, Float64} && J isa DMS.SMatrix{1, d, Float64, d}
     end
+    # Affine alignment (DM10): one source point's 2n residuals against central differences, at n = 1, 2 and 5, and at a
+    # point where w = Y[:, j] (d = 0), where the residual is D[i, j] and its row of J is zero
+    for n in (1, 2, 5)
+        X, Y, D = DMB.generate_affine_data(n)
+        ares = DMB.AffinePointResidual(X, Y, D, 2)
+        x = [vec(DMB.Matrix(1.0DMB.I, n, n) .+ 0.1 .* randn(DMB.MersenneTwister(n), n, n)); 0.05 .* ones(n)]
+        r0, J = map(copy, DMN.computeresjac(DMB.static(1), ares, x))
+        @test r0 ≈ DMN.computeresidual(ares, x)
+        h = 1e-6
+        # copies: computeresidual returns the cost's own buffer
+        Jfd = reduce(hcat, [(copy(DMN.computeresidual(ares, x + h * (1:length(x) .== k))) -
+                             copy(DMN.computeresidual(ares, x - h * (1:length(x) .== k)))) / 2h for k in eachindex(x)])
+        @test rel(J, Jfd) <= 1e-7
+        @test r0 isa Vector{Float64} && J isa Matrix{Float64} && size(J) == (2n, n * (n + 1))
+        # d = 0 at j = 1, exactly: M = 0 and t = Y[:, 1]
+        x0 = [zeros(n * n); Y[:, 1]]
+        r0, J = DMN.computeresjac(DMB.static(1), ares, x0)
+        @test r0[1] == D[2, 1]
+        @test all(iszero, J[1, :])
+        @test all(isfinite, J)
+    end
 
     # Routing: on every problem with both models the SecondOrderOptimization rows (those without an explicit model) run
     # on the NLLSModel model and LeastSquaresOptim's on the Standalone one; on the ODE BVP and the Rosenbrocks, JSOSolvers,
     # Ipopt, MadNLP and CaNNOLeS run on the JuMP model
     for name in ["Exponential Curve Fitting", "Robust Exponential Curve Fitting", "1D ODE Boundary Value Problem",
                  "Dense Multi-dimensional Rosenbrock", "Sparse Multi-dimensional Rosenbrock", "Ill-Conditioned Polynomial Fitting",
-                 "Multilateration"]
+                 "Multilateration", "Dense Affine Alignment"]
         prob = byname[name]
         models = prob.generate_models(first(prob.default_sizes))
         nl = dm_nlls(models)
