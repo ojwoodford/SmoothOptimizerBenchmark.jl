@@ -131,6 +131,13 @@ const DM_MODES = Dict(
         models = rprob.generate_models(sz)
         m_nlls = only(filter(m -> m.name == "NLLSModel (Static)", models))
         m_sa = only(filter(m -> m.name == "Standalone (fudged)", models))
+        # Built by standalone_problem, fudged, from the native model's own costs (DM4)
+        @test dm_standalone(models) === m_sa
+        @test m_sa.model.f!.layout.fudged
+        @test eltype(only(m_sa.model.f!.layout.costs)) === DMB.RobustExpFitResidual
+        for meth in dm_methods(m_sa.model.f!.layout.costs, m_sa.model.f!.layout.vars)
+            @test meth.module === DMN
+        end
         for p in ([1.0, 1.0, 1.0], [1.7, 1.2, 0.6])
             m_nlls.model.variables[1] = DMS.SVector{3}(p)
             copyto!(m_sa.model.x, p)

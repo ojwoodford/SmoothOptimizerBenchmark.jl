@@ -11,7 +11,10 @@
 # solver minimizes the robust cost. With s = r² and ρ the kernel,
 #     r̃ = sign(r)·√ρ(s),  dr̃/dr = ρ′(s)·|r| / √ρ(s)   (√ρ′(0) at r = 0, the limit),
 # so ½r̃² = ½ρ(r²) exactly and J̃ᵀr̃ (row i of J scaled by dr̃ᵢ/drᵢ) is the robust cost's gradient. Only the Gauss–Newton
-# Hessian J̃ᵀJ̃ differs from the native one. The residual-only packages' rows (LeastSquaresOptim, NonlinearSolve, CaNNOLeS)
+# Hessian J̃ᵀJ̃ differs from the native one. The fudged model is built by `standalone_problem(…; fudged = true)` from the
+# same `RobustExpFitResidual`s as the native model: each cost's residual and its row of J come from NLLSModel's
+# `computeresidual` and `computeresjac` (forward-mode automatic differentiation, the native model's own per-cost code),
+# and the row is then scaled by dr̃/dr. The residual-only packages' rows (LeastSquaresOptim, NonlinearSolve, CaNNOLeS)
 # are named "fudged", as is the control row, SecondOrderOptimization (LM) on the fudged model, which holds the
 # optimizer fixed and changes only the formulation. Optim, JSOSolvers, Ipopt and MadNLP run the same fudged model under
 # their standard names: their objective and gradient are the robust cost's exactly; only their Hessian J̃ᵀJ̃ comes from
@@ -68,25 +71,6 @@ function fudged_scale(kernel, r)
     return s == 0 ? sqrt(drho) : drho * abs(r) / sqrt(rho)
 end
 
-function exp_fudged_residuals!(r, p, t_pts, y_data, kernel)
-    exp_residuals!(r, p, t_pts, y_data)
-    @inbounds for i in eachindex(r)
-        r[i] = fudged_residual(kernel, r[i])
-    end
-    return r
-end
-
-function exp_fudged_jacobian!(J, p, t_pts, y_data, kernel)
-    exp_jacobian!(J, p, t_pts)
-    @inbounds for i in eachindex(t_pts)
-        scale = fudged_scale(kernel, p[1] * exp(-p[2] * t_pts[i]) + p[3] - y_data[i])
-        J[i, 1] *= scale
-        J[i, 2] *= scale
-        J[i, 3] *= scale
-    end
-    return J
-end
-
 # Rename a residual-only package's row: "X (a)" → "X (a, fudged)", "X" → "X (fudged)"
 fudged_name(name::AbstractString) = endswith(name, ")") ? string(chop(name), ", fudged)") : string(name, " (fudged)")
 
@@ -107,7 +91,8 @@ end
 Exponential curve fitting with 30 % one-sided outliers (+1) and a Huber kernel of width 0.05, at curve fitting's sizes.
 Two models: "NLLSModel (Static)", which declares the kernel (SecondOrderOptimization's native rows), and
 "Standalone (fudged)", whose rewritten residuals make ½‖r̃‖² the robust cost (every other row, including the control row
-"SecondOrderOptimization (LM, fudged)"). Data from `generate_exp_outlier_data`.
+"SecondOrderOptimization (LM, fudged)"). Both are built from the same `RobustExpFitResidual`s: the fudged model's
+Jacobian is each cost's autodiff row (NLLSModel's `computeresjac`) scaled by dr̃/dr. Data from `generate_exp_outlier_data`.
 """
 function create_robust_curve_fitting_problem()
     ProblemDefinition(
@@ -119,11 +104,14 @@ function create_robust_curve_fitting_problem()
             p0_static = SVector(1.0, 1.0, 1.0)
             p0_vec = [1.0, 1.0, 1.0]
 
+            # The costs, defined once: both models are built from the same residuals
+            costs = [RobustExpFitResidual(t_pts[i], y_data[i]) for i in 1:n_points]
+
             # Model 1: NLLSModel, with the kernel declared
             nlls_prob = NLLSModel.Model(SVector{3, Float64}, RobustExpFitResidual)
             addvariable!(nlls_prob, p0_static)
-            for i in 1:n_points
-                addcost!(nlls_prob, RobustExpFitResidual(t_pts[i], y_data[i]))
+            for c in costs
+                addcost!(nlls_prob, c)
             end
             nt = benchmark_numthreads()
             # Buffers of the types NLLSModel's linear system uses (MVector/MMatrix), so fdf! writes straight into them
@@ -138,25 +126,23 @@ function create_robust_curve_fitting_problem()
                 () -> (nlls_prob.variables[1] = p0_static)
             )
 
-            # Model 2: Standalone (fudged), the rewritten residuals and their Jacobian
+            # Model 2: Standalone (fudged): each cost's residual and autodiff row, rewritten (DM4)
+            lsp = standalone_problem((costs,), [p0_static]; fudged=true)
+            p_standalone = lsp.x
             r_buf = zeros(Float64, n_points)
             J_buf = zeros(Float64, n_points, 3)
             g_buf = zeros(Float64, 3)
             H_buf = zeros(Float64, 3, 3)
-            p_standalone = copy(p0_vec)
-            f_res!(r, p) = exp_fudged_residuals!(r, p, t_pts, y_data, exp_huber_kernel)
-            g_jac!(J, p) = exp_fudged_jacobian!(J, p, t_pts, y_data, exp_huber_kernel)
-            lsp = LeastSquaresProblem(x=p_standalone, f! = f_res!, g! = g_jac!, output_length=n_points)
             m_standalone = ModelDefinition(
                 "Standalone (fudged)",
                 lsp,
                 () -> begin
-                    f_res!(r_buf, p_standalone)
+                    lsp.f!(r_buf, p_standalone)
                     return 0.5 * sum(abs2, r_buf)
                 end,
                 () -> begin
-                    f_res!(r_buf, p_standalone)
-                    g_jac!(J_buf, p_standalone)
+                    lsp.f!(r_buf, p_standalone)
+                    lsp.g!(J_buf, p_standalone)
                     mul!(g_buf, J_buf', r_buf)
                     mul!(H_buf, J_buf', J_buf)
                     return (0.5 * sum(abs2, r_buf), (g_buf, H_buf))

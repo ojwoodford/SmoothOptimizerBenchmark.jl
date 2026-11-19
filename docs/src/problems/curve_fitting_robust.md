@@ -6,7 +6,7 @@
 - **Standard Baseline Model for Optimizers**: `Standalone (fudged)`
 - **Derivatives**: autodiff
 
-**Derivatives: automatic.** Every cost of this problem depends on at most 8 scalar inputs, so its costs are differentiated by forward-mode automatic differentiation: the `NLLSModel (Static)` model, which the native SecondOrderOptimization rows run on, computes each cost's Jacobian with NLLSModel's `computeresjac`. The `Standalone (fudged)` model, which every other row runs on, does not use that code yet: its rewritten residuals have a hand-written Jacobian (the exponential model's derivative, each row scaled as described below).
+**Derivatives: automatic.** Every cost of this problem depends on at most 8 scalar inputs, so each cost's Jacobian is computed by forward-mode automatic differentiation, with NLLSModel's `computeresjac`. The `Standalone (fudged)` model, which every row but the native SecondOrderOptimization ones runs on, fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, then rewrites each residual and scales its row as described below, so every model evaluates a cost with the same code.
 
 ---
 

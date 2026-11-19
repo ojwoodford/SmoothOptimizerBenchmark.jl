@@ -110,9 +110,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         # outliers move b instead: c is 0.064 off, b 0.63; maintainer, 2026-11-17)
         if n == 1024
             t, y, _ = SB.generate_exp_outlier_data(n)
-            # The closures name the module, not the local alias SB, which they would capture (and deepcopy cannot copy)
-            plain = SB.LeastSquaresProblem(x=[1.0, 1.0, 1.0], f! = (r, q) -> SmoothOptimizerBenchmark.exp_residuals!(r, q, t, y),
-                g! = (J, q) -> SmoothOptimizerBenchmark.exp_jacobian!(J, q, t), output_length=n)
+            plain = SB.standalone_problem(([SB.ExpFitResidual(t[i], y[i]) for i in 1:n],), [SB.SVector(1.0, 1.0, 1.0)])
             x_ls = Float64[]
             @test optimize_soo(plain; method=:lm, solution=x_ls).status === :ok
             @test abs(x_ls[3] - 0.5) > 0.2

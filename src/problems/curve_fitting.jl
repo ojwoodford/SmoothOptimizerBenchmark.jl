@@ -21,23 +21,6 @@ function generate_exp_data(n_points::Int)
     return collect(t_pts), y_data
 end
 
-function exp_residuals!(r, p, t_pts, y_data)
-    @inbounds for i in eachindex(t_pts)
-        r[i] = p[1] * exp(-p[2] * t_pts[i]) + p[3] - y_data[i]
-    end
-    return r
-end
-
-function exp_jacobian!(J, p, t_pts)
-    @inbounds for i in eachindex(t_pts)
-        e = exp(-p[2] * t_pts[i])
-        J[i, 1] = e
-        J[i, 2] = -p[1] * t_pts[i] * e
-        J[i, 3] = 1.0
-    end
-    return J
-end
-
 function create_curve_fitting_problem()
     ProblemDefinition(
         "Exponential Curve Fitting",
