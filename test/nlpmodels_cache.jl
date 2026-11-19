@@ -5,7 +5,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
 @testset "NLPModels Evaluation Recomputation and Cache Invalidation" begin
     prob = create_rosenbrock_sparse_problem()
     models = prob.generate_models(16)
-    nlp_m = first(filter(m -> occursin("NLPModels", m.name), models))
+    nlp_m = only(filter(m -> m.name == "JuMP", models))
     nls = nlp_m.model
 
     # Ensure cost evaluation computes finite cost

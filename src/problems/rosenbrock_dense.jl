@@ -99,12 +99,12 @@ function create_rosenbrock_dense_problem()
                 () -> copyto!(x_lso, x0)
             )
 
-            # Model 3: NLPModels / MathOptNLSModel
+            # Model 3: JuMP, as a MathOptNLSModel
             nls = build_jso_dense(n)
             g_nlp = zeros(Float64, n)
             h_vals_nlp = zeros(Float64, nls.meta.nnzh)
             m_nlp = ModelDefinition(
-                "NLPModels (MathOptNLSModel)",
+                "JuMP",
                 nls,
                 () -> begin
                     reset_nlp_cache!(nls)

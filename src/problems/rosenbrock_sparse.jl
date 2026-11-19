@@ -93,14 +93,14 @@ function create_rosenbrock_sparse_problem()
                 () -> copyto!(lsp.x, x0)
             )
 
-            # Model 3: NLPModels Sparse (up to 32k to avoid JuMP AST memory overhead)
+            # Model 3: JuMP, as a MathOptNLSModel (up to 32k to avoid JuMP AST memory overhead)
             models = ModelDefinition[m_nlls, m_lso]
             if n <= 32768
                 nls = build_sparse_jso(n)
                 g_nlp = zeros(Float64, n)
                 h_vals_nlp = zeros(Float64, nls.meta.nnzh)
                 m_nlp = ModelDefinition(
-                    "NLPModels (MathOptNLSModel)",
+                    "JuMP",
                     nls,
                     () -> begin
                         reset_nlp_cache!(nls)

@@ -4,6 +4,8 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
 
 @testset "Plot Styling & Unsupported Sparse Solver Handling" begin
     @test SmoothOptimizerBenchmark.model_style("Manifolds")[1] == :blue
+    # IND3a: the JuMP models keep the colour the "NLPModels (MathOptNLSModel)" models had
+    @test SmoothOptimizerBenchmark.model_style("JuMP")[1] == :forestgreen
     @test SmoothOptimizerBenchmark.optimizer_style("Manopt (LevenbergMarquardt)")[1] == :blue
     @test SmoothOptimizerBenchmark.optimizer_style("CaNNOLeS")[1] == :chocolate
     @test SmoothOptimizerBenchmark.optimizer_style("MadNLP")[1] == :teal

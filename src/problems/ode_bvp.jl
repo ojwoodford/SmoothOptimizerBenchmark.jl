@@ -124,14 +124,14 @@ function create_ode_bvp_problem()
                 () -> copyto!(lsp.x, x0)
             )
 
-            # Model 3: NLPModels Sparse (up to 32k)
+            # Model 3: JuMP, as a MathOptNLSModel (up to 32k)
             models = ModelDefinition[m_nlls, m_lso]
             if n <= 32768
                 nls = build_sparse_ode_bvp_jso(n)
                 g_nlp = zeros(Float64, n)
                 h_vals_nlp = zeros(Float64, nls.meta.nnzh)
                 m_nlp = ModelDefinition(
-                    "NLPModels (MathOptNLSModel)",
+                    "JuMP",
                     nls,
                     () -> begin
                         reset_nlp_cache!(nls)

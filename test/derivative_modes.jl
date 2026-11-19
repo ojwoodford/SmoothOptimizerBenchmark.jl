@@ -200,7 +200,7 @@ const DM_MODES = Dict(
         sa = only(filter(m -> m.model isa DMB.LeastSquaresProblem, models))
         target = get_standard_optimizer_model(models, prob.category)
         @test target === sa
-        jump = findfirst(m -> m.name == "NLPModels (MathOptNLSModel)", models)
+        jump = findfirst(m -> m.name == "JuMP", models)
         for o in prob.compatible_optimizers
             o.model_name === nothing || continue
             got = DMB.resolve_optimizer_model(o, target, models)

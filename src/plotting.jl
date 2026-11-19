@@ -58,7 +58,7 @@ Maps a model formulation name to a consistent (color, marker, linsys_style, cost
 - Specific color for each package:
   - NLLSModel: :red (matches SecondOrderOptimization)
   - Standalone: :blue
-  - NLPModels: :forestgreen (matches JSOSolvers)
+  - JuMP: :forestgreen (matches JSOSolvers)
   - BundleAdjustmentModels: :teal
   - Manifolds: :blue (matches Manopt)
 - Different flavours within the same package use distinct markers and linestyles:
@@ -75,7 +75,7 @@ function model_style(m_name::String)
         :red
     elseif occursin("standalone", name_lower) || occursin("leastsquares", name_lower) || occursin("lso", name_lower)
         :blue
-    elseif occursin("nlpmodels", name_lower)
+    elseif occursin("jump", name_lower)
         :forestgreen
     elseif occursin("bundleadjustment", name_lower) || occursin("bam", name_lower)
         :teal
