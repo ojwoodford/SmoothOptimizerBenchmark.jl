@@ -19,13 +19,13 @@ open(joinpath(data_dir, "environment.txt"), "w") do io
     Pkg.status(; mode=Pkg.PKGMODE_MANIFEST, io)
 end
 
-# Run scaling benchmarks (streams live markdown directly to docs/src/data/<slug>.md): threaded, with Julia and NLLSModel
-# at the thread count Julia was started with and BLAS on one thread (B12, decided 2026-11-18), then single-threaded
-# (NLLSModel and BLAS on one thread) into its own folder
+# Run scaling benchmarks (streams live markdown directly to docs/src/data/<slug>.md): multi-threaded, with Julia and
+# NLLSModel at the thread count Julia was started with and BLAS left at the count it has (recorded in each header), then
+# single-threaded (NLLSModel and BLAS on one thread) into its own folder
 t_start = time()
-results = run_all_scaling_benchmarks(data_dir=data_dir, blas_threads=1)
+results = run_all_scaling_benchmarks(data_dir=data_dir)
 t_elapsed = time() - t_start
-println(@sprintf("\n✓ Threaded scaling benchmarks completed in %.1f seconds.", t_elapsed))
+println(@sprintf("\n✓ Multi-threaded scaling benchmarks completed in %.1f seconds.", t_elapsed))
 println("✓ Benchmark streaming Markdown files saved to: $data_dir")
 
 mkpath(SINGLE_THREADED_DATA_DIR)

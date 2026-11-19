@@ -7,6 +7,14 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     t = set_benchmark_threads!(; numthreads=1, blas_threads=1)
     @test t == (; numthreads=1, julia_threads=Threads.nthreads(), blas_threads=1)
     @test benchmark_numthreads() === SmoothOptimizerBenchmark.static(1)
+    # IND7: without blas_threads, BLAS is left at the count it has (the multi-threaded table)
+    BLAS = SmoothOptimizerBenchmark.BLAS
+    blas0 = BLAS.get_num_threads()
+    BLAS.set_num_threads(2)
+    @test set_benchmark_threads!(; numthreads=1).blas_threads == 2
+    @test BLAS.get_num_threads() == 2
+    @test_throws ArgumentError set_benchmark_threads!(; blas_threads=0)
+    BLAS.set_num_threads(blas0)
 
     # min_work and min_work_cost reach NLLSModel: forcing threading on or off changes nothing but the schedule
     set_benchmark_threads!()

@@ -9,8 +9,8 @@ export DEFAULT_DOCS_DIR, DEFAULT_DATA_DIR, DEFAULT_PLOTS_DIR, SINGLE_THREADED_DA
 const DEFAULT_DOCS_DIR = normpath(joinpath(@__DIR__, "..", "docs", "src"))
 const DEFAULT_DATA_DIR = joinpath(DEFAULT_DOCS_DIR, "data")
 const DEFAULT_PLOTS_DIR = joinpath(DEFAULT_DOCS_DIR, "assets", "plots")
-# The single-threaded table (NLLSModel and BLAS on one thread) is stored and plotted beside the threaded one, under the
-# same file names
+# The single-threaded table (NLLSModel and BLAS on one thread) is stored and plotted beside the multi-threaded one, under
+# the same file names
 const SINGLE_THREADED_DATA_DIR = joinpath(DEFAULT_DATA_DIR, "single_threaded")
 const SINGLE_THREADED_PLOTS_DIR = joinpath(DEFAULT_PLOTS_DIR, "single_threaded")
 
@@ -30,18 +30,19 @@ the one set by [`set_benchmark_threads!`](@ref), or `Threads.nthreads()` if none
 benchmark_numthreads() = static(BENCHMARK_NUMTHREADS[] > 0 ? BENCHMARK_NUMTHREADS[] : Threads.nthreads())
 
 """
-    set_benchmark_threads!(; numthreads=Threads.nthreads(), blas_threads=numthreads) -> NamedTuple
+    set_benchmark_threads!(; numthreads=Threads.nthreads(), blas_threads=nothing) -> NamedTuple
 
 Fixes the thread counts for a benchmark run: `numthreads` for NLLSModel's threaded evaluation (at most
-`Threads.nthreads()`), and `blas_threads` for BLAS, which is set with `BLAS.set_num_threads`. Returns the
-counts in force, `(; numthreads, julia_threads, blas_threads)`, for the results file.
+`Threads.nthreads()`), and `blas_threads` for BLAS, set with `BLAS.set_num_threads`; `nothing` (the default) leaves BLAS
+at the count it has, as the multi-threaded table does (IND7). Returns the counts in force,
+`(; numthreads, julia_threads, blas_threads)`, for the results file.
 """
-function set_benchmark_threads!(; numthreads::Integer=Threads.nthreads(), blas_threads::Integer=numthreads)
+function set_benchmark_threads!(; numthreads::Integer=Threads.nthreads(), blas_threads::Union{Nothing, Integer}=nothing)
     1 <= numthreads <= Threads.nthreads() || throw(ArgumentError(
         "numthreads = $numthreads, but Julia was started with $(Threads.nthreads()) threads; start Julia with `-t $numthreads` or ask for fewer"))
-    blas_threads >= 1 || throw(ArgumentError("blas_threads = $blas_threads must be at least 1"))
+    blas_threads === nothing || blas_threads >= 1 || throw(ArgumentError("blas_threads = $blas_threads must be at least 1"))
     BENCHMARK_NUMTHREADS[] = Int(numthreads)
-    BLAS.set_num_threads(Int(blas_threads))
+    blas_threads === nothing || BLAS.set_num_threads(Int(blas_threads))
     return benchmark_threads()
 end
 

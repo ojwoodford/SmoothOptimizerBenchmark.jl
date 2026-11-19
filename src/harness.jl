@@ -262,7 +262,7 @@ end
 
 """
     run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=nothing, samples=nothing,
-                          numthreads=Threads.nthreads(), blas_threads=numthreads) -> SingleSizeBenchmarkResult
+                          numthreads=Threads.nthreads(), blas_threads=nothing) -> SingleSizeBenchmarkResult
 
 Executes the benchmark for a single problem and size:
 1. Model evaluation comparison (cost vs linear system) across all implementations
@@ -271,7 +271,7 @@ Executes the benchmark for a single problem and size:
 The thread counts are fixed first with [`set_benchmark_threads!`](@ref).
 """
 function run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=nothing, samples=nothing,
-                               numthreads::Integer=Threads.nthreads(), blas_threads::Integer=numthreads)
+                               numthreads::Integer=Threads.nthreads(), blas_threads::Union{Nothing, Integer}=nothing)
     set_benchmark_threads!(; numthreads, blas_threads)
     model_samples = samples !== nothing ? max(1, Int(samples)) : 5
     models = prob.generate_models(size)
@@ -302,7 +302,7 @@ end
 
 """
     run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes, target_model_name=nothing, samples=nothing, data_dir=DEFAULT_DATA_DIR,
-                          numthreads=Threads.nthreads(), blas_threads=numthreads) -> ProblemScalingBenchmarkResult
+                          numthreads=Threads.nthreads(), blas_threads=nothing) -> ProblemScalingBenchmarkResult
 
 Runs the benchmark across all specified problem sizes (collecting at least 10 problem sizes for scaling), in increasing
 order. A row that ends `:timeout` at one size is not run at the larger sizes: it is recorded `:timeout` there, "timed out
@@ -312,10 +312,11 @@ Streams results into `<data_dir>/<slug>.md`: the model rows as they finish, each
 finishes (their statuses are decided then, IT4).
 
 The thread counts are fixed with [`set_benchmark_threads!`](@ref) before any model is built, and written into the
-file's header: `numthreads` for NLLSModel (at most `Threads.nthreads()`), `blas_threads` for BLAS.
+file's header: `numthreads` for NLLSModel (at most `Threads.nthreads()`), `blas_threads` for BLAS (`nothing`: BLAS is left
+at the count it has; the header records the count in force).
 """
 function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes, target_model_name=nothing, samples=nothing, data_dir=DEFAULT_DATA_DIR,
-                               numthreads::Integer=Threads.nthreads(), blas_threads::Integer=numthreads)
+                               numthreads::Integer=Threads.nthreads(), blas_threads::Union{Nothing, Integer}=nothing)
     set_benchmark_threads!(; numthreads, blas_threads)
     sizes = ascending_sizes(sizes)
     model_samples = samples !== nothing ? max(1, Int(samples)) : 5
@@ -445,12 +446,12 @@ end
 
 """
     run_all_scaling_benchmarks(; problems=get_all_problems(), quick=false, samples=nothing, data_dir=DEFAULT_DATA_DIR,
-                               numthreads=Threads.nthreads(), blas_threads=numthreads) -> Vector{ProblemScalingBenchmarkResult}
+                               numthreads=Threads.nthreads(), blas_threads=nothing) -> Vector{ProblemScalingBenchmarkResult}
 
 Executes scaling benchmarks across all registered problems, at the thread counts given (see [`run_scaling_benchmark`](@ref)).
 """
 function run_all_scaling_benchmarks(; problems=get_all_problems(), quick=false, samples=nothing, data_dir=DEFAULT_DATA_DIR,
-                                    numthreads::Integer=Threads.nthreads(), blas_threads::Integer=numthreads)
+                                    numthreads::Integer=Threads.nthreads(), blas_threads::Union{Nothing, Integer}=nothing)
     scaling_results = ProblemScalingBenchmarkResult[]
     for prob in problems
         sizes = quick ? prob.default_sizes[1:min(3, length(prob.default_sizes))] : prob.default_sizes

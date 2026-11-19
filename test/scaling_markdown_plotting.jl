@@ -16,7 +16,8 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     streamed_md = joinpath(tmp_data_dir, "rosenbrock_sparse.md")
     @test isfile(streamed_md)
     md_text = read(streamed_md, String)
-    @test occursin("**Threads**: NLLSModel numthreads=$(Threads.nthreads()), Julia threads=$(Threads.nthreads()), BLAS threads=$(Threads.nthreads())", md_text)
+    # IND7: BLAS is left at the count it has, which the header records
+    @test occursin("**Threads**: NLLSModel numthreads=$(Threads.nthreads()), Julia threads=$(Threads.nthreads()), BLAS threads=$(SmoothOptimizerBenchmark.BLAS.get_num_threads())", md_text)
     @test !occursin("Git Commit: unknown", md_text)
     # Every header records the commit of each sibling package it ran against
     for dep in SmoothOptimizerBenchmark.RECORDED_DEPENDENCIES

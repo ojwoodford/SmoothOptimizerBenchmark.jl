@@ -95,7 +95,7 @@ const DERIVATIVES_NOTES = Dict(
 )
 
 # `single_threaded`: the same problems run with NLLSModel and BLAS on one thread, stored in `data/single_threaded/` and
-# plotted in `assets/plots/single_threaded/`; each problem page shows them beside the threaded results.
+# plotted in `assets/plots/single_threaded/`; each problem page shows them beside the multi-threaded results.
 function generate_docs_markdown(results::Vector{ProblemScalingBenchmarkResult}; single_threaded::Vector{ProblemScalingBenchmarkResult}=ProblemScalingBenchmarkResult[], docs_dir=DEFAULT_DOCS_DIR)
     mkpath(joinpath(docs_dir, "problems"))
     mkpath(joinpath(docs_dir, "assets", "plots"))
@@ -152,9 +152,9 @@ To separate modeling overhead from solver algorithm efficiency, every problem is
 ### Derivatives
 Each problem has one derivative mode, which every model handed to an optimizer follows, and which its page states. A problem is **automatic** when every cost depends on at most $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) scalar inputs at every size: each cost's Jacobian is then computed by NLLSModel's forward-mode automatic differentiation. Otherwise it is **analytic**, and each cost has a hand-written Jacobian. Either way the `Standalone` model fills its residuals and Jacobian by calling the same per-cost functions in a plain single-threaded loop, so the rows differ by how the linear system is assembled and how it is solved, not by how a cost is differentiated; bundle adjustment, whose two models are separate formulations, is exempt (**mixed**).
 
-### Threaded and Single-Threaded Tables
-Every problem is run twice. The **threaded** table runs Julia and NLLSModel on the thread counts in its data file's
-header and **BLAS on one thread**; the **single-threaded** table runs NLLSModel and BLAS on one thread
+### Multi-Threaded and Single-Threaded Tables
+Every problem is run twice. The **multi-threaded** table runs Julia, NLLSModel and BLAS on the thread counts in its data
+file's header, BLAS at its own default; the **single-threaded** table runs NLLSModel and BLAS on one thread
 (`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`) and is stored separately, in `docs/src/data/single_threaded/`.
 Each problem page shows both.
 
@@ -669,7 +669,7 @@ This problem uses `$(target_model_name)` universally across all solvers via its 
 ## 3. Single-Threaded Results
 
 The same benchmark with NLLSModel and BLAS on one thread (`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`),
-stored separately from the threaded table. Comparing the two shows what threading gains or costs at each size.
+stored separately from the multi-threaded table. Comparing the two shows what threading gains or costs at each size.
 $(model_plot)
 ![$(res.problem) Optimizer Scaling, 1 thread](../assets/plots/single_threaded/$(slug)_optimizers.png)
 

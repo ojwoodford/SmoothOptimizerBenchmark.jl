@@ -25,6 +25,14 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     for (name, r) in sr.optimizer_results
         append_optimizer_evaluation(threaded_md, sr.size, name, r)
     end
+    # IND7: the multi-threaded table passes no blas_threads, and its header records the BLAS count in force
+    BLAS = SmoothOptimizerBenchmark.BLAS
+    blas0 = BLAS.get_num_threads()
+    BLAS.set_num_threads(3)
+    mt_dir = joinpath(tmp_root, "multi")
+    run_scaling_benchmark(prob; sizes=Any[4], samples=1, data_dir=mt_dir)
+    @test occursin("Julia threads=$(Threads.nthreads()), BLAS threads=3", read(joinpath(mt_dir, "rosenbrock_sparse.md"), String))
+    BLAS.set_num_threads(blas0)
     loaded_all = load_all_problem_markdown(tmp_root)
     @test length(loaded_all) == 1
     @test only(loaded_all).problem == prob.name
