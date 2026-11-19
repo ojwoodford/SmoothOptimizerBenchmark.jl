@@ -20,8 +20,8 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         lm = only(filter(o -> o.name == "SecondOrderOptimization (LM)", prob.compatible_optimizers))
         for sz in prob.default_sizes[1:2]
             models = prob.generate_models(sz)
-            std = get_standard_optimizer_model(models, prob.category)
-            @test SOB.resolve_optimizer_model(gn, std, models) === SOB.resolve_optimizer_model(lm, std, models)
+            std = get_standard_optimizer_model(models)
+            @test SOB.resolve_optimizer_model(gn, models) === SOB.resolve_optimizer_model(lm, models)
             rows = run_optimizer_benchmarks([gn, lm], std; all_models=models, samples=1, reference=prob.reference_cost(sz))
             r_gn, r_lm = rows[gn_name], rows[lm.name]
             @test r_lm.status === :ok

@@ -2,7 +2,7 @@
 using BenchmarkTools
 using Statistics
 
-export run_model_benchmarks, select_best_model, run_optimizer_benchmarks, get_standard_optimizer_model
+export run_model_benchmarks, run_optimizer_benchmarks, get_standard_optimizer_model
 export run_problem_benchmark, run_scaling_benchmark, run_all_scaling_benchmarks
 export load_benchmark_results
 
@@ -65,119 +65,12 @@ function run_model_benchmarks(models::Vector{<:ModelDefinition}; samples=5, eval
 end
 
 """
-    select_best_model(models::Vector{<:ModelDefinition}, results::Dict{String, ModelEvaluationResult})
-
-Selects the model with the fastest cost+linear system evaluation time.
-"""
-function select_best_model(models::Vector{<:ModelDefinition}, results::Dict{String, ModelEvaluationResult})
-    valid_models = filter(m -> haskey(results, m.name) && !isnan(results[m.name].linsys_time_ns) && !isinf(results[m.name].linsys_time_ns), models)
-    if isempty(valid_models)
-        return first(models)
-    end
-    return argmin(m -> results[m.name].linsys_time_ns, valid_models)
-end
-
-"""
-    get_standard_optimizer_model(models::Vector{<:ModelDefinition}, category::Symbol)::ModelDefinition
-
-Finds the designated standard baseline model from the generated models list for optimizer benchmarking.
-- Manifold: Manifolds / Manopt formulation
-- Bundle Adjustment: BundleAdjustmentModels (AbstractNLSModel / AbstractNLPModel)
-- Euclidean: Standalone (LeastSquaresProblem / vector residual + Jacobian)
-"""
-function get_standard_optimizer_model(models::Vector{<:ModelDefinition}, category::Symbol)::ModelDefinition
-    if category == :manifold
-        idx = findfirst(m -> lowercase(m.name) == "manifolds" || occursin("manopt", lowercase(m.name)), models)
-        if idx === nothing
-            idx = findfirst(m -> occursin("manifold", lowercase(m.name)) && !occursin("nlls", lowercase(m.name)), models)
-        end
-        return idx !== nothing ? models[idx] : first(models)
-    end
-
-    # 1. Prefer Standalone / LeastSquares
-    idx = findfirst(m -> occursin("standalone", lowercase(m.name)) || m.model isa LeastSquaresProblem, models)
-    idx !== nothing && return models[idx]
-
-    # 2. For Bundle Adjustment: prefer BundleAdjustmentModels
-    idx = findfirst(m -> occursin("bundleadjustment", lowercase(m.name)) || occursin("bam", lowercase(m.name)), models)
-    idx !== nothing && return models[idx]
-
-    return first(models)
-end
-
-"""
-    find_common_model(models::Vector{<:ModelDefinition}) -> Union{ModelDefinition, Nothing}
-
-Finds a universal Common Model (e.g. `LeastSquaresOptim` / `LeastSquaresProblem` / `NLSModel`).
-"""
-function find_common_model(models::Vector{<:ModelDefinition})
-    idx = findfirst(m -> occursin("standalone", lowercase(m.name)) || occursin("leastsquares", lowercase(m.name)) || m.model isa LeastSquaresProblem, models)
-    return idx === nothing ? nothing : models[idx]
-end
-
-"""
-    resolve_optimizer_model(opt::OptimizerDefinition, target_model::ModelDefinition, all_models::Vector{<:ModelDefinition}) -> ModelDefinition
-
-Selects the model passed to `opt.optimize`. A row with a `model_name` runs on the model of exactly that name, and an
-`ArgumentError` is thrown if there is none. Otherwise each optimizer is paired, by its name, with its optimal model
-formulation:
-- `SecondOrderOptimization`: uses `NLLSModel` (preferring specialized / static / sparse when present)
-- `LeastSquaresOptim`: uses `Standalone` / `LeastSquaresProblem`
-- `Manopt`: uses `Manifolds`
-- `JSOSolvers`, `Ipopt`, `MadNLP`, `CaNNOLeS`: use `BundleAdjustmentModels` or `NLPModels`
-- Fallback: uses `target_model`
-"""
-function resolve_optimizer_model(opt::OptimizerDefinition, target_model::ModelDefinition, all_models::Vector{<:ModelDefinition})
-    # 0. An explicit model for the row (P2a): the model of that exact name, whatever the row's name says
-    if opt.model_name !== nothing
-        idx = findfirst(m -> m.name == opt.model_name, all_models)
-        idx === nothing && throw(ArgumentError("Optimizer row $(repr(opt.name)) asks for the model $(repr(opt.model_name)), " *
-            "which this problem does not have; its models are $(join(repr.(getfield.(all_models, :name)), ", "))"))
-        return all_models[idx]
-    end
-
-    name_lower = lowercase(opt.name)
-
-    # 1. SecondOrderOptimization: thrives on NLLSModel
-    if occursin("secondorder", name_lower) || occursin("soo", name_lower) || occursin("nllsmodel", name_lower)
-        for flavour in ["specialized", "static", "sparse"]
-            idx = findfirst(m -> m.model isa NLLSModel.Model && occursin(flavour, lowercase(m.name)), all_models)
-            idx !== nothing && return all_models[idx]
-        end
-        nlls_idx = findfirst(m -> m.model isa NLLSModel.Model, all_models)
-        nlls_idx !== nothing && return all_models[nlls_idx]
-    end
-
-    # 2. LeastSquaresOptim: thrives on LeastSquaresProblem (Standalone)
-    if occursin("leastsquares", name_lower) || occursin("lso", name_lower)
-        lso_idx = findfirst(m -> occursin("standalone", lowercase(m.name)) || m.model isa LeastSquaresProblem, all_models)
-        lso_idx !== nothing && return all_models[lso_idx]
-    end
-
-    # 3. Manopt: thrives on Manifolds
-    if occursin("manopt", name_lower)
-        man_idx = findfirst(m -> lowercase(m.name) == "manifolds" || occursin("manopt", lowercase(m.name)) || occursin("manifold", lowercase(m.name)), all_models)
-        man_idx !== nothing && return all_models[man_idx]
-    end
-
-    # 4. JSO and Interior-Point solvers: thrive on BundleAdjustmentModels or NLPModels
-    if occursin("jsosolvers", name_lower) || occursin("ipopt", name_lower) || occursin("madnlp", name_lower) || occursin("cannoles", name_lower)
-        bam_idx = findfirst(m -> occursin("bundleadjustment", lowercase(m.name)) || occursin("bam", lowercase(m.name)), all_models)
-        bam_idx !== nothing && return all_models[bam_idx]
-        nlp_idx = findfirst(m -> occursin("nlpmodels", lowercase(m.name)) || m.model isa AbstractNLPModel, all_models)
-        nlp_idx !== nothing && return all_models[nlp_idx]
-    end
-
-    # Fallback to target_model
-    return target_model
-end
-
-"""
     run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, target_model::ModelDefinition;
                              all_models=ModelDefinition[target_model], max_samples::Int=50,
                              target_total_time_sec::Float64=1.0, samples=nothing)
 
-Runs all compatible optimizers on the target model (routing `NLLSModel + ...` entries to the corresponding `NLLSModel` formulation), returning performance statistics.
+Runs each optimizer on the model of `all_models` that `resolve_optimizer_model` pairs it with (its package's native model,
+or else the Standalone model), returning performance statistics.
 Times the first (non-warmup) run with no run time limits, then calculates the number of further
 samples needed for up to 1s total computation (or up to `max_samples`), collecting at least 1 sample.
 
@@ -203,7 +96,7 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
     effective_max = samples !== nothing ? max(1, Int(samples)) : max_samples
 
     for opt in optimizers
-        opt_model = resolve_optimizer_model(opt, target_model, all_models)
+        opt_model = resolve_optimizer_model(opt, all_models)
         # Ensure this concrete (optimizer, model-type) specialization is JIT-compiled before timing
         sig = (opt.name, typeof(opt_model.model))
         if !(sig in warmed_signatures)
@@ -323,13 +216,13 @@ function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model
         # Pick standard target model
         target = if target_model_name !== nothing
             idx = findfirst(m -> m.name == target_model_name, models)
-            idx !== nothing ? models[idx] : get_standard_optimizer_model(models, prob.category)
+            idx !== nothing ? models[idx] : get_standard_optimizer_model(models)
         else
-            get_standard_optimizer_model(models, prob.category)
+            get_standard_optimizer_model(models)
         end
 
         for opt in prob.compatible_optimizers
-            opt_model = resolve_optimizer_model(opt, target, models)
+            opt_model = resolve_optimizer_model(opt, models)
             push!(warmed_signatures, (opt.name, typeof(opt_model.model)))
             try
                 opt_model.reset!()
@@ -362,13 +255,14 @@ function run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=
     model_results = run_model_benchmarks(models; samples=model_samples)
     target_model = if target_model_name !== nothing
         idx = findfirst(m -> m.name == target_model_name, models)
-        idx !== nothing ? models[idx] : get_standard_optimizer_model(models, prob.category)
+        idx !== nothing ? models[idx] : get_standard_optimizer_model(models)
     else
-        get_standard_optimizer_model(models, prob.category)
+        get_standard_optimizer_model(models)
     end
 
-    # Phase 2: Optimizers (each on optimal model representation), every row's costs evaluated by the standard model's evaluator
-    evaluator = point_evaluator(get_standard_optimizer_model(models, prob.category))
+    # Phase 2: Optimizers, each on the model the pairing gives it (`resolve_optimizer_model`), every row's costs evaluated by
+    # the standard model's evaluator
+    evaluator = point_evaluator(get_standard_optimizer_model(models))
     optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples, evaluator,
         reference=prob.reference_cost(size))
 
@@ -404,7 +298,7 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
 
     # 1. Determine target model from sample size
     sample_models = prob.generate_models(first(sizes))
-    standard_m = get_standard_optimizer_model(sample_models, prob.category)
+    standard_m = get_standard_optimizer_model(sample_models)
     winning_model_name = target_model_name !== nothing ? target_model_name : standard_m.name
 
     has_phase1_models = length(sample_models) > 1
@@ -487,11 +381,11 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
         models = all_models[i]
         m_results = all_model_results[i]
         target_idx = findfirst(m -> m.name == winning_model_name, models)
-        target_model = target_idx !== nothing ? models[target_idx] : get_standard_optimizer_model(models, prob.category)
+        target_model = target_idx !== nothing ? models[target_idx] : get_standard_optimizer_model(models)
 
-        # Run optimizers on target model (routing NLLSModel + ... to NLLSModel), streaming each optimizer result immediately to file
+        # Run each optimizer on the model the pairing gives it, streaming each size's rows to file once all have run
         optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples,
-            warmed_signatures=warmed_signatures, evaluator=point_evaluator(get_standard_optimizer_model(models, prob.category)),
+            warmed_signatures=warmed_signatures, evaluator=point_evaluator(get_standard_optimizer_model(models)),
             reference=prob.reference_cost(sz),
             on_result = (opt_name, r) -> append_optimizer_evaluation(data_file, sz, opt_name, r)
         )

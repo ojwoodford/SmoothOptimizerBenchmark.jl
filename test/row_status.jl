@@ -3,10 +3,11 @@ using SmoothOptimizerBenchmark, Printf
 isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
 
 # A stub row that claims `converged` (or not) at a given point, with a solver's own cost that the harness ignores
+# A stub's name names no package, so it names its model (IND1): "Standalone", the standard model of the problems used here
 stub_row(name, x; converged=true) = OptimizerDefinition(name, (m; solution=nothing, kwargs...) -> begin
     solution === nothing || append!(empty!(solution), x)
     OptimizerResult(1.0e3, 0, 0, 3, 0.0, 0.0, converged; message="stub")
-end)
+end, "Standalone")
 
 @testset "A row is ok only if its cost passes the test (IT4)" begin
     SOB = SmoothOptimizerBenchmark
@@ -19,7 +20,7 @@ end)
     ode = create_ode_bvp_problem()
     @test ode.reference_cost(4096) == 0.0
     ode_models = ode.generate_models(4096)
-    ode_std = get_standard_optimizer_model(ode_models, ode.category)
+    ode_std = get_standard_optimizer_model(ode_models)
     lso = only(filter(o -> o.name == "LeastSquaresOptim (Dogleg)", ode.compatible_optimizers))
     r_lso = run_optimizer_benchmarks([lso], ode_std; all_models=ode_models, samples=1, reference=0.0)[lso.name]
     @test r_lso.final_cost > 0.99 * r_lso.start_cost
@@ -32,7 +33,7 @@ end)
     rd = create_rosenbrock_dense_problem()
     @test rd.reference_cost(6) == 0.0
     rd_models = rd.generate_models(6)
-    rd_std = get_standard_optimizer_model(rd_models, rd.category)
+    rd_std = get_standard_optimizer_model(rd_models)
     ev = SOB.point_evaluator(rd_std)
     x_local = [-0.663967779442176, 0.8669554213761816, 0.8440265088560183, 0.8129759294645175, 0.770498797438184, 0.7141993664423817]
     @test ev.cost(x_local) ≈ 2.5072 rtol=1e-4
@@ -53,7 +54,7 @@ end)
     cf = create_curve_fitting_problem()
     @test cf.reference_cost(64) === nothing
     cf_models = cf.generate_models(64)
-    cf_std = get_standard_optimizer_model(cf_models, cf.category)
+    cf_std = get_standard_optimizer_model(cf_models)
     x_min = Float64[]
     optimize_soo(cf_std; method=:lm, solution=x_min)
     cf_ev = SOB.point_evaluator(cf_std)
@@ -67,7 +68,7 @@ end)
     @test occursin(@sprintf("reference %.6e", cf_ev.cost(x_min)), rows_cf["Converged at the start"].message)
 
     # A converged row that hands back no point fails the cost test and cannot be tested for stationarity
-    silent = OptimizerDefinition("No point", (m; kwargs...) -> OptimizerResult(1.0e3, 0, 0, 3, 0.0, 0.0, true))
+    silent = OptimizerDefinition("No point", (m; kwargs...) -> OptimizerResult(1.0e3, 0, 0, 3, 0.0, 0.0, true), "Standalone")
     @test run_optimizer_benchmarks([silent], cf_std; all_models=cf_models, samples=1)["No point"].status === :above_reference
 
     # Rows reach on_result, and so the results file, only once the size has run, with their final statuses

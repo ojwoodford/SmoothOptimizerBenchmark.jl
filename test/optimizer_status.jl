@@ -10,9 +10,10 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     # An adapter that throws is reported as :error with the exception text, not as a bare NaN row
     prob = create_curve_fitting_problem()
     models = prob.generate_models(64)
-    target = get_standard_optimizer_model(models, prob.category)
-    bad = OptimizerDefinition("Broken adapter", (m; kwargs...) -> error("adapter exploded"))
-    skip = OptimizerDefinition("Skipping adapter", (m; kwargs...) -> skipped_result("not applicable"))
+    target = get_standard_optimizer_model(models)
+    # A stub's name names no package, so it names its model (IND1)
+    bad = OptimizerDefinition("Broken adapter", (m; kwargs...) -> error("adapter exploded"), "Standalone")
+    skip = OptimizerDefinition("Skipping adapter", (m; kwargs...) -> skipped_result("not applicable"), "Standalone")
     good = OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_nlls_soo(m; method=:lm, kwargs...))
     res = @test_logs (:warn, r"Broken adapter") match_mode=:any run_optimizer_benchmarks([bad, skip, good], target; all_models=models, samples=1)
     @test res["Broken adapter"].status === :error
@@ -27,7 +28,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         calls[] += 1
         calls[] >= 3 && error("sample exploded")   # call 1 is the warm-up, call 2 the first timed run
         OptimizerResult(1.0e3, 0, 0, 1, 1.0, 0.5, true)
-    end)
+    end, "Standalone")
     res_flaky = @test_logs (:warn, r"Flaky adapter threw in a timing sample") match_mode=:any run_optimizer_benchmarks([flaky], target; all_models=models, samples=3)
     @test calls[] == 3
     @test res_flaky["Flaky adapter"].status === :error

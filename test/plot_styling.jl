@@ -32,7 +32,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     # Optim NewtonTrustRegion on sparse problem must gracefully return converged=false & NaN time
     sp_prob = create_rosenbrock_sparse_problem()
     sp_models = sp_prob.generate_models(10)
-    sp_target = get_standard_optimizer_model(sp_models, sp_prob.category)
+    sp_target = get_standard_optimizer_model(sp_models)
     res_ntr = optimize_optim(sp_target; method=:newton_trust_region)
     @test isnan(res_ntr.time_ns)
     @test !res_ntr.converged

@@ -211,8 +211,7 @@ Defines a compatible optimizer for a problem:
 - `name`: Human-readable identifier (e.g. "SecondOrderOptimization (LM)", "Ipopt", "JSOSolvers (tron)")
 - `optimize`: Function `(model_def) -> OptimizerResult` executing optimization on the given model
 - `model_name`: `nothing` (the two-argument constructor), or the exact name of a model. When set, the row runs on the
-  model of that name, whatever its own name says; otherwise the model is chosen from the row's name
-  (`resolve_optimizer_model`).
+  model of that name; otherwise on the model the pairing table gives the row's package (`resolve_optimizer_model`).
 """
 struct OptimizerDefinition
     name::String

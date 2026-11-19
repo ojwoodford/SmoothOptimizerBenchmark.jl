@@ -5,7 +5,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
 # Every row of `prob` at `sz` through the harness (one sample), each adapter's own result captured beside the row
 function rows_with_own_results(prob, sz)
     models = prob.generate_models(sz)
-    std = get_standard_optimizer_model(models, prob.category)
+    std = get_standard_optimizer_model(models)
     own = Dict{String, OptimizerResult}()
     capture(o) = OptimizerDefinition(o.name, (m; kwargs...) -> begin
         r = o.optimize(m; kwargs...)
@@ -34,16 +34,17 @@ end
     # skipped and failed rows. The start cost is the evaluator's, for every row that ran
     cf = create_curve_fitting_problem()
     cf_models = cf.generate_models(64)
-    cf_std = get_standard_optimizer_model(cf_models, cf.category)
+    cf_std = get_standard_optimizer_model(cf_models)
     cf_ev = SOB.point_evaluator(cf_std)
     x_lm = Float64[]
     r_lm = optimize_soo(cf_std; method=:lm, solution=x_lm)
     liar = OptimizerDefinition("Wrong own cost", (m; solution=nothing, kwargs...) -> begin
         solution === nothing || append!(empty!(solution), x_lm)
         OptimizerResult(1.0e3, 0, 0, 7, 123.0, 1.0e9, true)
-    end)
-    silent = OptimizerDefinition("No point", (m; kwargs...) -> OptimizerResult(1.0e3, 0, 0, 7, 123.0, 1.0e9, true))
-    skip = OptimizerDefinition("Skipping adapter", (m; kwargs...) -> skipped_result("not applicable"; start_cost=123.0))
+    end, "Standalone")
+    # A stub's name names no package, so it names its model (IND1)
+    silent = OptimizerDefinition("No point", (m; kwargs...) -> OptimizerResult(1.0e3, 0, 0, 7, 123.0, 1.0e9, true), "Standalone")
+    skip = OptimizerDefinition("Skipping adapter", (m; kwargs...) -> skipped_result("not applicable"; start_cost=123.0), "Standalone")
     stub_rows = run_optimizer_benchmarks([liar, silent, skip], cf_std; all_models=cf_models, samples=1)
     @test stub_rows["Wrong own cost"].final_cost == cf_ev.cost(x_lm)
     @test isapprox(stub_rows["Wrong own cost"].final_cost, r_lm.final_cost; rtol=1e-12)
@@ -77,7 +78,7 @@ end
     # The ManifoldVar model, which no row runs on by default, hands back the same rotation layout
     pr = create_robust_procrustes_problem()
     pr_models = pr.generate_models(3)
-    pr_ev = SOB.point_evaluator(get_standard_optimizer_model(pr_models, pr.category))
+    pr_ev = SOB.point_evaluator(get_standard_optimizer_model(pr_models))
     m_ovi = only(filter(m -> m.name == "NLLSModel (ManifoldVar)", pr_models))
     x_ovi = Float64[]
     r_ovi = optimize_soo(m_ovi; method=:lm, solution=x_ovi)

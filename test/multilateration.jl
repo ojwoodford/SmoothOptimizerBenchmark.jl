@@ -40,10 +40,10 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         end
         @test J ≈ J_fd rtol=1e-8
         # Routing: the SecondOrderOptimization rows run Model 1, the others the Standalone model
-        target = get_standard_optimizer_model(models, prob.category)
+        target = get_standard_optimizer_model(models)
         @test target === m_sa
-        @test SmoothOptimizerBenchmark.resolve_optimizer_model(lm, target, models) === m_nlls
-        @test SmoothOptimizerBenchmark.resolve_optimizer_model(tall, target, models) === m_nlls
+        @test SmoothOptimizerBenchmark.resolve_optimizer_model(lm, models) === m_nlls
+        @test SmoothOptimizerBenchmark.resolve_optimizer_model(tall, models) === m_nlls
         # The formulations agree on cost (rules.md 31), and each solution is near the true point
         x_nlls, x_sa, x_tall = Float64[], Float64[], Float64[]
         r_nlls = lm.optimize(m_nlls; solution=x_nlls)

@@ -7,7 +7,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     sz = first(prob.default_sizes)
     ref = SmoothOptimizerBenchmark.polyfit_reference(sz)
     models = prob.generate_models(sz)
-    target = get_standard_optimizer_model(models, prob.category)
+    target = get_standard_optimizer_model(models)
     res = run_optimizer_benchmarks(prob.compatible_optimizers, target; all_models=models, samples=1)
     r_tall = res["SecondOrderOptimization (LM, tall)"]
     r_norm = res["SecondOrderOptimization (LM)"]

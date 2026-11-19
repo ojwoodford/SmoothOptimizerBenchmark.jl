@@ -34,6 +34,7 @@ include("standalone.jl")
 include("point_evaluation.jl")
 include("row_status.jl")
 include("markdown_storage.jl")
+include("pairing.jl")
 include("harness.jl")
 include("plotting.jl")
 

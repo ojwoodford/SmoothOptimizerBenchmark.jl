@@ -198,12 +198,12 @@ const DM_MODES = Dict(
         models = prob.generate_models(first(prob.default_sizes))
         nl = dm_nlls(models)
         sa = only(filter(m -> m.model isa DMB.LeastSquaresProblem, models))
-        target = get_standard_optimizer_model(models, prob.category)
+        target = get_standard_optimizer_model(models)
         @test target === sa
         jump = findfirst(m -> m.name == "JuMP", models)
         for o in prob.compatible_optimizers
             o.model_name === nothing || continue
-            got = DMB.resolve_optimizer_model(o, target, models)
+            got = DMB.resolve_optimizer_model(o, models)
             if startswith(o.name, "SecondOrderOptimization")
                 @test got === nl
             elseif startswith(o.name, "LeastSquaresOptim")

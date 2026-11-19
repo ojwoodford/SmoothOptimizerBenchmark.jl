@@ -15,7 +15,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     prob = create_robust_procrustes_problem()
     for d in (3, 4)
         models = prob.generate_models(d)
-        std = get_standard_optimizer_model(models, prob.category)
+        std = get_standard_optimizer_model(models)
         rows = run_optimizer_benchmarks(prob.compatible_optimizers, std; all_models=models, samples=1)
         manopt = rows["Manopt (LevenbergMarquardt)"]
         @test manopt.status === :ok

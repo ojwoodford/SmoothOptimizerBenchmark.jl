@@ -10,8 +10,8 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     for (prob, sz) in ((create_curve_fitting_problem(), 256), (create_rosenbrock_dense_problem(), 8), (create_robust_procrustes_problem(), 4), (create_multilateration_problem(), 8), (create_robust_curve_fitting_problem(), 256))
         @test any(o -> o.name == tall.name, prob.compatible_optimizers)
         models = prob.generate_models(sz)
-        target = get_standard_optimizer_model(models, prob.category)
-        md = SmoothOptimizerBenchmark.resolve_optimizer_model(tall, target, models)
+        target = get_standard_optimizer_model(models)
+        md = SmoothOptimizerBenchmark.resolve_optimizer_model(tall, models)
         r_tall = tall.optimize(md)
         r_norm = normal_lm(md)
         @test r_norm.status === :ok
@@ -37,7 +37,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         @test any(o -> o.name == tall.name, prob.compatible_optimizers)
         sz = first(prob.default_sizes)
         models = prob.generate_models(sz)
-        md = SmoothOptimizerBenchmark.resolve_optimizer_model(tall, get_standard_optimizer_model(models, prob.category), models)
+        md = SmoothOptimizerBenchmark.resolve_optimizer_model(tall, models)
         @test md.model isa SmoothOptimizerBenchmark.NLLSModel.Model
         r_tall = tall.optimize(md)
         r_norm = normal_lm(md)
@@ -57,10 +57,10 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     ba_tall = only(filter(o -> o.name == tall.name, ba.compatible_optimizers))
     ba_lm = only(filter(o -> o.name == "SecondOrderOptimization (LM)", ba.compatible_optimizers))
     models = ba.generate_models(first(ba.default_sizes))
-    target = get_standard_optimizer_model(models, ba.category)
-    md = SmoothOptimizerBenchmark.resolve_optimizer_model(ba_tall, target, models)
+    target = get_standard_optimizer_model(models)
+    md = SmoothOptimizerBenchmark.resolve_optimizer_model(ba_tall, models)
     @test md.model isa SmoothOptimizerBenchmark.NLLSModel.Model
-    @test SmoothOptimizerBenchmark.resolve_optimizer_model(ba_lm, target, models) === md
+    @test SmoothOptimizerBenchmark.resolve_optimizer_model(ba_lm, models) === md
     r_norm = ba_lm.optimize(md)
     @test r_norm.status === :ok
     ba_proto(storage) = last(SmoothOptimizerBenchmark.NLLSModel.optimvars_nls(md.model; reduction=:eliminate, storage))
@@ -87,7 +87,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         lm = only(filter(o -> o.name == "SecondOrderOptimization (LM)", prob.compatible_optimizers))
         for sz in prob.default_sizes[1:2]
             models = prob.generate_models(sz)
-            md = SmoothOptimizerBenchmark.resolve_optimizer_model(lsmr, get_standard_optimizer_model(models, prob.category), models)
+            md = SmoothOptimizerBenchmark.resolve_optimizer_model(lsmr, models)
             @test md.model isa SmoothOptimizerBenchmark.NLLSModel.Model
             r_lsmr = lsmr.optimize(md)
             r_norm = lm.optimize(md)
@@ -116,7 +116,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     @test optimize_soo(sp_nlls; method=:lm, formulation=:jacobian, storage=:sparse).status === :ok
     @test_throws ArgumentError optimize_soo(sp_nlls; method=:lm, storage=:bogus)
     @test_throws ArgumentError optimize_nlls_soo(sp_nlls; method=:lm, storage=:bogus)
-    sp_lsp = get_standard_optimizer_model(sp_models, sp.category)
+    sp_lsp = get_standard_optimizer_model(sp_models)
     @test optimize_soo(sp_lsp; method=:lm, formulation=:jacobian).status === :skipped
 
     # N2: the tall objective of a dense LeastSquaresProblem gives the same minimum as the normal equations

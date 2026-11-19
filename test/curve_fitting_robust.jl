@@ -51,16 +51,16 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         models = prob.generate_models(n)
         m_nlls = only(filter(m -> m.name == "NLLSModel (Static)", models))
         m_sa = only(filter(m -> m.name == "Standalone (fudged)", models))
-        target = get_standard_optimizer_model(models, prob.category)
+        target = get_standard_optimizer_model(models)
         @test target === m_sa
         # Routing: the native rows run Model 1, every other row the fudged model; a renamed row has its original's
         # model and style, and the control row has a style of its own
         for o in prob.compatible_optimizers
             native = o.name in names[1:4]
-            @test resolve(o, target, models) === (native ? m_nlls : m_sa)
+            @test resolve(o, models) === (native ? m_nlls : m_sa)
             orig = replace(replace(o.name, ", fudged)" => ")"), " (fudged)" => "")
             if o.model_name === nothing && o.name != orig
-                @test resolve(standard[orig], target, models) === m_sa
+                @test resolve(standard[orig], models) === m_sa
                 @test SB.optimizer_style(o.name) == SB.optimizer_style(orig)
             end
         end
