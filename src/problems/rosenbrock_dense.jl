@@ -30,22 +30,6 @@ NLLSModel.varindices(res::RosenOffDiagDense) = res.varind
 NLLSModel.getvars(res::RosenOffDiagDense, vars::AbstractVector) = (vars[res.varind[1]]::Float64, vars[res.varind[2]]::Float64)
 NLLSModel.computeresidual(res::RosenOffDiagDense, x, y) = res.weight * (y - x^2)
 
-function rosenbrock_dense_res!(out, x)
-    n = length(x)
-    @inbounds for k in 1:n
-        out[k] = rosen_diag_w_dense * (x[k] - 1.0)
-    end
-    i = n + 1
-    @inbounds for j in 1:n-1
-        xj2 = x[j]^2
-        for k in j+1:n
-            out[i] = rosen_offdiag_w_dense * (x[k] - xj2)
-            i += 1
-        end
-    end
-    return out
-end
-
 function build_nlls_dense(n::Int)
     costs = NLLSModel.CostStruct{Union{RosenDiagDense, RosenOffDiagDense}}()
     append!(get(costs, RosenDiagDense), [RosenDiagDense(rosen_diag_w_dense, k) for k in 1:n])
@@ -90,10 +74,11 @@ function create_rosenbrock_dense_problem()
                 () -> copyto!(nlls_prob.variables, x0)
             )
 
-            # Model 2: Standalone
+            # Model 2: Standalone: the NLLSModel model's own costs, their residuals and Jacobians filled cost by cost by
+            # NLLSModel's computeresidual and computeresjac (autodiff), in a plain loop, into a dense J (DM6)
+            lsp = standalone_problem((get(nlls_prob.costs, RosenDiagDense), get(nlls_prob.costs, RosenOffDiagDense)), x0)
+            x_lso = lsp.x
             r_buf = zeros(Float64, m_len)
-            x_lso = copy(x0)
-            lsp = LeastSquaresProblem(x=x_lso, f! = rosenbrock_dense_res!, output_length=m_len, autodiff=:forward)
             J_buf = deepcopy(lsp.J)
             g_buf = zeros(Float64, n)
             H_buf = zeros(Float64, n, n)
@@ -101,11 +86,11 @@ function create_rosenbrock_dense_problem()
                 "Standalone",
                 lsp,
                 () -> begin
-                    rosenbrock_dense_res!(r_buf, x_lso)
+                    lsp.f!(r_buf, x_lso)
                     return 0.5 * sum(abs2, r_buf)
                 end,
                 () -> begin
-                    rosenbrock_dense_res!(r_buf, x_lso)
+                    lsp.f!(r_buf, x_lso)
                     lsp.g!(J_buf, x_lso)
                     mul!(g_buf, J_buf', r_buf)
                     mul!(H_buf, J_buf', J_buf)
