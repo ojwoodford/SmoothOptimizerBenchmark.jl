@@ -35,8 +35,9 @@ const PAIRED_MODELS = Dict(
         "Standalone" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "Multilateration" => Dict(
+        "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
         "NLLSModel (Static)" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)"],
-        "Standalone" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)", "CaNNOLeS"],
+        "Standalone" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "Nonlinear 3D Pose Chain" => Dict(
         "NLLSModel (Sparse)" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)", "SecondOrderOptimization (LM, tall, LSMR)"],

@@ -11,8 +11,9 @@
 # JᵀJ = Σ uᵢuᵢᵀ ≈ 4I: the problem is well conditioned.
 #
 # A cost has d inputs, up to 16, so the problem is analytic (DM1): each residual has a hand-written Jacobian, (x − aᵢ)ᵀ/‖x − aᵢ‖,
-# `computeresjac` below. Two models, both built from the same residuals and both using that Jacobian: NLLSModel with one
-# static variable, and a Standalone LeastSquaresProblem (`standalone_problem`) that fills r and J cost by cost.
+# `computeresjac` below. Two models are built from the same residuals and both use that Jacobian: NLLSModel with one
+# static variable, and a Standalone LeastSquaresProblem (`standalone_problem`) that fills r and J cost by cost. The third,
+# JuMP, is the native model of JSOSolvers, Ipopt, MadNLP and CaNNOLeS; JuMP differentiates its expressions itself.
 using Static, StaticArrays, LinearAlgebra, Random
 using SecondOrderOptimization, NLLSModel, LeastSquaresOptim
 
@@ -109,13 +110,23 @@ function multilateration_standalone_model(costs::Vector{MultilaterationResidual{
     )
 end
 
+# Model 3: JuMP (IND3e), one residual expression per anchor, ‖x − aᵢ‖ − ρᵢ, in x[1:d]. JuMP differentiates it itself
+function build_jump_multilateration(data)
+    d, m = size(data.anchors)
+    model = JuMP.Model()
+    @variable(model, x[k = 1:d], start = data.x0[k])
+    F = [@NLexpression(model, sqrt(sum((x[k] - data.anchors[k, i])^2 for k in 1:d)) - data.ranges[i]) for i in 1:m]
+    return MathOptNLSModel(model, F)
+end
+
 """
     create_multilateration_problem() -> ProblemDefinition
 
 Multilateration in `R^d`: the point whose distances to `m = 4d` anchors best match noisy ranges, at
 `d = 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16`, the sizes of SecondOrderOptimization's static linear system.
-Two models, both from the same residuals and their hand-written Jacobian: "NLLSModel (Static)" (one `SVector{d}`
-variable) and "Standalone" (a `LeastSquaresProblem` filled cost by cost). Data from `multilateration_data`.
+Three models: two from the same residuals and their hand-written Jacobian, "NLLSModel (Static)" (one `SVector{d}`
+variable) and "Standalone" (a `LeastSquaresProblem` filled cost by cost), and "JuMP", the residuals as JuMP expressions,
+which JuMP differentiates itself. Data from `multilateration_data`.
 """
 function create_multilateration_problem()
     ProblemDefinition(
@@ -125,7 +136,8 @@ function create_multilateration_problem()
         d -> begin
             data = multilateration_data(d)
             costs = multilateration_costs(Val(d), data)
-            return [multilateration_nlls_model(costs, data), multilateration_standalone_model(costs, data)]
+            return [multilateration_nlls_model(costs, data), multilateration_standalone_model(costs, data),
+                    jump_model("JuMP", build_jump_multilateration(data), copy(data.x0))]
         end,
         get_standard_optimizers(; tall=true),
         "Dimension d";
