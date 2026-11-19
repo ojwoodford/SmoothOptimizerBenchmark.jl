@@ -51,6 +51,10 @@ function build_jso_dense(n::Int)
     return MathOptNLSModel(model, [FA; FB])
 end
 
+# The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, n = 32,
+# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_wellconditioned, RS_hessian, L_dense, I_lm
+const ROSENBROCK_DENSE_SOO = (; iterator = :levenbergmarquardt, linsolver = :cholesky, formulation = :hessian, reduction = :none, storage = :dense)
+
 function create_rosenbrock_dense_problem()
     ProblemDefinition(
         "Dense Multi-dimensional Rosenbrock",
@@ -104,7 +108,7 @@ function create_rosenbrock_dense_problem()
 
             return [m_nlls, m_lso, m_jump]
         end,
-        get_standard_optimizers(; tall=true),
+        get_standard_optimizers(ROSENBROCK_DENSE_SOO),
         "Dimension n",
         # The global minimum, x = 1, has zero residuals (IT4)
         _ -> 0.0;

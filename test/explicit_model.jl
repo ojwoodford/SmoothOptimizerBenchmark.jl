@@ -7,56 +7,56 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
 const PAIRED_MODELS = Dict(
     "Sparse Multi-dimensional Rosenbrock" => Dict(
         "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
-        "NLLSModel" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)", "SecondOrderOptimization (LM, tall, LSMR)"],
+        "NLLSModel" => ["SecondOrderOptimization"],
         "Standalone (Sparse)" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "Exponential Curve Fitting" => Dict(
         "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
-        "NLLSModel (Static)" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)"],
+        "NLLSModel (Static)" => ["SecondOrderOptimization"],
         "Standalone" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "Robust Exponential Curve Fitting" => Dict(
-        "NLLSModel (Static)" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)"],
         "JuMP (fudged)" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS (fudged)"],
-        "Standalone (fudged)" => ["SecondOrderOptimization (LM, fudged)", "LeastSquaresOptim (Dogleg, fudged)", "LeastSquaresOptim (LM, fudged)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM, fudged)", "NonlinearSolve (TrustRegion, fudged)"],
+        "NLLSModel (Static)" => ["SecondOrderOptimization"],
+        "Standalone (fudged)" => ["LeastSquaresOptim (Dogleg, fudged)", "LeastSquaresOptim (LM, fudged)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM, fudged)", "NonlinearSolve (TrustRegion, fudged)"],
     ),
     "Ill-Conditioned Polynomial Fitting" => Dict(
         "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
-        "NLLSModel (Static)" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)"],
+        "NLLSModel (Static)" => ["SecondOrderOptimization"],
         "Standalone" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "Dense Affine Alignment" => Dict(
         "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
-        "NLLSModel" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)"],
+        "NLLSModel" => ["SecondOrderOptimization"],
         "Standalone" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "Dense Multi-dimensional Rosenbrock" => Dict(
         "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
-        "NLLSModel" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)"],
+        "NLLSModel" => ["SecondOrderOptimization"],
         "Standalone" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "Multilateration" => Dict(
         "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
-        "NLLSModel (Static)" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)"],
+        "NLLSModel (Static)" => ["SecondOrderOptimization"],
         "Standalone" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "Nonlinear 3D Pose Chain" => Dict(
         "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
-        "NLLSModel (Sparse)" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)", "SecondOrderOptimization (LM, tall, LSMR)"],
+        "NLLSModel (Sparse)" => ["SecondOrderOptimization"],
         "Standalone (Sparse)" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "1D ODE Boundary Value Problem" => Dict(
         "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
-        "NLLSModel (Sparse)" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)"],
+        "NLLSModel (Sparse)" => ["SecondOrderOptimization"],
         "Standalone (Sparse)" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "Robust Procrustes on SO(d)" => Dict(
         "Manifolds" => ["Manopt (LevenbergMarquardt)"],
-        "NLLSModel (Specialized)" => ["SecondOrderOptimization (LM)", "SecondOrderOptimization (LM, tall)", "SecondOrderOptimization (Dogleg)"],
+        "NLLSModel (Specialized)" => ["SecondOrderOptimization"],
     ),
     "Sparse Bundle Adjustment" => Dict(
         "BundleAdjustmentModels" => ["CaNNOLeS", "JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP"],
-        "NLLSModel" => ["SecondOrderOptimization (LM)", "SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)", "SecondOrderOptimization (LM, tall, LSMR)"],
+        "NLLSModel" => ["SecondOrderOptimization"],
     ),
 )
 
@@ -92,9 +92,8 @@ end
     @test err isa ArgumentError
     @test occursin("SecondOrderOptimization (LM)", err.msg) && occursin("No such model", err.msg)
     @test occursin("NLLSModel (Static)", err.msg) && occursin("Standalone", err.msg)
-    # Only P2's control row sets a model name; every other row is paired by its package
-    @test [(o.name, o.model_name) for p in problems for o in p.compatible_optimizers if o.model_name !== nothing] ==
-        [("SecondOrderOptimization (LM, fudged)", "Standalone (fudged)")]
+    # No row sets a model name (P2's control row went in IND4c): every row is paired by its package
+    @test isempty([o.name for p in problems for o in p.compatible_optimizers if o.model_name !== nothing])
 
     # IND1: the pairing table. A row's package is the part of its name before " ("
     @test SB.row_package("SecondOrderOptimization (LM, tall)") == "SecondOrderOptimization"
@@ -116,6 +115,19 @@ end
     for p in problems
         @test paired_models(p, first(p.default_sizes)) == PAIRED_MODELS[p.name]
     end
+    # IND4: one SecondOrderOptimization row per problem, named for the package alone, from the problem's hard-coded
+    # configuration: the five choices NLLSModel's recommender made at the problem's largest size
+    for p in problems
+        soo = filter(o -> SB.row_package(o.name) == "SecondOrderOptimization", p.compatible_optimizers)
+        @test [o.name for o in soo] == ["SecondOrderOptimization"]
+    end
+    configs = [SB.AFFINE_ALIGNMENT_SOO, SB.BUNDLE_ADJUSTMENT_SOO, SB.CURVE_FITTING_SOO, SB.MULTILATERATION_SOO, SB.ODE_BVP_SOO,
+               SB.POLYNOMIAL_FITTING_SOO, SB.POSE_CHAIN_SOO, SB.ROBUST_CURVE_FITTING_SOO, SB.ROBUST_PROCRUSTES_SOO,
+               SB.ROSENBROCK_DENSE_SOO, SB.ROSENBROCK_SPARSE_SOO]
+    @test all(c -> keys(c) == (:iterator, :linsolver, :formulation, :reduction, :storage), configs)
+    @test SB.soo_optimizer(SB.POSE_CHAIN_SOO).name == "SecondOrderOptimization"
+    @test_throws MethodError SB.soo_optimizer((; iterator = :dogleg))
+
     # The JuMP model is built at every size (decision 18: no build was near its limits, IND3), so the map is the same at
     # the largest size: sparse Rosenbrock's, the largest JuMP model
     sr = create_rosenbrock_sparse_problem()

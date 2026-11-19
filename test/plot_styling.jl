@@ -10,22 +10,10 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     @test SmoothOptimizerBenchmark.optimizer_style("CaNNOLeS")[1] == :chocolate
     @test SmoothOptimizerBenchmark.optimizer_style("MadNLP")[1] == :teal
     @test SmoothOptimizerBenchmark.optimizer_style("NonlinearSolve (LM)")[1] == :deeppink
-    @test SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (LM)") == (:red, :solid, :circle)
-    @test SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (Dogleg)") == (:red, :dash, :square)
-    @test SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (Sparse LM)") == (:red, :solid, :circle)
-    @test SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (Sparse Dogleg)") == (:red, :dash, :square)
-    @test SmoothOptimizerBenchmark.optimizer_style("NLLSModel + SecondOrderOptimization (LM)") == (:red, :dot, :star5)
-    @test SmoothOptimizerBenchmark.optimizer_style("NLLSModel + SecondOrderOptimization (Dogleg)") == (:red, :dashdot, :star5)
-    @test SmoothOptimizerBenchmark.optimizer_style("NLLSModel + SecondOrderOptimization (Sparse LM)") == (:red, :dot, :star5)
-    @test SmoothOptimizerBenchmark.optimizer_style("NLLSModel + SecondOrderOptimization (Sparse Dogleg)") == (:red, :dashdot, :star5)
-    # B11: the tall row has a line of its own; the polynomial fit has an explicit slug
-    tall_style = SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (LM, tall)")
-    @test tall_style == (:red, :dashdotdot, :utriangle)
-    @test tall_style != SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (LM)")
-    # T4: the LSMR row has the tall row's line and a marker of its own
-    lsmr_style = SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization (LM, tall, LSMR)")
-    @test lsmr_style == (:red, :dashdotdot, :dtriangle)
-    @test lsmr_style != tall_style
+    # IND4c: the one SecondOrderOptimization row is red, solid, with a circle; the flavours of the other packages remain
+    @test SmoothOptimizerBenchmark.optimizer_style("SecondOrderOptimization") == (:red, :solid, :circle)
+    @test SmoothOptimizerBenchmark.optimizer_style("JSOSolvers (tron)") == (:forestgreen, :dash, :square)
+    @test SmoothOptimizerBenchmark.optimizer_style("LeastSquaresOptim (LM)") == (:blue, :solid, :circle)
     @test problem_slug(create_polynomial_fitting_problem().name) == "polynomial_fitting"
     @test length(unique(problem_slug(p.name) for p in problems)) == length(problems)
 
@@ -39,7 +27,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     @test res_ntr.status === :skipped
     @test !isempty(res_ntr.message)
 
-    # SOO with maxiters=1 from non-optimal start must report converged=false
+    # SecondOrderOptimization with maxiters=1 from non-optimal start must report converged=false
     res_soo_1 = optimize_soo(sp_target; method=:lm, maxiters=1)
     @test !res_soo_1.converged
     @test res_soo_1.status === :not_converged

@@ -217,6 +217,10 @@ function _make_bam_model_definition(bam_model::BundleAdjustmentModel)
     )
 end
 
+# The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, 256 cameras,
+# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_illconditioned, RS_jacobian, L_jacobian, I_dtd. No model keywords were passed: the recommender decided
+const BUNDLE_ADJUSTMENT_SOO = (; iterator = :levenbergmarquardt_dtd, linsolver = :qr, formulation = :jacobian, reduction = :eliminate, storage = :sparse)
+
 function create_bundle_adjustment_problem()
     ProblemDefinition(
         "Sparse Bundle Adjustment",
@@ -234,14 +238,7 @@ function create_bundle_adjustment_problem()
             return [m_nlls, m_bam]
         end,
         [
-            OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:levenbergmarquardt_dtd, reduction=:eliminate, kwargs...)),
-            OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, reduction=:eliminate, kwargs...)),
-            # Gauss–Newton, like CaNNOLeS's Newton_noFHess (IT2)
-            soo_gauss_newton_optimizer(; reduction=:eliminate),
-            # QR elimination on the tall path (square-root bundle adjustment), same iterator and reduction as the LM row
-            OptimizerDefinition("SecondOrderOptimization (LM, tall)", (m; kwargs...) -> optimize_soo(m; method=:levenbergmarquardt_dtd, formulation=:jacobian, reduction=:eliminate, kwargs...)),
-            # The same with LSMR on the reduced Jacobian (T3)
-            soo_tall_lsmr_optimizer(; method=:levenbergmarquardt_dtd, reduction=:eliminate),
+            soo_optimizer(BUNDLE_ADJUSTMENT_SOO),
             OptimizerDefinition("CaNNOLeS", (m; kwargs...) -> optimize_cannoles(m; kwargs...)),
             OptimizerDefinition("JSOSolvers (trunk)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:trunk, kwargs...)),
             OptimizerDefinition("JSOSolvers (tron)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:tron, kwargs...)),

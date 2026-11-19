@@ -37,15 +37,13 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         abs(r) <= SB.EXP_HUBER_WIDTH && @test scale == 1
     end
 
-    # Rows (step 9): the four native rows (IT2 added Gauss-Newton), the control row, then the others, the residual-only
-    # packages' renamed
+    # Rows (step 9; IND4c): the one SecondOrderOptimization row, then the others, the residual-only packages' renamed
     names = [o.name for o in prob.compatible_optimizers]
-    @test names[1:5] == ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)",
-        "SecondOrderOptimization (LM, tall)", "SecondOrderOptimization (LM, fudged)"]
-    @test names[6:end] == ["LeastSquaresOptim (Dogleg, fudged)", "LeastSquaresOptim (LM, fudged)", "Optim (NewtonTrustRegion)", "Optim (Newton)",
+    @test names[1] == "SecondOrderOptimization"
+    @test names[2:end] == ["LeastSquaresOptim (Dogleg, fudged)", "LeastSquaresOptim (LM, fudged)", "Optim (NewtonTrustRegion)", "Optim (Newton)",
         "JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "NonlinearSolve (LM, fudged)", "NonlinearSolve (TrustRegion, fudged)", "CaNNOLeS (fudged)"]
     @test SB.fudged_name("CaNNOLeS") == "CaNNOLeS (fudged)" && SB.fudged_name("NonlinearSolve (LM)") == "NonlinearSolve (LM, fudged)"
-    standard = Dict(o.name => o for o in get_standard_optimizers(; tall=true))
+    standard = Dict(o.name => o for o in get_standard_optimizers(SB.ROBUST_CURVE_FITTING_SOO))
 
     for n in (64, 1024)
         models = prob.generate_models(n)
@@ -54,11 +52,11 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         m_jump = only(filter(m -> m.name == "JuMP (fudged)", models))
         target = get_standard_optimizer_model(models)
         @test target === m_sa
-        # Routing (IND1, IND3c): the native rows run Model 1; JSOSolvers, Ipopt, MadNLP and CaNNOLeS, whose native model
+        # Routing (IND1, IND3c): the SecondOrderOptimization row runs Model 1; JSOSolvers, Ipopt, MadNLP and CaNNOLeS, whose native model
         # is JuMP, the JuMP (fudged) model; every other row the fudged Standalone model. A renamed row has its
-        # original's model and style, and the control row has a style of its own
+        # original's model and style
         for o in prob.compatible_optimizers
-            native = o.name in names[1:4]
+            native = o.name == names[1]
             on_jump = SB.row_package(o.name) in ("JSOSolvers", "Ipopt", "MadNLP", "CaNNOLeS")
             @test resolve(o, models) === (native ? m_nlls : on_jump ? m_jump : m_sa)
             orig = replace(replace(o.name, ", fudged)" => ")"), " (fudged)" => "")
@@ -67,17 +65,13 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
                 @test SB.optimizer_style(o.name) == SB.optimizer_style(orig)
             end
         end
-        @test SB.optimizer_style("SecondOrderOptimization (LM, fudged)") == (:red, :dash, :diamond)
-        @test SB.optimizer_style("SecondOrderOptimization (LM, fudged)") != SB.optimizer_style("SecondOrderOptimization (LM)")
-
-        # Step 19: the native rows converge to one cost, near (2, 1.5, 0.5)
+        # Step 19: the native row converges near (2, 1.5, 0.5); the native LM iterator on the Jacobian path, called
+        # directly, reaches the same cost (IND4c: the Dogleg and LM tall rows are gone)
         row(name) = only(filter(o -> o.name == name, prob.compatible_optimizers))
         x_native = Float64[]
-        r_lm = row("SecondOrderOptimization (LM)").optimize(m_nlls; solution=x_native)
-        r_dl = row("SecondOrderOptimization (Dogleg)").optimize(m_nlls)
-        r_tall = row("SecondOrderOptimization (LM, tall)").optimize(m_nlls)
-        @test r_lm.status === :ok && r_dl.status === :ok && r_tall.status === :ok
-        @test r_dl.final_cost ≈ r_lm.final_cost rtol=1e-8
+        r_lm = row("SecondOrderOptimization").optimize(m_nlls; solution=x_native)
+        r_tall = optimize_soo(m_nlls; method=:lm, formulation=:jacobian)
+        @test r_lm.status === :ok && r_tall.status === :ok
         @test r_tall.final_cost ≈ r_lm.final_cost rtol=1e-8
         @test maximum(abs.(x_native .- [2.0, 1.5, 0.5])) < 0.1
 

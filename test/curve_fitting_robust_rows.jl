@@ -10,14 +10,14 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         models = prob.generate_models(n)
         m_nlls = only(filter(m -> m.name == "NLLSModel (Static)", models))
         m_sa = only(filter(m -> m.name == "Standalone (fudged)", models))
-        r_lm = only(filter(o -> o.name == "SecondOrderOptimization (LM)", prob.compatible_optimizers)).optimize(m_nlls)
+        r_lm = only(filter(o -> o.name == "SecondOrderOptimization", prob.compatible_optimizers)).optimize(m_nlls)
         @test r_lm.status === :ok
         # Step 20: every row on the fudged model, pinned to what step 13 measured: :ok at the native LM cost, or the
         # measured failure (a stop without convergence, at the same minimum)
         # Measured on Julia 1.10 and 1.13 alike, with EXP_OUTLIER_SEED = 4245
         measured_failures = n == 64 ? ("NonlinearSolve (TrustRegion, fudged)",) :
             ("JSOSolvers (trunk)", "JSOSolvers (tron)", "NonlinearSolve (TrustRegion, fudged)")
-        for o in prob.compatible_optimizers[5:end]   # after the four native rows
+        for o in prob.compatible_optimizers[2:end]   # after the native row
             m_sa.reset!()
             r = o.optimize(m_sa)
             if o.name in measured_failures

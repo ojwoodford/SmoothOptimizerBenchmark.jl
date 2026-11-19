@@ -19,7 +19,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         rows = run_optimizer_benchmarks(prob.compatible_optimizers, std; all_models=models, samples=1)
         manopt = rows["Manopt (LevenbergMarquardt)"]
         @test manopt.status === :ok
-        for name in ("SecondOrderOptimization (LM)", "SecondOrderOptimization (LM, tall)", "SecondOrderOptimization (Dogleg)")
+        for name in ("SecondOrderOptimization",)   # IND4c: one row
             @test rows[name].status === :ok
             @test isapprox(rows[name].final_cost, manopt.final_cost; rtol=1e-8, atol=SOB.DEFAULT_FTOL * manopt.start_cost)
         end

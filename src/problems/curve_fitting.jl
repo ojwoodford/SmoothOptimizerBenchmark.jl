@@ -29,6 +29,10 @@ function build_jump_curve_fitting(t_pts::Vector{Float64}, y_data::Vector{Float64
     return MathOptNLSModel(model, F)
 end
 
+# The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, m = 65536,
+# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_wellconditioned, RS_hessian, L_static, I_lm
+const CURVE_FITTING_SOO = (; iterator = :levenbergmarquardt, linsolver = :cholesky, formulation = :hessian, reduction = :none, storage = :dense)
+
 function create_curve_fitting_problem()
     ProblemDefinition(
         "Exponential Curve Fitting",
@@ -91,7 +95,7 @@ function create_curve_fitting_problem()
 
             return [m_nlls, m_standalone, m_jump]
         end,
-        get_standard_optimizers(; tall=true),
+        get_standard_optimizers(CURVE_FITTING_SOO),
         "Data Points m";
         # Derivatives (DM1): every cost has 3 inputs
         derivatives = :autodiff

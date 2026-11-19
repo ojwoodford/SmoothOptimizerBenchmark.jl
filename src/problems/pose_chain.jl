@@ -95,6 +95,10 @@ function build_jump_pose_chain(n_poses::Int, link_offsets::Vector{SVector{3, Flo
 end
 build_jump_pose_chain(n_poses::Int) = build_jump_pose_chain(n_poses, get_chain_measurements(n_poses)..., generate_chain_start_vars(n_poses))
 
+# The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, N = 10000,
+# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_wellconditioned, RS_hessian, L_sparse, I_dogleg
+const POSE_CHAIN_SOO = (; iterator = :dogleg, linsolver = :ldl, formulation = :hessian, reduction = :none, storage = :sparse)
+
 function create_pose_chain_problem()
     ProblemDefinition(
         "Nonlinear 3D Pose Chain",
@@ -148,23 +152,8 @@ function create_pose_chain_problem()
 
             return [m_nlls, m_lso, m_jump]
         end,
-        [
-            OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),
-            OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)),
-            soo_gauss_newton_optimizer(),
-            soo_tall_optimizer(),
-            soo_tall_lsmr_optimizer(),
-            OptimizerDefinition("LeastSquaresOptim (Dogleg)", (m; kwargs...) -> optimize_least_squares(m; method=:dogleg, kwargs...)),
-            OptimizerDefinition("LeastSquaresOptim (LM)", (m; kwargs...) -> optimize_least_squares(m; method=:lm, kwargs...)),
-            OptimizerDefinition("Optim (Newton)", (m; kwargs...) -> optimize_optim(m; method=:newton, kwargs...)),
-            OptimizerDefinition("JSOSolvers (trunk)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:trunk, kwargs...)),
-            OptimizerDefinition("JSOSolvers (tron)", (m; kwargs...) -> optimize_jsosolvers(m; solver=:tron, kwargs...)),
-            OptimizerDefinition("Ipopt", (m; kwargs...) -> optimize_ipopt(m; kwargs...)),
-            OptimizerDefinition("MadNLP", (m; kwargs...) -> optimize_madnlp(m; kwargs...)),
-            OptimizerDefinition("NonlinearSolve (LM)", (m; kwargs...) -> optimize_nonlinearsolve(m; method=:lm, kwargs...)),
-            OptimizerDefinition("NonlinearSolve (TrustRegion)", (m; kwargs...) -> optimize_nonlinearsolve(m; method=:trust_region, kwargs...)),
-            OptimizerDefinition("CaNNOLeS", (m; kwargs...) -> optimize_cannoles(m; kwargs...))
-        ],
+        # The standard rows but Optim (NewtonTrustRegion), which needs a dense Hessian (a feature limit)
+        filter(o -> o.name != "Optim (NewtonTrustRegion)", get_standard_optimizers(POSE_CHAIN_SOO)),
         "Poses N";
         # Derivatives (DM1): every cost has at most 6 inputs
         derivatives = :autodiff

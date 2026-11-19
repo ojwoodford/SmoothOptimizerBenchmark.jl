@@ -3,16 +3,16 @@ using SmoothOptimizerBenchmark
 isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
 
 @testset "Tall formulation (N1, N2, N5)" begin
-    # N5: the tall and normal rows reach the same cost on the well-conditioned dense problems
-    tall = soo_tall_optimizer()
-    @test tall.name == "SecondOrderOptimization (LM, tall)"
+    # IND4c: the tall rows are gone; the adapter's Jacobian formulation is tested here, called directly, on the model the
+    # problem's SecondOrderOptimization row runs on
+    tall(m; kwargs...) = optimize_soo(m; method=:lm, formulation=:jacobian, kwargs...)
+    soo_row(prob) = only(filter(o -> o.name == "SecondOrderOptimization", prob.compatible_optimizers))
+    # N5: the tall and normal formulations reach the same cost on the well-conditioned dense problems
     normal_lm(m) = optimize_soo(m; method=:lm)
     for (prob, sz) in ((create_curve_fitting_problem(), 256), (create_rosenbrock_dense_problem(), 8), (create_robust_procrustes_problem(), 4), (create_multilateration_problem(), 8), (create_robust_curve_fitting_problem(), 256))
-        @test any(o -> o.name == tall.name, prob.compatible_optimizers)
         models = prob.generate_models(sz)
-        target = get_standard_optimizer_model(models)
-        md = SmoothOptimizerBenchmark.resolve_optimizer_model(tall, models)
-        r_tall = tall.optimize(md)
+        md = SmoothOptimizerBenchmark.resolve_optimizer_model(soo_row(prob), models)
+        r_tall = tall(md)
         r_norm = normal_lm(md)
         @test r_norm.status === :ok
         if r_tall.status === :skipped
@@ -34,12 +34,11 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     for (prob, build_nlls) in ((create_pose_chain_problem(), SmoothOptimizerBenchmark.build_chain_nlls),
                                (create_rosenbrock_sparse_problem(), SmoothOptimizerBenchmark.build_sparse_nlls),
                                (create_ode_bvp_problem(), SmoothOptimizerBenchmark.build_sparse_ode_bvp_nlls))
-        @test any(o -> o.name == tall.name, prob.compatible_optimizers)
         sz = first(prob.default_sizes)
         models = prob.generate_models(sz)
-        md = SmoothOptimizerBenchmark.resolve_optimizer_model(tall, models)
+        md = SmoothOptimizerBenchmark.resolve_optimizer_model(soo_row(prob), models)
         @test md.model isa SmoothOptimizerBenchmark.NLLSModel.Model
-        r_tall = tall.optimize(md)
+        r_tall = tall(md)
         r_norm = normal_lm(md)
         @test r_tall.status === :ok && r_tall.converged
         @test r_norm.status === :ok
@@ -54,14 +53,13 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     # resolves to the dense reduced system at these sizes, so :dense is checked by its prototype's type, the same as
     # :auto's, without a second solve; the second size ran the same compiled code and is not run
     ba = create_bundle_adjustment_problem()
-    ba_tall = only(filter(o -> o.name == tall.name, ba.compatible_optimizers))
-    ba_lm = only(filter(o -> o.name == "SecondOrderOptimization (LM)", ba.compatible_optimizers))
+    # The old rows' configurations, called directly: LM with D'D damping and Schur (normal) or QR (tall) elimination
+    ba_tall(m; kwargs...) = optimize_soo(m; method=:levenbergmarquardt_dtd, formulation=:jacobian, reduction=:eliminate, kwargs...)
+    ba_lm(m; kwargs...) = optimize_soo(m; method=:levenbergmarquardt_dtd, reduction=:eliminate, kwargs...)
     models = ba.generate_models(first(ba.default_sizes))
-    target = get_standard_optimizer_model(models)
-    md = SmoothOptimizerBenchmark.resolve_optimizer_model(ba_tall, models)
+    md = SmoothOptimizerBenchmark.resolve_optimizer_model(soo_row(ba), models)
     @test md.model isa SmoothOptimizerBenchmark.NLLSModel.Model
-    @test SmoothOptimizerBenchmark.resolve_optimizer_model(ba_lm, models) === md
-    r_norm = ba_lm.optimize(md)
+    r_norm = ba_lm(md)
     @test r_norm.status === :ok
     ba_proto(storage) = last(SmoothOptimizerBenchmark.NLLSModel.optimvars_nls(md.model; reduction=:eliminate, storage))
     J_auto, J_dense, J_sparse = ba_proto(:auto), ba_proto(:dense), ba_proto(:sparse)
@@ -71,26 +69,23 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     @test typeof(J_auto) === typeof(J_dense)
     @test typeof(J_sparse).parameters[2] <: SmoothOptimizerBenchmark.SparseMatrixCSC
     for storage in (:auto, :sparse)
-        r_tall = ba_tall.optimize(md; storage)
+        r_tall = ba_tall(md; storage)
         @test r_tall.status === :ok && r_tall.converged
         @test isapprox(r_tall.final_cost, r_norm.final_cost; rtol=1e-8, atol=SmoothOptimizerBenchmark.DEFAULT_FTOL * r_norm.start_cost)
     end
 
-    # T3: the LSMR row on the three large sparse problems (and no other), at the two smallest sizes, reaches the normal
-    # LM row's cost at LSMR's tolerance, rtol = 1e-6; with the absolute floor of ftol times the start cost, as above,
-    # since sparse Rosenbrock and bundle adjustment are zero-residual problems
-    lsmr_name = "SecondOrderOptimization (LM, tall, LSMR)"
-    @test sort([p.name for p in problems if any(o -> o.name == lsmr_name, p.compatible_optimizers)]) ==
-        sort([create_pose_chain_problem().name, create_rosenbrock_sparse_problem().name, ba.name])
-    for prob in (create_pose_chain_problem(), create_rosenbrock_sparse_problem(), ba)
-        lsmr = only(filter(o -> o.name == lsmr_name, prob.compatible_optimizers))
-        lm = only(filter(o -> o.name == "SecondOrderOptimization (LM)", prob.compatible_optimizers))
+    # T3: LSMR on the Jacobian path (linsolver = :lsmr, the old "LM, tall, LSMR" row's configuration, called directly) on
+    # the three large sparse problems, at the two smallest sizes, reaches the normal LM cost at LSMR's tolerance,
+    # rtol = 1e-6; with the absolute floor of ftol times the start cost, as above, since sparse Rosenbrock and bundle
+    # adjustment are zero-residual problems
+    for (prob, method, reduction) in ((create_pose_chain_problem(), :lm, :auto), (create_rosenbrock_sparse_problem(), :lm, :auto),
+                                      (ba, :levenbergmarquardt_dtd, :eliminate))
         for sz in prob.default_sizes[1:2]
             models = prob.generate_models(sz)
-            md = SmoothOptimizerBenchmark.resolve_optimizer_model(lsmr, models)
+            md = SmoothOptimizerBenchmark.resolve_optimizer_model(soo_row(prob), models)
             @test md.model isa SmoothOptimizerBenchmark.NLLSModel.Model
-            r_lsmr = lsmr.optimize(md)
-            r_norm = lm.optimize(md)
+            r_lsmr = optimize_soo(md; method, formulation=:jacobian, reduction, linsolver=:lsmr)
+            r_norm = optimize_soo(md; method, reduction)
             @test r_lsmr.status === :ok
             @test r_norm.status === :ok
             @test isapprox(r_lsmr.final_cost, r_norm.final_cost; rtol=1e-6, atol=SmoothOptimizerBenchmark.DEFAULT_FTOL * r_norm.start_cost)
@@ -101,21 +96,20 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     sp = create_rosenbrock_sparse_problem()
     sp_models = sp.generate_models(10)
     sp_nlls = first(filter(m -> m.model isa SmoothOptimizerBenchmark.NLLSModel.Model, sp_models))
-    r_big = optimize_nlls_soo(sp_nlls; method=:lm, formulation=:jacobian, storage=:dense, max_dense_bytes=8)
+    r_big = optimize_soo(sp_nlls; method=:lm, formulation=:jacobian, storage=:dense, max_dense_bytes=8)
     @test r_big.status === :skipped
     @test occursin("dense", r_big.message)
     # U1: under storage = :auto (NLLSModel NTP1) the same run stores J sparse and runs, to the normal row's cost
     J_auto = last(SmoothOptimizerBenchmark.NLLSModel.optimvars_nls(sp_nlls.model; storage=:auto, max_dense_bytes=8))
     @test J_auto isa SmoothOptimizerBenchmark.SparseMatrixCSC
-    r_auto = optimize_nlls_soo(sp_nlls; method=:lm, formulation=:jacobian, storage=:auto, max_dense_bytes=8)
+    r_auto = optimize_soo(sp_nlls; method=:lm, formulation=:jacobian, storage=:auto, max_dense_bytes=8)
     @test r_auto.status === :ok
     @test r_auto.converged
-    r_auto_norm = optimize_nlls_soo(sp_nlls; method=:lm)
+    r_auto_norm = optimize_soo(sp_nlls; method=:lm)
     @test isapprox(r_auto.final_cost, r_auto_norm.final_cost; rtol=1e-8, atol=1e-12)
     # optimize_soo forwards storage likewise (NLLSModel checks it)
     @test optimize_soo(sp_nlls; method=:lm, formulation=:jacobian, storage=:sparse).status === :ok
     @test_throws ArgumentError optimize_soo(sp_nlls; method=:lm, storage=:bogus)
-    @test_throws ArgumentError optimize_nlls_soo(sp_nlls; method=:lm, storage=:bogus)
     sp_lsp = get_standard_optimizer_model(sp_models)
     @test optimize_soo(sp_lsp; method=:lm, formulation=:jacobian).status === :skipped
 

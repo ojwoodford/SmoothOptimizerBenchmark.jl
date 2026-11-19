@@ -275,35 +275,12 @@ Maps an optimizer name to a consistent (color, linestyle, marker) tuple:
   - NonlinearSolve: :deeppink
   - CaNNOLeS: :chocolate
   - Manopt: :blue
-- Different flavours (e.g. LM, Dogleg, tron, trunk, NLLSModel + SecondOrderOptimization) use distinct linestyles and markers:
-  - NLLSModel + SecondOrderOptimization (LM): :dot with :star5
-  - NLLSModel + SecondOrderOptimization (Dogleg): :dashdot with :star5
-  - SecondOrderOptimization (LM, tall): :dashdotdot with :utriangle, so it is not drawn like the normal-equations row
-  - SecondOrderOptimization (LM, tall, LSMR): :dashdotdot with :dtriangle, the tall row's line with its own marker
-  - SecondOrderOptimization (LM, fudged), the control row on rewritten residuals: :dash with :diamond, so it is not drawn
-    like the native LM row
-  - LM / trunk / default Newton: :solid with :circle
+- Different flavours (e.g. LM, Dogleg, tron, trunk) use distinct linestyles and markers:
+  - LM / trunk / default Newton, and the one SecondOrderOptimization row: :solid with :circle
   - Dogleg / tron / TrustRegion: :dash with :square
-  - GaussNewton / Gauss-Newton: :dot with :diamond
 """
 function optimizer_style(opt_name::String)
     name_lower = lowercase(opt_name)
-
-    # Full-stack NLLSModel + SecondOrderOptimization uses red star markers
-    if occursin("nllsmodel", name_lower) && (occursin("secondorder", name_lower) || occursin("soo", name_lower))
-        linestyle = occursin("dogleg", name_lower) ? :dashdot : :dot
-        return :red, linestyle, :star5
-    end
-
-    # The tall formulation (residual and Jacobian) of SecondOrderOptimization, beside its normal-equations rows
-    if (occursin("secondorder", name_lower) || startswith(name_lower, "soo")) && occursin("tall", name_lower)
-        return :red, :dashdotdot, occursin("lsmr", name_lower) ? :dtriangle : :utriangle
-    end
-
-    # SecondOrderOptimization on the rewritten ("fudged") residuals, beside its native rows
-    if (occursin("secondorder", name_lower) || startswith(name_lower, "soo")) && occursin("fudged", name_lower)
-        return :red, :dash, :diamond
-    end
 
     # 1. Package color
     color = if occursin("secondorder", name_lower) || startswith(name_lower, "soo")
@@ -332,9 +309,6 @@ function optimizer_style(opt_name::String)
     if occursin("dogleg", name_lower) || occursin("trustregion", name_lower) || occursin("trust_region", name_lower) || occursin("tron", name_lower)
         linestyle = :dash
         marker = :square
-    elseif occursin("gaussnewton", name_lower) || occursin("gauss_newton", name_lower) || occursin("gauss-newton", name_lower)
-        linestyle = :dot
-        marker = :diamond
     else
         linestyle = :solid
         marker = :circle

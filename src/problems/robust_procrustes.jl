@@ -329,6 +329,10 @@ function get_procrustes_manopt_components(model_def)
     return M, procrustes_manopt_blocks(fs, Js, d), A, B, Matrix{Float64}(I, d, d)
 end
 
+# The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, d = 32, on NLLSModel (Specialized),
+# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_wellconditioned, RS_hessian, L_dense, I_lm
+const ROBUST_PROCRUSTES_SOO = (; iterator = :levenbergmarquardt, linsolver = :cholesky, formulation = :hessian, reduction = :none, storage = :dense)
+
 function create_robust_procrustes_problem()
     ProblemDefinition(
         "Robust Procrustes on SO(d)",
@@ -418,9 +422,7 @@ function create_robust_procrustes_problem()
             return [m_ovi, m_spec, m_manopt]
         end,
         [
-            OptimizerDefinition("SecondOrderOptimization (LM)", (model_def; kwargs...) -> optimize_soo(model_def; method=:lm, kwargs...)),
-            soo_tall_optimizer(),
-            OptimizerDefinition("SecondOrderOptimization (Dogleg)", (model_def; kwargs...) -> optimize_soo(model_def; method=:dogleg, kwargs...)),
+            soo_optimizer(ROBUST_PROCRUSTES_SOO),
             OptimizerDefinition("Manopt (LevenbergMarquardt)", (model_def; solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> begin
                 M, blocks, A, B, p0 = get_procrustes_manopt_components(model_def)
                 start_c = procrustes_robust_cost(A, B, p0)

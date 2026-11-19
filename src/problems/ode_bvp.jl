@@ -76,6 +76,10 @@ function build_sparse_ode_bvp_jso(n::Int, lambda::Float64=bratu_lambda_default)
     return MathOptNLSModel(model, exprs)
 end
 
+# The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, N = 32768,
+# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_illconditioned, RS_jacobian, L_jacobian, I_lm
+const ODE_BVP_SOO = (; iterator = :levenbergmarquardt, linsolver = :qr, formulation = :jacobian, reduction = :none, storage = :sparse)
+
 function create_ode_bvp_problem()
     ProblemDefinition(
         "1D ODE Boundary Value Problem",
@@ -129,7 +133,7 @@ function create_ode_bvp_problem()
 
             return ModelDefinition[m_nlls, m_lso, m_jump]
         end,
-        get_standard_optimizers(; tall=true),
+        get_standard_optimizers(ODE_BVP_SOO),
         "Grid Points N",
         # The discretized equations have an exact solution: zero residuals (IT4)
         _ -> 0.0;

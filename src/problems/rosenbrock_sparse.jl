@@ -46,6 +46,11 @@ function build_sparse_jso(n::Int)
     return MathOptNLSModel(model, [FA; FB])
 end
 
+# The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, n = 75000,
+# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_wellconditioned, RS_hessian, L_sparse, I_lm. The iterator rule compares measured times: Julia 1.10 gave I_dogleg in one of
+# two runs, and 8 threads I_dogleg; the release's 1-thread answer, I_lm in both runs, is used
+const ROSENBROCK_SPARSE_SOO = (; iterator = :levenbergmarquardt, linsolver = :ldl, formulation = :hessian, reduction = :none, storage = :sparse)
+
 function create_rosenbrock_sparse_problem()
     ProblemDefinition(
         "Sparse Multi-dimensional Rosenbrock",
@@ -98,7 +103,7 @@ function create_rosenbrock_sparse_problem()
 
             return ModelDefinition[m_nlls, m_lso, m_jump]
         end,
-        get_standard_optimizers(; tall=true, lsmr=true),
+        get_standard_optimizers(ROSENBROCK_SPARSE_SOO),
         "Variables n",
         # The global minimum, x = 1, has zero residuals (IT4)
         _ -> 0.0;

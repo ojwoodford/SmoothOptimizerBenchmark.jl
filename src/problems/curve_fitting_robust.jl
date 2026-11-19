@@ -7,14 +7,13 @@
 # correction as well as the reweighting. The inlier data, the residual formula and the sizes are curve fitting's.
 #
 # Three models, and which rows run on each (IND1's pairing):
-# - "NLLSModel (Static)" declares the kernel (`robustkernel`): SecondOrderOptimization's rows.
+# - "NLLSModel (Static)" declares the kernel (`robustkernel`): SecondOrderOptimization's row.
 # - "JuMP (fudged)" is the rewritten residuals below as JuMP expressions: JSOSolvers, Ipopt, MadNLP and CaNNOLeS, the
 #   packages whose native model is JuMP. JuMP differentiates the rewritten cost itself, so those rows get its exact
 #   Hessian, and JSOSolvers, Ipopt and MadNLP keep their standard names; CaNNOLeS, which has no kernel interface, is
 #   "CaNNOLeS (fudged)".
-# - "Standalone (fudged)": every other row (LeastSquaresOptim, NonlinearSolve and Optim, which have no native model),
-#   and the control row, SecondOrderOptimization (LM) on the fudged model, which holds the optimizer fixed and changes
-#   only the formulation. The residual-only packages' rows (LeastSquaresOptim, NonlinearSolve) are named "fudged"; Optim
+# - "Standalone (fudged)": every other row (LeastSquaresOptim, NonlinearSolve and Optim, which have no native model).
+#   The residual-only packages' rows (LeastSquaresOptim, NonlinearSolve) are named "fudged"; Optim
 #   keeps its standard names: its objective and gradient are the robust cost's exactly, and only its Hessian J̃ᵀJ̃ comes
 #   from the fudge.
 # The fudge: the residuals are rewritten so that a plain least-squares solver minimizes the robust cost. With s = r² and
@@ -83,12 +82,9 @@ fudged_name(name::AbstractString) = endswith(name, ")") ? string(chop(name), ", 
 const FUDGED_PACKAGES = ("LeastSquaresOptim", "NonlinearSolve", "CaNNOLeS")
 
 function robust_curve_fitting_optimizers()
-    standard = get_standard_optimizers(; tall=true)
-    native = filter(o -> occursin("SecondOrderOptimization", o.name), standard)
-    control = OptimizerDefinition("SecondOrderOptimization (LM, fudged)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...), "Standalone (fudged)")
-    others = [any(pkg -> startswith(o.name, pkg), FUDGED_PACKAGES) ? OptimizerDefinition(fudged_name(o.name), o.optimize) : o
-              for o in standard if !occursin("SecondOrderOptimization", o.name)]
-    return OptimizerDefinition[native..., control, others...]
+    standard = get_standard_optimizers(ROBUST_CURVE_FITTING_SOO)
+    return OptimizerDefinition[any(pkg -> startswith(o.name, pkg), FUDGED_PACKAGES) ? OptimizerDefinition(fudged_name(o.name), o.optimize) : o
+                               for o in standard]
 end
 
 # The JuMP model (IND3c): with r curve fitting's residual and w the kernel's width, the fudged residual of the Huber
@@ -102,14 +98,18 @@ function build_jump_curve_fitting_robust(t_pts::Vector{Float64}, y_data::Vector{
     return MathOptNLSModel(model, F)
 end
 
+# The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, m = 65536,
+# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_wellconditioned, RS_hessian, L_static, I_lm
+const ROBUST_CURVE_FITTING_SOO = (; iterator = :levenbergmarquardt, linsolver = :cholesky, formulation = :hessian, reduction = :none, storage = :dense)
+
 """
     create_robust_curve_fitting_problem() -> ProblemDefinition
 
 Exponential curve fitting with 30 % one-sided outliers (+1) and a Huber kernel of width 0.05, at curve fitting's sizes.
-Three models: "NLLSModel (Static)", which declares the kernel (SecondOrderOptimization's rows); "JuMP (fudged)", the
+Three models: "NLLSModel (Static)", which declares the kernel (SecondOrderOptimization's row); "JuMP (fudged)", the
 rewritten residuals as JuMP expressions, so that ½‖r̃‖² is the robust cost (JSOSolvers, Ipopt, MadNLP and
 "CaNNOLeS (fudged)"); and "Standalone (fudged)", the same rewritten residuals (LeastSquaresOptim, NonlinearSolve and
-Optim, and the control row "SecondOrderOptimization (LM, fudged)"). The NLLSModel and Standalone models are built from
+Optim). The NLLSModel and Standalone models are built from
 the same `RobustExpFitResidual`s: the fudged model's Jacobian is each cost's autodiff row (NLLSModel's `computeresjac`)
 scaled by dr̃/dr. Data from `generate_exp_outlier_data`.
 """

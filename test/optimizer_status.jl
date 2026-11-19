@@ -14,7 +14,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     # A stub's name names no package, so it names its model (IND1)
     bad = OptimizerDefinition("Broken adapter", (m; kwargs...) -> error("adapter exploded"), "Standalone")
     skip = OptimizerDefinition("Skipping adapter", (m; kwargs...) -> skipped_result("not applicable"), "Standalone")
-    good = OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_nlls_soo(m; method=:lm, kwargs...))
+    good = OptimizerDefinition("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...))
     res = @test_logs (:warn, r"Broken adapter") match_mode=:any run_optimizer_benchmarks([bad, skip, good], target; all_models=models, samples=1)
     @test res["Broken adapter"].status === :error
     @test occursin("adapter exploded", res["Broken adapter"].message)

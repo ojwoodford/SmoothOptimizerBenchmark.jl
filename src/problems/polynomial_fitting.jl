@@ -103,6 +103,12 @@ function polyfit_optimizer(name::String, run)
     end)
 end
 
+# The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, m = 6400,
+# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_singular, RS_hessian, L_static, I_lm (the
+# Cholesky probe of JᵀJ fails, so F keeps the Hessian path). With 8 threads Julia 1.10's probe succeeded, with condition
+# estimate 9.7e15, and F_illconditioned chose the Jacobian path; the 1-thread answer is used (decision 14)
+const POLYNOMIAL_FITTING_SOO = (; iterator = :levenbergmarquardt, linsolver = :cholesky, formulation = :hessian, reduction = :none, storage = :dense)
+
 function create_polynomial_fitting_problem()
     ProblemDefinition(
         "Ill-Conditioned Polynomial Fitting",
@@ -166,7 +172,7 @@ function create_polynomial_fitting_problem()
             return [m_nlls, m_standalone, m_jump]
         end,
         # The standard rows (decision 16, IND3d), each wrapped to record its excess cost
-        OptimizerDefinition[polyfit_optimizer(o.name, o.optimize) for o in get_standard_optimizers(; tall=true)],
+        OptimizerDefinition[polyfit_optimizer(o.name, o.optimize) for o in get_standard_optimizers(POLYNOMIAL_FITTING_SOO)],
         "Data Points m",
         # The least-squares minimum in extended precision (IT4)
         n_points -> Float64(polyfit_reference(n_points).minimum);

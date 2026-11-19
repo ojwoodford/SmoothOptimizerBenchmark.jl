@@ -119,6 +119,10 @@ function build_jump_multilateration(data)
     return MathOptNLSModel(model, F)
 end
 
+# The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, d = 16,
+# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_wellconditioned, RS_hessian, L_static, I_lm
+const MULTILATERATION_SOO = (; iterator = :levenbergmarquardt, linsolver = :cholesky, formulation = :hessian, reduction = :none, storage = :dense)
+
 """
     create_multilateration_problem() -> ProblemDefinition
 
@@ -139,7 +143,7 @@ function create_multilateration_problem()
             return [multilateration_nlls_model(costs, data), multilateration_standalone_model(costs, data),
                     jump_model("JuMP", build_jump_multilateration(data), copy(data.x0))]
         end,
-        get_standard_optimizers(; tall=true),
+        get_standard_optimizers(MULTILATERATION_SOO),
         "Dimension d";
         # Derivatives (DM1): a cost has up to 16 inputs
         derivatives = :analytic

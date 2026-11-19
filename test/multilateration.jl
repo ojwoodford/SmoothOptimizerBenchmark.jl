@@ -17,8 +17,10 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         @test norm(data.xtrue) ≈ 1
         @test data.x0 == zeros(d)
     end
-    lm = only(filter(o -> o.name == "SecondOrderOptimization (LM)", prob.compatible_optimizers))
-    tall = only(filter(o -> o.name == "SecondOrderOptimization (LM, tall)", prob.compatible_optimizers))
+    # The SecondOrderOptimization row (IND4: Levenberg–Marquardt on the normal equations), and its iterator on the
+    # Jacobian path, called directly (the "LM, tall" row is gone)
+    lm = only(filter(o -> o.name == "SecondOrderOptimization", prob.compatible_optimizers))
+    tall = (m; kwargs...) -> optimize_soo(m; method=:lm, formulation=:jacobian, kwargs...)
     for d in (2, 5, 16)
         data = SmoothOptimizerBenchmark.multilateration_data(d)
         models = prob.generate_models(d)
@@ -39,16 +41,15 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
             J_fd[:, k] = (r_p - r_m) / 2h
         end
         @test J ≈ J_fd rtol=1e-8
-        # Routing: the SecondOrderOptimization rows run Model 1, the others the Standalone model
+        # Routing: the SecondOrderOptimization row runs Model 1
         target = get_standard_optimizer_model(models)
         @test target === m_sa
         @test SmoothOptimizerBenchmark.resolve_optimizer_model(lm, models) === m_nlls
-        @test SmoothOptimizerBenchmark.resolve_optimizer_model(tall, models) === m_nlls
         # The formulations agree on cost (rules.md 31), and each solution is near the true point
         x_nlls, x_sa, x_tall = Float64[], Float64[], Float64[]
         r_nlls = lm.optimize(m_nlls; solution=x_nlls)
         r_sa = lm.optimize(m_sa; solution=x_sa)
-        r_tall = tall.optimize(m_nlls; solution=x_tall)
+        r_tall = tall(m_nlls; solution=x_tall)
         @test r_nlls.status === :ok && r_sa.status === :ok && r_tall.status === :ok
         @test r_sa.final_cost ≈ r_nlls.final_cost rtol=1e-8
         @test r_tall.final_cost ≈ r_nlls.final_cost rtol=1e-8
