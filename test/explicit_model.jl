@@ -21,8 +21,9 @@ const PAIRED_MODELS = Dict(
         "Standalone (fudged)" => ["SecondOrderOptimization (LM, fudged)", "LeastSquaresOptim (Dogleg, fudged)", "LeastSquaresOptim (LM, fudged)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM, fudged)", "NonlinearSolve (TrustRegion, fudged)"],
     ),
     "Ill-Conditioned Polynomial Fitting" => Dict(
-        "NLLSModel (Static)" => ["SecondOrderOptimization (LM)", "SecondOrderOptimization (LM, tall)"],
-        "Standalone" => ["LeastSquaresOptim (LM)", "LeastSquaresOptim (Dogleg)"],
+        "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
+        "NLLSModel (Static)" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)"],
+        "Standalone" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "Dense Affine Alignment" => Dict(
         "NLLSModel" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)"],

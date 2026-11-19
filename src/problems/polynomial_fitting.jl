@@ -83,6 +83,15 @@ end
 polyfit_npoints(m::ModelDefinition) = polyfit_npoints(m.model)
 polyfit_npoints(m::LeastSquaresProblem) = length(m.y)
 polyfit_npoints(m::NLLSModel.Model) = NLLSModel.nresiduals(m)
+polyfit_npoints(m::AbstractNLSModel) = m.nls_meta.nequ
+
+# The JuMP model (IND3d): the residuals are affine in the coefficients, so they are JuMP affine expressions, V[i, :]·p − y[i]
+function build_jump_polynomial_fitting(V::Matrix{Float64}, y::Vector{Float64})
+    model = JuMP.Model()
+    @variable(model, p[k = 1:POLYFIT_NCOEFFS], start = 0.0)
+    F = [@expression(model, sum(V[i, k] * p[k] for k in 1:POLYFIT_NCOEFFS) - y[i]) for i in eachindex(y)]
+    return MathOptNLSModel(model, F)
+end
 
 # An optimizer definition whose rows also carry the excess cost over the reference minimum, at the point the row hands
 # back through the `solution` keyword: the harness's buffer when it passes one (IT1), else one of its own
@@ -151,14 +160,13 @@ function create_polynomial_fitting_problem()
                 () -> copyto!(p_standalone, p0_vec)
             )
 
-            return [m_nlls, m_standalone]
+            # Model 3: JuMP, as a MathOptNLSModel (IND3d)
+            m_jump = jump_model("JuMP", build_jump_polynomial_fitting(V, y), p0_vec)
+
+            return [m_nlls, m_standalone, m_jump]
         end,
-        OptimizerDefinition[
-            polyfit_optimizer("SecondOrderOptimization (LM)", (m; kwargs...) -> optimize_soo(m; method=:lm, kwargs...)),
-            polyfit_optimizer("SecondOrderOptimization (LM, tall)", (m; kwargs...) -> optimize_soo(m; method=:lm, formulation=:jacobian, kwargs...)),
-            polyfit_optimizer("LeastSquaresOptim (LM)", (m; kwargs...) -> optimize_least_squares(m; method=:lm, kwargs...)),
-            polyfit_optimizer("LeastSquaresOptim (Dogleg)", (m; kwargs...) -> optimize_least_squares(m; method=:dogleg, kwargs...)),
-        ],
+        # The standard rows (decision 16, IND3d), each wrapped to record its excess cost
+        OptimizerDefinition[polyfit_optimizer(o.name, o.optimize) for o in get_standard_optimizers(; tall=true)],
         "Data Points m",
         # The least-squares minimum in extended precision (IT4)
         n_points -> Float64(polyfit_reference(n_points).minimum);

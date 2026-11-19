@@ -6,6 +6,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
 const JUMP_MODEL_NAMES = Dict(
     "Exponential Curve Fitting" => "JuMP",
     "Robust Exponential Curve Fitting" => "JuMP (fudged)",
+    "Ill-Conditioned Polynomial Fitting" => "JuMP",
     "1D ODE Boundary Value Problem" => "JuMP",
     "Dense Multi-dimensional Rosenbrock" => "JuMP",
     "Sparse Multi-dimensional Rosenbrock" => "JuMP",
