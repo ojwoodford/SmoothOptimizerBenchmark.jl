@@ -666,16 +666,6 @@ function optimize_least_squares(target; method=:dogleg, solution=nothing, gtol=D
     end
 
     lsp = deepcopy(m)
-    n_vars = length(lsp.x)
-    is_sparse = lsp.J isa SparseMatrixCSC
-    if is_sparse
-        # LeastSquaresOptim uses un-preconditioned iterative LSMR for sparse problems without timeout support.
-        # Dogleg attempts to solve the un-damped Gauss-Newton system (singular on gauge-free problems like pose graphs),
-        # causing LSMR to stall beyond ~5,000 variables.
-        if (method === :dogleg && n_vars > 5000) || n_vars > 25000
-            return skipped_result("sparse LSMR beyond $(method === :dogleg ? 5000 : 25000) variables")
-        end
-    end
 
     r0 = zeros(Float64, length(lsp.y))
     lsp.f!(r0, lsp.x)
@@ -1156,10 +1146,6 @@ function optimize_nonlinearsolve(target; method=:lm, solution=nothing, maxiters=
         cb = NLLSModel.nls_callbacks(m; numthreads=benchmark_numthreads())
         m_len = cb.nequ
         n_len = cb.nvar
-        if cb.J0 isa SparseMatrixCSC && n_len > 25000
-            # Avoid excessive sparse QR solve time on massive sparse regimes
-            return skipped_result("sparse QR beyond 25000 variables")
-        end
         x0 = copy(cb.x0)
         actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
         r_init = zeros(Float64, m_len)
@@ -1197,11 +1183,6 @@ function optimize_nonlinearsolve(target; method=:lm, solution=nothing, maxiters=
     n_len = length(lsp.x)
     x0 = copy(lsp.x)
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
-
-    if lsp.J isa SparseMatrixCSC && n_len > 25000
-        # Avoid excessive sparse QR solve time on massive sparse regimes
-        return skipped_result("sparse QR beyond 25000 variables")
-    end
 
     r_init = zeros(Float64, m_len)
     lsp.f!(r_init, x0)

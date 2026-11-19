@@ -36,6 +36,7 @@ const TEST_FILES = [
     ("Tall formulation (N1, N2, N5)", "tall_formulation.jl", :serial),
     ("Ill-conditioned polynomial fit: excess cost over the reference minimum (N3, N4)", "polynomial_fitting.jl", :integration),
     ("The harness evaluates every row's cost (IT1)", "point_evaluation.jl", :integration),
+    ("A row that times out is not run at larger sizes (IND6)", "timeouts.jl", :serial),
     ("Quick Single-Size Benchmark", "quick_benchmark.jl", :integration),
     ("Scaling Benchmark, Markdown Serialization & Plotting", "scaling_markdown_plotting.jl", :serial),
     ("Problem pages: header, The Problem section and its numbers (PP3)", "problem_pages.jl", :serial),

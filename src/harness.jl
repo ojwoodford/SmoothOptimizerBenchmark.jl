@@ -80,6 +80,9 @@ the adapter hands back the point it stopped at (the `solution` keyword), and `ev
 `point_evaluator` built from its standard model (by default from `target_model`), evaluates the cost there, outside the
 timed region. A row that hands back no point (a skip, an error) has a final cost of `NaN`.
 
+A row named in `timed_out_at` (row name ⇒ the size at which it timed out) is not run: it is recorded `:timeout`, "timed
+out at size N" (decision 17, from `run_scaling_benchmark`).
+
 When every row has run, the harness decides each row's status (IT4, `assign_statuses!`): a row the solver says
 converged is `:ok` only if its cost passes the cost test against `reference` (the problem's known minimum at this size,
 `nothing` for the lowest cost of any row here), and `:local_minimum` or `:above_reference` otherwise. Only then is
@@ -90,13 +93,19 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
                                  all_models::Vector{<:ModelDefinition}=ModelDefinition[target_model],
                                  max_samples::Int=50, target_total_time_sec::Float64=1.0, samples=nothing,
                                  on_result=nothing, warmed_signatures::Set{Any}=Set{Any}(),
-                                 evaluator=point_evaluator(target_model), reference=nothing)
+                                 evaluator=point_evaluator(target_model), reference=nothing,
+                                 timed_out_at::AbstractDict=Dict{String, Any}())
     results = Dict{String, OptimizerResult}()
     # The point each row handed back and the model it ran on, for the status test
     points = Dict{String, Tuple{Vector{Float64}, ModelDefinition}}()
     effective_max = samples !== nothing ? max(1, Int(samples)) : max_samples
 
     for opt in optimizers
+        # A row that timed out at a smaller size of this table is not run again (decision 17)
+        if haskey(timed_out_at, opt.name)
+            results[opt.name] = timed_out_earlier_result(timed_out_at[opt.name])
+            continue
+        end
         opt_model = resolve_optimizer_model(opt, all_models)
         # A model not built at this size (decision 18): the row is skipped with its reason
         if !is_built(opt_model)
@@ -187,6 +196,12 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
     end
     return results
 end
+
+# The row of a size not run because the row timed out at a smaller size of the same table (decision 17)
+timed_out_earlier_result(size) = OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false, :timeout, "timed out at size $(size)")
+
+# The sizes of a scaling run in increasing order (decision 17); sizes that are not all numbers (a BAL dataset's name) as given
+ascending_sizes(sizes) = all(s -> s isa Real, sizes) ? sort(collect(Any, sizes)) : collect(Any, sizes)
 
 """
     warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model_name=nothing, warmed_signatures=Set{Any}())
@@ -289,7 +304,9 @@ end
     run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes, target_model_name=nothing, samples=nothing, data_dir=DEFAULT_DATA_DIR,
                           numthreads=Threads.nthreads(), blas_threads=numthreads) -> ProblemScalingBenchmarkResult
 
-Runs the benchmark across all specified problem sizes (collecting at least 10 problem sizes for scaling).
+Runs the benchmark across all specified problem sizes (collecting at least 10 problem sizes for scaling), in increasing
+order. A row that ends `:timeout` at one size is not run at the larger sizes: it is recorded `:timeout` there, "timed out
+at size N" (decision 17), the same for every row.
 Performs model evaluation across all sizes, and benchmarks optimizers across all sizes on the standardized baseline model.
 Streams results into `<data_dir>/<slug>.md`: the model rows as they finish, each size's optimizer rows when the size
 finishes (their statuses are decided then, IT4).
@@ -300,6 +317,7 @@ file's header: `numthreads` for NLLSModel (at most `Threads.nthreads()`), `blas_
 function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes, target_model_name=nothing, samples=nothing, data_dir=DEFAULT_DATA_DIR,
                                numthreads::Integer=Threads.nthreads(), blas_threads::Integer=numthreads)
     set_benchmark_threads!(; numthreads, blas_threads)
+    sizes = ascending_sizes(sizes)
     model_samples = samples !== nothing ? max(1, Int(samples)) : 5
     slug = problem_slug(prob.name)
     data_file = joinpath(data_dir, "$(slug).md")
@@ -386,6 +404,8 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
 
     # 4. Benchmark optimizers across all sizes on the standardized model, streaming EVERY optimizer performance immediately to file!
     size_results = SingleSizeBenchmarkResult[]
+    # Decision 17: a row that times out at one size is recorded as timed out at every larger size, without running
+    timed_out_at = Dict{String, Any}()
     for (i, sz) in enumerate(sizes)
         models = all_models[i]
         m_results = all_model_results[i]
@@ -395,9 +415,12 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
         # Run each optimizer on the model the pairing gives it, streaming each size's rows to file once all have run
         optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples,
             warmed_signatures=warmed_signatures, evaluator=point_evaluator(get_standard_optimizer_model(models)),
-            reference=prob.reference_cost(sz),
+            reference=prob.reference_cost(sz), timed_out_at,
             on_result = (opt_name, r) -> append_optimizer_evaluation(data_file, sz, opt_name, r)
         )
+        for (name, r) in optimizer_results
+            r.status === :timeout && !haskey(timed_out_at, name) && (timed_out_at[name] = sz)
+        end
 
         s_res = SingleSizeBenchmarkResult(
             prob.name,
