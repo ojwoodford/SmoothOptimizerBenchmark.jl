@@ -100,30 +100,9 @@ function create_rosenbrock_dense_problem()
             )
 
             # Model 3: JuMP, as a MathOptNLSModel
-            nls = build_jso_dense(n)
-            g_nlp = zeros(Float64, n)
-            h_vals_nlp = zeros(Float64, nls.meta.nnzh)
-            m_nlp = ModelDefinition(
-                "JuMP",
-                nls,
-                () -> begin
-                    reset_nlp_cache!(nls)
-                    NLPModels.obj(nls, x0)
-                end,
-                () -> begin
-                    reset_nlp_cache!(nls)
-                    c = NLPModels.obj(nls, x0)
-                    NLPModels.grad!(nls, x0, g_nlp)
-                    NLPModels.hess_coord!(nls, x0, h_vals_nlp)
-                    return (c, h_vals_nlp)
-                end,
-                () -> begin
-                    copyto!(nls.meta.x0, x0)
-                    reset_nlp_cache!(nls)
-                end
-            )
+            m_jump = jump_model("JuMP", build_jso_dense(n), x0)
 
-            return [m_nlls, m_lso, m_nlp]
+            return [m_nlls, m_lso, m_jump]
         end,
         get_standard_optimizers(; tall=true),
         "Dimension n",

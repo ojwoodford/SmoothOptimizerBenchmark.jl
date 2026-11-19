@@ -124,35 +124,10 @@ function create_ode_bvp_problem()
                 () -> copyto!(lsp.x, x0)
             )
 
-            # Model 3: JuMP, as a MathOptNLSModel (up to 32k)
-            models = ModelDefinition[m_nlls, m_lso]
-            if n <= 32768
-                nls = build_sparse_ode_bvp_jso(n)
-                g_nlp = zeros(Float64, n)
-                h_vals_nlp = zeros(Float64, nls.meta.nnzh)
-                m_nlp = ModelDefinition(
-                    "JuMP",
-                    nls,
-                    () -> begin
-                        reset_nlp_cache!(nls)
-                        NLPModels.obj(nls, x0)
-                    end,
-                    () -> begin
-                        reset_nlp_cache!(nls)
-                        c = NLPModels.obj(nls, x0)
-                        NLPModels.grad!(nls, x0, g_nlp)
-                        NLPModels.hess_coord!(nls, x0, h_vals_nlp)
-                        return (c, h_vals_nlp)
-                    end,
-                    () -> begin
-                        copyto!(nls.meta.x0, x0)
-                        reset_nlp_cache!(nls)
-                    end
-                )
-                push!(models, m_nlp)
-            end
+            # Model 3: JuMP, as a MathOptNLSModel, at every size (its build was measured, IND3, decision 18)
+            m_jump = jump_model("JuMP", build_sparse_ode_bvp_jso(n), x0)
 
-            return models
+            return ModelDefinition[m_nlls, m_lso, m_jump]
         end,
         get_standard_optimizers(; tall=true),
         "Grid Points N",

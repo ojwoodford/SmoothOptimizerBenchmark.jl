@@ -11,8 +11,9 @@ const PAIRED_MODELS = Dict(
         "Standalone (Sparse)" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "Exponential Curve Fitting" => Dict(
+        "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
         "NLLSModel (Static)" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)"],
-        "Standalone" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)", "CaNNOLeS"],
+        "Standalone" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "Robust Exponential Curve Fitting" => Dict(
         "NLLSModel (Static)" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)"],
@@ -110,10 +111,8 @@ end
     for p in problems
         @test paired_models(p, first(p.default_sizes)) == PAIRED_MODELS[p.name]
     end
-    # Where a problem lacks a package's native model at a size, the row runs on the Standalone model: sparse Rosenbrock
-    # has no JuMP model above 32768 variables
+    # The JuMP model is built at every size (decision 18: no build was near its limits, IND3), so the map is the same at
+    # the largest size: sparse Rosenbrock's, the largest JuMP model
     sr = create_rosenbrock_sparse_problem()
-    big = paired_models(sr, last(sr.default_sizes))
-    @test !haskey(big, "JuMP")
-    @test sort(big["Standalone (Sparse)"]) == sort([PAIRED_MODELS[sr.name]["Standalone (Sparse)"]; PAIRED_MODELS[sr.name]["JuMP"]])
+    @test paired_models(sr, last(sr.default_sizes)) == PAIRED_MODELS[sr.name]
 end

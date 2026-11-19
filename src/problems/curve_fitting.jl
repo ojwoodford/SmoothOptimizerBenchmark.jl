@@ -21,6 +21,14 @@ function generate_exp_data(n_points::Int)
     return collect(t_pts), y_data
 end
 
+# The JuMP model (IND3b): one residual expression per data point, the formula of ExpFitResidual, in p[1:3]
+function build_jump_curve_fitting(t_pts::Vector{Float64}, y_data::Vector{Float64}, p0::Vector{Float64})
+    model = JuMP.Model()
+    @variable(model, p[i = 1:3], start = p0[i])
+    F = [@NLexpression(model, p[1] * exp(-p[2] * t_pts[i]) + p[3] - y_data[i]) for i in eachindex(t_pts)]
+    return MathOptNLSModel(model, F)
+end
+
 function create_curve_fitting_problem()
     ProblemDefinition(
         "Exponential Curve Fitting",
@@ -78,7 +86,10 @@ function create_curve_fitting_problem()
                 () -> copyto!(p_standalone, p0_vec)
             )
 
-            return [m_nlls, m_standalone]
+            # Model 3: JuMP, as a MathOptNLSModel (IND3b)
+            m_jump = jump_model("JuMP", build_jump_curve_fitting(t_pts, y_data, p0_vec), p0_vec)
+
+            return [m_nlls, m_standalone, m_jump]
         end,
         get_standard_optimizers(; tall=true),
         "Data Points m";
