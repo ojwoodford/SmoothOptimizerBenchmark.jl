@@ -329,9 +329,11 @@ function get_procrustes_manopt_components(model_def)
     return M, procrustes_manopt_blocks(fs, Js, d), A, B, Matrix{Float64}(I, d, d)
 end
 
-# The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, d = 32, on NLLSModel (Specialized),
-# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_wellconditioned, RS_hessian, L_dense, I_lm
-const ROBUST_PROCRUSTES_SOO = (; iterator = :levenbergmarquardt, linsolver = :cholesky, formulation = :hessian, reduction = :none, storage = :dense)
+# The SecondOrderOptimization row's configuration (IND4, re-derived by K1 of jacobian-normal-equations.md): NLLSModel's
+# recommendoptimizer at the largest size, d = 32, on NLLSModel (Specialized), with numthreads = 1, evaluated 2026-11-19 at NLLSModel 61a7bcd
+# (Julia 1.13.3); rules F_normalequations, RS_jacobian_dense, L_jacobian_normal, I_lm: the Jacobian path, with the
+# normal equations formed from the dense Jacobian
+const ROBUST_PROCRUSTES_SOO = (; iterator = :levenbergmarquardt, linsolver = :cholesky, formulation = :jacobian, reduction = :none, storage = :dense)
 
 function create_robust_procrustes_problem()
     ProblemDefinition(

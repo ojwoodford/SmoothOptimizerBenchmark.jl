@@ -129,9 +129,11 @@ function build_jump_affine_alignment(X::Matrix{Float64}, Y::Matrix{Float64}, D::
     return MathOptNLSModel(model, F)
 end
 
-# The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, n = 32,
-# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_wellconditioned, RS_hessian, L_dense, I_lm
-const AFFINE_ALIGNMENT_SOO = (; iterator = :levenbergmarquardt, linsolver = :cholesky, formulation = :hessian, reduction = :none, storage = :dense)
+# The SecondOrderOptimization row's configuration (IND4, re-derived by K1 of jacobian-normal-equations.md): NLLSModel's
+# recommendoptimizer at the largest size, n = 32, with numthreads = 1, evaluated 2026-11-19 at NLLSModel 61a7bcd
+# (Julia 1.13.3); rules F_normalequations, RS_jacobian_dense, L_jacobian_normal, I_lm: the Jacobian path, with the
+# normal equations formed from the dense Jacobian
+const AFFINE_ALIGNMENT_SOO = (; iterator = :levenbergmarquardt, linsolver = :cholesky, formulation = :jacobian, reduction = :none, storage = :dense)
 
 function create_affine_alignment_problem()
     ProblemDefinition(
