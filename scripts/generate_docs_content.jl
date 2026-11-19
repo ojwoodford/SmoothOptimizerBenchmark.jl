@@ -332,7 +332,7 @@ $(model_plot)
 - **Category**: `$(res.category)`
 - **Scaling Metric**: $(res.size_metric_name)
 - **Problem Sizes Evaluated**: $(join(res.sizes, ", ")) ($(num_sizes) sizes)
-- **Standard Baseline Model for Solvers**: `$(target_model_name)`
+- **Standard Baseline Model for Optimizers**: `$(target_model_name)`
 - **Derivatives**: $(derivatives)
 
 $(DERIVATIVES_NOTES[slug])
