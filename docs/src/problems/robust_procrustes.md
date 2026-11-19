@@ -4,6 +4,9 @@
 - **Scaling Metric**: Matrix Dimension d
 - **Problem Sizes Evaluated**: 3, 4, 5, 6, 8, 10, 13, 16, 20, 26, 32 (11 sizes)
 - **Standard Baseline Model for Solvers**: `Manifolds`
+- **Derivatives**: analytic
+
+**Derivatives: analytic.** Each correspondence's residual depends on the rotation, ``d(d-1)/2`` scalar inputs (more than 8 from ``d = 5``), and every model has a hand-written Jacobian. `NLLSModel (ManifoldVar)` computes each correspondence's Jacobian in the orthonormal tangent basis of `Manifolds.jl`, through `computeresjac`; `NLLSModel (Specialized)` does the same for its own rotation type, with a specialized kernel; and the `Manifolds` model's per-correspondence Jacobian blocks, ``-p E_l b_i`` with the products ``E_l b_i`` precomputed, are hand-written as well (the Manopt row builds the same blocks).
 
 ---
 
@@ -47,6 +50,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Matrix Dimension d = `32`, **`Manifolds`** achieves the fastest Cost + Linear System evaluation at **262.77 ms** (32 B allocated).
-- **Top Converged Optimizer**: At Matrix Dimension d = `32` (4/4 solvers converged), **`Manopt (LevenbergMarquardt)`** is fastest at **2.00 s** (11 iterations, final cost `3.92e-06`).
+- **Model Efficiency**: At Matrix Dimension d = `32`, **`Manifolds`** achieves the fastest Cost + Linear System evaluation at **193.59 ms** (32 B allocated).
+- **Top Converged Optimizer**: At Matrix Dimension d = `32` (4/4 solvers converged), **`SecondOrderOptimization (Dogleg)`** is fastest at **1.26 s** (11 iterations, final cost `3.92e-06`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

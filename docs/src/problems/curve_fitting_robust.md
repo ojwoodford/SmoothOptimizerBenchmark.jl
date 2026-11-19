@@ -4,6 +4,9 @@
 - **Scaling Metric**: Data Points m
 - **Problem Sizes Evaluated**: 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536 (11 sizes)
 - **Standard Baseline Model for Solvers**: `Standalone (fudged)`
+- **Derivatives**: autodiff
+
+**Derivatives: automatic.** Every cost of this problem depends on at most 8 scalar inputs, so its costs are differentiated by forward-mode automatic differentiation: the `NLLSModel (Static)` model, which the native SecondOrderOptimization rows run on, computes each cost's Jacobian with NLLSModel's `computeresjac`. The `Standalone (fudged)` model, which every other row runs on, does not use that code yet: its rewritten residuals have a hand-written Jacobian (the exponential model's derivative, each row scaled as described below).
 
 ---
 
@@ -11,7 +14,7 @@
 
 Exponential curve fitting, ``a e^{-b t} + c - y`` with one `SVector{3}` variable, on curve fitting's data with **30 % of the points moved up by +1** (one-sided outliers, against noise of σ = 0.02), fitted with a **Huber kernel of width 0.05** (2.5σ, `Huber2oKernel`, with the second-order correction).
 
-- **Native rows.** `SecondOrderOptimization` (Dogleg, LM, LM tall) run the `NLLSModel (Static)` model, which declares the kernel.
+- **Native rows.** `SecondOrderOptimization` (Dogleg, LM, Gauss-Newton, LM tall) run the `NLLSModel (Static)` model, which declares the kernel. The Gauss-Newton row is `iterator = :newton`, the full step with no line search or trust region; `CaNNOLeS (fudged)` is Gauss–Newton globalized by a regularized ``LDL^T`` factorization and an Armijo line search.
 - **Every other row runs `Standalone (fudged)`.** That includes the general solvers, whether or not the row's name says "fudged". The residuals are rewritten as ``\tilde r = \operatorname{sign}(r)\sqrt{\rho(r^2)}``, and each row of the Jacobian is scaled by ``\rho'(r^2)\,|r| / \sqrt{\rho(r^2)}``. Then ``\tfrac12\|\tilde r\|^2`` is the robust cost exactly and ``\tilde J^T \tilde r`` its gradient.
   - LeastSquaresOptim, NonlinearSolve and CaNNOLeS have no kernel interface, and their rows are named "fudged".
   - So is the control row, `SecondOrderOptimization (LM, fudged)`: the native LM optimizer on the fudged model.
@@ -66,6 +69,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Data Points m = `65536`, **`NLLSModel (Static)`** achieves the fastest Cost + Linear System evaluation at **757.12 μs** (32 B allocated).
-- **Top Converged Optimizer**: At Data Points m = `65536` (12/15 solvers converged), **`SecondOrderOptimization (LM)`** is fastest at **11.32 ms** (8 iterations, final cost `9.57e+02`).
+- **Model Efficiency**: At Data Points m = `65536`, **`NLLSModel (Static)`** achieves the fastest Cost + Linear System evaluation at **1.10 ms** (32 B allocated).
+- **Top Converged Optimizer**: At Data Points m = `65536` (13/16 solvers converged), **`SecondOrderOptimization (Gauss-Newton)`** is fastest at **9.90 ms** (8 iterations, final cost `9.57e+02`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.
