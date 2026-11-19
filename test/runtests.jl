@@ -37,6 +37,7 @@ const TEST_FILES = [
     ("The harness evaluates every row's cost (IT1)", "point_evaluation.jl", :integration),
     ("Quick Single-Size Benchmark", "quick_benchmark.jl", :integration),
     ("Scaling Benchmark, Markdown Serialization & Plotting", "scaling_markdown_plotting.jl", :serial),
+    ("Problem pages: header, The Problem section and its numbers (PP3)", "problem_pages.jl", :serial),
     ("Scaling Benchmark: the single-threaded table", "scaling_single_threaded.jl", :threaded),
     ("NLPModels Evaluation Recomputation and Cache Invalidation", "nlpmodels_cache.jl", :serial),
     ("The features page: every cell has a state and its evidence (FP3)", "features_page.jl", :serial),
