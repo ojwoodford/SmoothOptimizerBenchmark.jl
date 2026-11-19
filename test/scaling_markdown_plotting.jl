@@ -52,7 +52,41 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         @test keys(sr_old.optimizer_results) == keys(sr_new.optimizer_results)
         @test keys(sr_old.model_results) == keys(sr_new.model_results)
     end
+    # DM12: the header records the problem's derivative mode, after the target model; a file without the line still loads
+    @test occursin("- **Optimizer Target Model**: Standalone (Sparse)\n- **Derivatives**: autodiff\n", md_text)
+    no_mode_md = joinpath(tmp_data_dir, "no_mode", "rosenbrock_sparse.md")
+    mkpath(dirname(no_mode_md))
+    write(no_mode_md, replace(md_text, "- **Derivatives**: autodiff\n" => ""))
+    loaded_no_mode = load_problem_markdown(no_mode_md)
+    @test !occursin("Derivatives", read(no_mode_md, String))
+    @test loaded_no_mode.sizes == loaded.sizes
+    for (sr_new, sr_old) in zip(loaded.size_results, loaded_no_mode.size_results)
+        @test keys(sr_old.optimizer_results) == keys(sr_new.optimizer_results)
+        @test keys(sr_old.model_results) == keys(sr_new.model_results)
+    end
+    @test_throws ArgumentError init_problem_markdown(joinpath(tmp_data_dir, "x.md"), "P", :small_dense, "n", "Standalone"; derivatives=:numeric)
     rm(tmp_data_dir; recursive=true, force=true)
+
+    # DM12: a generated page states the mode in its header and says, under it, what the mode means on that problem. The
+    # mode comes from the problem's definition, not from the results
+    isdefined(@__MODULE__, :generate_problem_markdown) || include(joinpath(@__DIR__, "..", "scripts", "generate_docs_content.jl"))
+    page = generate_problem_markdown(scaling_res, "rosenbrock_sparse")
+    @test occursin("- **Standard Baseline Model for Solvers**: `Standalone (Sparse)`\n- **Derivatives**: autodiff\n\n**Derivatives: automatic.**", page)
+    @test occursin("The `Standalone` model fills its residual vector and Jacobian by calling that same function", page)
+    @test occursin("JuMP's own automatic differentiation", page)
+    empty_result(name, cat) = ProblemScalingBenchmarkResult(name, cat, "n", Any[], SingleSizeBenchmarkResult[])
+    for (name, slug, line, text) in (
+            ("Multilateration", "multilateration", "analytic", "**Derivatives: analytic.** A cost of this problem depends on more than 8"),
+            ("Nonlinear 3D Pose Chain", "pose_chain", "autodiff", "**Derivatives: automatic.**"),
+            ("Sparse Bundle Adjustment", "bundle_adjustment", "mixed", "**Derivatives: mixed, exempt from the rule.**"),
+            ("Robust Procrustes on SO(d)", "robust_procrustes", "analytic", "every model has a hand-written Jacobian"))
+        p = generate_problem_markdown(empty_result(name, :small_dense), slug)
+        @test occursin("- **Derivatives**: $(line)\n", p)
+        @test occursin(text, p)
+    end
+    # The pose chain has one model: no Standalone sentence
+    @test !occursin("Standalone", generate_problem_markdown(empty_result("Nonlinear 3D Pose Chain", :large_sparse), "pose_chain"))
+    @test_throws ArgumentError problem_derivatives("No Such Problem")
 
     # Test Plotting Pipeline
     tmp_plot_dir = mktempdir()

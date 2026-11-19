@@ -411,7 +411,7 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
 
     if has_phase1_models
         # Initialize markdown file with metadata and Model Evaluation table header
-        init_problem_markdown(data_file, prob.name, prob.category, prob.size_metric_name, winning_model_name)
+        init_problem_markdown(data_file, prob.name, prob.category, prob.size_metric_name, winning_model_name; derivatives=prob.derivatives)
     else
         # Initialize markdown file with metadata, noting universal single model
         mkpath(dirname(data_file))
@@ -421,6 +421,7 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
             println(io, "- **Category**: $(prob.category)")
             println(io, "- **Scaling Metric**: $(prob.size_metric_name)")
             println(io, "- **Optimizer Target Model**: $(winning_model_name)")
+            println(io, derivatives_line(prob.derivatives))
             println(io, convergence_criteria_line())
             println(io, "- **Benchmark Date**: $(Dates.format(Dates.now(), "yyyy-mm-ddTHH:MM:SS"))")
             println(io, "- **Host CPU**: $(Sys.CPU_NAME) ($(Sys.CPU_THREADS) cores)")

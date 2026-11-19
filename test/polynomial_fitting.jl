@@ -19,7 +19,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     # The excess survives the round trip through the results file
     dir = mktempdir()
     f = joinpath(dir, "polyfit.md")
-    init_problem_markdown(f, prob.name, prob.category, prob.size_metric_name, target.name)
+    init_problem_markdown(f, prob.name, prob.category, prob.size_metric_name, target.name; derivatives=prob.derivatives)
     init_optimizer_section(f, target.name)
     for (k, r) in res
         append_optimizer_evaluation(f, sz, k, r)

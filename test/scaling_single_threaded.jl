@@ -17,7 +17,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     # The threaded folder's file: the result in hand written with the package's own functions (ET5), not a second run
     sr = only(st_res.size_results)
     threaded_md = joinpath(tmp_root, "rosenbrock_sparse.md")
-    init_problem_markdown(threaded_md, st_res.problem, st_res.category, st_res.size_metric_name, sr.target_model)
+    init_problem_markdown(threaded_md, st_res.problem, st_res.category, st_res.size_metric_name, sr.target_model; derivatives=prob.derivatives)
     for (name, mr) in sr.model_results
         append_model_evaluation(threaded_md, sr.size, name, mr)
     end

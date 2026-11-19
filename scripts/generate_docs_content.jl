@@ -65,6 +65,35 @@ function summarize_solvers(res::ProblemScalingBenchmarkResult)
     return join(pkgs, ", ")
 end
 
+# The derivative mode a problem declares (DM12): from its definition, looked up by name among the registered problems,
+# not from the results
+function problem_derivatives(problem_name::AbstractString)
+    probs = get_all_problems()
+    i = findfirst(p -> p.name == problem_name, probs)
+    i === nothing && throw(ArgumentError("No registered problem is named $(repr(problem_name))"))
+    return probs[i].derivatives
+end
+
+const DERIV_AUTODIFF = "**Derivatives: automatic.** Every cost of this problem depends on at most $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) scalar inputs, so each cost's Jacobian is computed by forward-mode automatic differentiation, with NLLSModel's `computeresjac`."
+const DERIV_AUTODIFF_STANDALONE = " The `Standalone` model fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, so every model evaluates a cost with the same code; what differs between rows is how the linear system is assembled and how the optimizer uses it."
+const DERIV_JUMP = " The `NLPModels (MathOptNLSModel)` model is differentiated by JuMP's own automatic differentiation."
+const DERIV_ANALYTIC = "**Derivatives: analytic.** A cost of this problem depends on more than $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) scalar inputs, so each cost has a hand-written Jacobian. NLLSModel calls it through `computeresjac`, and the `Standalone` model fills its residual vector and Jacobian by calling the same function for each cost in a plain single-threaded loop, so every model evaluates a cost with the same code."
+
+# The paragraph under each problem page's header: what its derivative mode means on that problem, by what its models are
+const DERIVATIVES_NOTES = Dict(
+    "curve_fitting" => DERIV_AUTODIFF * DERIV_AUTODIFF_STANDALONE,
+    "ode_bvp" => DERIV_AUTODIFF * DERIV_AUTODIFF_STANDALONE * DERIV_JUMP,
+    "rosenbrock_dense" => DERIV_AUTODIFF * DERIV_AUTODIFF_STANDALONE * DERIV_JUMP,
+    "rosenbrock_sparse" => DERIV_AUTODIFF * DERIV_AUTODIFF_STANDALONE * DERIV_JUMP,
+    "pose_chain" => DERIV_AUTODIFF,
+    "curve_fitting_robust" => "**Derivatives: automatic.** Every cost of this problem depends on at most $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) scalar inputs, so its costs are differentiated by forward-mode automatic differentiation: the `NLLSModel (Static)` model, which the native SecondOrderOptimization rows run on, computes each cost's Jacobian with NLLSModel's `computeresjac`. The `Standalone (fudged)` model, which every other row runs on, does not use that code yet: its rewritten residuals have a hand-written Jacobian (the exponential model's derivative, each row scaled as described below).",
+    "polynomial_fitting" => DERIV_ANALYTIC,
+    "multilateration" => DERIV_ANALYTIC,
+    "affine_alignment" => "**Derivatives: analytic, not yet in place.** A cost of this problem depends on more than $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) scalar inputs (all ``n(n+1)`` of the affine map's), so by the benchmark's rule its costs are to have hand-written Jacobians shared by every model. They do not yet: the problem has one model, `Standalone`, which computes the Jacobian of the whole residual vector by LeastSquaresOptim's forward-mode automatic differentiation (`autodiff = :forward`), and every row, SecondOrderOptimization's included, runs on it.",
+    "robust_procrustes" => "**Derivatives: analytic.** Each correspondence's residual depends on the rotation, ``d(d-1)/2`` scalar inputs (more than $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) from ``d = 5``), and every model has a hand-written Jacobian. `NLLSModel (ManifoldVar)` computes each correspondence's Jacobian in the orthonormal tangent basis of `Manifolds.jl`, through `computeresjac`; `NLLSModel (Specialized)` does the same for its own rotation type, with a specialized kernel; and the `Manifolds` model's per-correspondence Jacobian blocks, ``-p E_l b_i`` with the products ``E_l b_i`` precomputed, are hand-written as well (the Manopt row builds the same blocks).",
+    "bundle_adjustment" => "**Derivatives: mixed, exempt from the rule.** Each observation depends on a camera and a point, 12 scalar inputs, but this problem is exempt from the rule: its two models are separate formulations of the problem, not two uses of the same per-cost code, so no equivalent pair of rows is being compared. The `NLLSModel` model differentiates each observation automatically (NLLSModel's `computeresjac`); `BundleAdjustmentModels` evaluates its own Jacobian.",
+)
+
 # `single_threaded`: the same problems run with NLLSModel and BLAS on one thread, stored in `data/single_threaded/` and
 # plotted in `assets/plots/single_threaded/`; each problem page shows them beside the threaded results.
 function generate_docs_markdown(results::Vector{ProblemScalingBenchmarkResult}; single_threaded::Vector{ProblemScalingBenchmarkResult}=ProblemScalingBenchmarkResult[], docs_dir=DEFAULT_DOCS_DIR)
@@ -81,7 +110,7 @@ function generate_docs_markdown(results::Vector{ProblemScalingBenchmarkResult}; 
         sz_range = isempty(res.sizes) ? "-" : "$(first(res.sizes)) … $(last(res.sizes))"
         target_m = isempty(res.size_results) ? "Standard" : first(res.size_results).target_model
         solvers_str = summarize_solvers(res)
-        push!(suite_rows, "| [$(res.problem)](problems/$(slug).md) | `$(res.category)` | $(res.size_metric_name) | $(n_sz) sizes ($(sz_range)) | `$(target_m)` | $(solvers_str) |")
+        push!(suite_rows, "| [$(res.problem)](problems/$(slug).md) | `$(res.category)` | $(res.size_metric_name) | $(n_sz) sizes ($(sz_range)) | `$(target_m)` | $(problem_derivatives(res.problem)) | $(solvers_str) |")
     end
     suite_table = join(suite_rows, "\n")
 
@@ -120,9 +149,12 @@ To separate modeling overhead from solver algorithm efficiency, every problem is
    - Only `ok` rows are plotted (`converged = true` in the raw data tables); every other status is omitted (`NaN`) from the runtime plots, `local_minimum` included, since its time is the time to a different optimum.
    - Results stream line-by-line directly to Markdown tables in `docs/src/data/` as each model and optimizer measurement completes.
 
+### Derivatives
+Each problem has one derivative mode, which every model handed to an optimizer follows, and which its page states. A problem is **automatic** when every cost depends on at most $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) scalar inputs at every size: each cost's Jacobian is then computed by NLLSModel's forward-mode automatic differentiation. Otherwise it is **analytic**, and each cost has a hand-written Jacobian. Either way the `Standalone` model fills its residuals and Jacobian by calling the same per-cost functions in a plain single-threaded loop, so the rows differ by how the linear system is assembled and how it is solved, not by how a cost is differentiated; bundle adjustment, whose two models are separate formulations, is exempt (**mixed**).
+
 ### Threaded and Single-Threaded Tables
-Every problem is run twice. The **threaded** table uses the thread counts in its data file's header (NLLSModel's
-`numthreads`, Julia's threads and BLAS's threads); the **single-threaded** table runs NLLSModel and BLAS on one thread
+Every problem is run twice. The **threaded** table runs Julia and NLLSModel on the thread counts in its data file's
+header and **BLAS on one thread**; the **single-threaded** table runs NLLSModel and BLAS on one thread
 (`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`) and is stored separately, in `docs/src/data/single_threaded/`.
 Each problem page shows both.
 
@@ -130,8 +162,8 @@ Each problem page shows both.
 
 ## Benchmark Problem Suite
 
-| Problem | Category | Scaling Metric | Sizes Tested | Baseline Model | Tested Solver Packages |
-|:---|:---|:---|:---|:---|:---|
+| Problem | Category | Scaling Metric | Sizes Tested | Baseline Model | Derivatives | Tested Solver Packages |
+|:---|:---|:---|:---|:---|:---|:---|
 $(suite_table)
 
 ---
@@ -293,6 +325,7 @@ $(model_plot)
 
     model_summary_line = has_phase1 ? "- **Model Efficiency**: $(model_summary_str)" : "- **Model Architecture**: Handled universally via `$(target_model_name)` with built-in zero-allocation adapters."
 
+    derivatives = problem_derivatives(res.problem)
     md = """
 # $(res.problem)
 
@@ -300,6 +333,9 @@ $(model_plot)
 - **Scaling Metric**: $(res.size_metric_name)
 - **Problem Sizes Evaluated**: $(join(res.sizes, ", ")) ($(num_sizes) sizes)
 - **Standard Baseline Model for Solvers**: `$(target_model_name)`
+- **Derivatives**: $(derivatives)
+
+$(DERIVATIVES_NOTES[slug])
 
 ---
 

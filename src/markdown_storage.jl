@@ -70,12 +70,23 @@ function threads_line()
     return "- **Threads**: NLLSModel numthreads=$(t.numthreads), Julia threads=$(t.julia_threads), BLAS threads=$(t.blas_threads)"
 end
 
+# The problem's derivative mode (DM12), for the header of a results file; the loader ignores it, so a file without it loads
+function derivatives_line(derivatives::Symbol)
+    derivatives in DERIVATIVE_MODES || throw(ArgumentError(
+        "Unknown derivative mode $(repr(derivatives)); expected one of :autodiff, :analytic or :mixed"))
+    return "- **Derivatives**: $(derivatives)"
+end
+
 """
-    init_problem_markdown(filepath::String, prob_name::String, category::Symbol, size_metric_name::String, target_model_name::String) -> String
+    init_problem_markdown(filepath::String, prob_name::String, category::Symbol, size_metric_name::String, target_model_name::String;
+                          derivatives::Symbol) -> String
 
 Initializes a problem markdown data file with metadata headers and the Model Evaluation table header, flushing immediately.
+`derivatives` is the problem's derivative mode (`ProblemDefinition`'s `derivatives`), written into the header.
 """
-function init_problem_markdown(filepath::String, prob_name::String, category::Symbol, size_metric_name::String, target_model_name::String)
+function init_problem_markdown(filepath::String, prob_name::String, category::Symbol, size_metric_name::String, target_model_name::String;
+                               derivatives::Symbol)
+    dline = derivatives_line(derivatives)
     mkpath(dirname(filepath))
     open(filepath, "w") do io
         println(io, "# Benchmark Results: $(prob_name)")
@@ -83,6 +94,7 @@ function init_problem_markdown(filepath::String, prob_name::String, category::Sy
         println(io, "- **Category**: $(category)")
         println(io, "- **Scaling Metric**: $(size_metric_name)")
         println(io, "- **Optimizer Target Model**: $(target_model_name)")
+        println(io, dline)
         println(io, convergence_criteria_line())
         println(io, "- **Benchmark Date**: $(Dates.format(Dates.now(), "yyyy-mm-ddTHH:MM:SS"))")
         println(io, "- **Host CPU**: $(Sys.CPU_NAME) ($(Sys.CPU_THREADS) cores)")

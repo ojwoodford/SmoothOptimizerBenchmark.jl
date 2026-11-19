@@ -78,7 +78,7 @@ end)
 
     # The new statuses are written and read back
     file = joinpath(mktempdir(), "status.md")
-    init_problem_markdown(file, "Status", :small_dense, "Size", "Standalone")
+    init_problem_markdown(file, "Status", :small_dense, "Size", "Standalone"; derivatives=:analytic)
     @test occursin("above_reference", read(file, String))
     init_optimizer_section(file, "Standalone")
     for (name, r) in rows
