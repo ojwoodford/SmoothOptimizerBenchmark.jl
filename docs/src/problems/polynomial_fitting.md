@@ -12,13 +12,13 @@
 
 ## The Problem
 
-Fit a polynomial of degree 13 to ``m`` samples of a smooth curve, ``y(t) = \sin(3t) + 0.01\cos(17t)``, at evenly spaced points in ``[0, 1]``. The unknowns are the polynomial's 14 coefficients ``c_0, \dots, c_{13}``:
+Fit a polynomial of degree 13 to ``m`` samples of a smooth curve, ``y_i = \sin(3t_i) + 0.01\cos(17t_i)``, at evenly spaced points ``t_i`` in ``[0, 1]``. The unknowns are the polynomial's 14 coefficients, ``\mathbf{c} = (c_0, \dots, c_{13})``:
 
 ```math
-f(c) = \tfrac12 \sum_{i=1}^{m} \Bigl(\sigma \bigl(\textstyle\sum_{k=0}^{13} c_k\, t_i^k - y(t_i)\bigr)\Bigr)^2, \qquad \sigma = 10^4 .
+f(\mathbf{c}) = \tfrac12 \sum_{i=1}^{m} \Bigl(\sigma \bigl(\textstyle\sum_{k=0}^{13} c_k\, t_i^k - y_i\bigr)\Bigr)^2, \qquad \sigma = 10^4 .
 ```
 
-The residuals are linear in the unknowns, so this is ordinary linear least squares, and in exact arithmetic one step from the starting point (all coefficients zero) would land on the answer. The difficulty is numerical. On ``[0, 1]`` the powers ``t^8, t^9, t^{10}, \dots`` look almost alike, so very different sets of coefficients give almost the same curve. The Jacobian's condition number is about ``4 \times 10^9``. Forming ``J^T J`` squares it, to about ``10^{19}``, which is more than double precision can represent (about ``10^{16}``). An optimizer that forms ``J^T J`` therefore loses the answer's accuracy before it starts; one that factorizes ``J`` itself does not. Because the cost of a computed answer is itself rounded, each row is scored by its excess cost over the true minimum, both computed in extended precision.
+The residuals are linear in the unknowns, so this is ordinary linear least squares, and in exact arithmetic one step from the starting point (all coefficients zero) would land on the answer. The difficulty is numerical. On ``[0, 1]`` the powers ``t^8, t^9, t^{10}, \dots`` look almost alike, so very different sets of coefficients give almost the same curve. The Jacobian's condition number is about ``4 \times 10^9``. Forming ``\mathbf{J}^T \mathbf{J}`` squares it, to about ``10^{19}``, which is more than double precision can represent (about ``10^{16}``). An optimizer that forms ``\mathbf{J}^T \mathbf{J}`` therefore loses the answer's accuracy before it starts; one that factorizes ``\mathbf{J}`` itself does not. Because the cost of a computed answer is itself rounded, each row is scored by its excess cost over the true minimum, both computed in extended precision.
 
 ### Where it is used
 
@@ -40,7 +40,7 @@ The size is the number of data points, ``m``. The number of unknowns is fixed at
 | Costs | ``m``, each one residual depending on the whole variable | 60 | 6400 |
 | Residuals in total | ``m`` | 60 | 6400 |
 | Jacobian | ``m \times 14``, dense | 60 × 14 | 6400 × 14 |
-| Hessian ``J^T J`` | ``14 \times 14``, dense | 14 × 14 | 14 × 14 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``14 \times 14``, dense | 14 × 14 | 14 × 14 |
 
 ---
 

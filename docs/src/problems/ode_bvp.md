@@ -21,10 +21,10 @@ A differential equation describes how a quantity varies along a line; a *boundar
 To solve it on a computer, the line is divided by ``N`` evenly spaced grid points, a distance ``h = 1/(N+1)`` apart, and the unknowns are the values ``u_1, \dots, u_N`` at those points. The equation becomes one algebraic equation per grid point, each involving a point and its two neighbours:
 
 ```math
-r_i(u) = \frac{-u_{i-1} + 2u_i - u_{i+1}}{h^2} - \lambda\, e^{u_i}, \qquad u_0 = u_{N+1} = 0 .
+\epsilon_i(\mathbf{u}) = \frac{-u_{i-1} + 2u_i - u_{i+1}}{h^2} - \lambda\, e^{u_i}, \qquad u_0 = u_{N+1} = 0 .
 ```
 
-The optimizer minimizes ``\tfrac12 \sum_i r_i^2``, starting from ``u = 0``. There are as many equations as unknowns, so at the solution every residual is zero: this is a system of nonlinear equations, solved as a least-squares problem.
+The optimizer minimizes ``\tfrac12 \sum_i \epsilon_i(\mathbf{u})^2``, starting from ``\mathbf{u} = \mathbf{0}``. There are as many equations as unknowns, so at the solution every residual is zero: this is a system of nonlinear equations, solved as a least-squares problem.
 
 ### Where it is used
 
@@ -32,7 +32,7 @@ Discretized differential equations are the daily work of scientific computing: h
 
 ### Similar problems
 
-Its structure is that of the [sparse Rosenbrock problem](rosenbrock_sparse.md), a chain in which each unknown is tied to its neighbours, with a tridiagonal Jacobian. Two things set it apart. It is square (as many residuals as unknowns). And it becomes badly conditioned as the grid is refined: the division by ``h^2`` makes the Jacobian's condition number grow as about ``0.4\,N^2``, and that of ``J^T J`` as its square. At the largest size that is about ``4 \times 10^8`` for ``J`` and ``10^{17}`` for ``J^T J``, beyond what double precision can represent, so, as in the [ill-conditioned polynomial fit](polynomial_fitting.md), optimizers that form ``J^T J`` are at a disadvantage against those that work with ``J``.
+Its structure is that of the [sparse Rosenbrock problem](rosenbrock_sparse.md), a chain in which each unknown is tied to its neighbours, with a tridiagonal Jacobian. Two things set it apart. It is square (as many residuals as unknowns). And it becomes badly conditioned as the grid is refined: the division by ``h^2`` makes the Jacobian's condition number grow as about ``0.4\,N^2``, and that of ``\mathbf{J}^T \mathbf{J}`` as its square. At the largest size that is about ``4 \times 10^8`` for ``\mathbf{J}`` and ``10^{17}`` for ``\mathbf{J}^T \mathbf{J}``, beyond what double precision can represent, so, as in the [ill-conditioned polynomial fit](polynomial_fitting.md), optimizers that form ``\mathbf{J}^T \mathbf{J}`` are at a disadvantage against those that work with ``\mathbf{J}``.
 
 ### How it scales
 
@@ -46,14 +46,14 @@ The size is the number of grid points, ``N``. Variables, residuals and non-zeros
 | Costs | ``N``, each one residual: ``N - 2`` depend on three variables, the 2 at the ends on two | 32 | 32768 |
 | Residuals in total | ``N`` | 32 | 32768 |
 | Jacobian | ``N \times N``, tridiagonal, ``3N - 2`` non-zeros | 94 non-zeros | 98302 non-zeros |
-| Hessian ``J^T J`` | ``N \times N``, pentadiagonal, ``5N - 6`` non-zeros | 154 non-zeros | 163834 non-zeros |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``N \times N``, pentadiagonal, ``5N - 6`` non-zeros | 154 non-zeros | 163834 non-zeros |
 
 ---
 
 ## The SecondOrderOptimization rows
 
-- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton` on the normal equations: Gauss–Newton, since the Hessian it is given is ``J^T J``. It takes the full step, with no line search or trust region (a diagonal shift only when the system cannot be solved), so a step that raises the cost is caught only by the stall test, and the row then ends `not_converged`. **`CaNNOLeS`** (`method = :Newton_noFHess`) is Gauss–Newton too, globalized: an ``LDL^T`` factorization of the augmented system ``[\rho I\ \ J^T;\ J\ \ {-I}]``, with ``\rho`` raised from 0 only when the factorization fails or has the wrong inertia, then an Armijo backtracking line search on ``\tfrac12\|F\|^2``.
-- **`SecondOrderOptimization (LM, tall)`** is Levenberg–Marquardt on the residual-and-Jacobian form (`formulation = :jacobian`): each step solves the damped least-squares problem in ``J`` by QR, without forming ``J^T J``, on the `NLLSModel` model. `storage = :auto` stores ``J`` dense or sparse from its fill (sparse at the large sizes), and `linsolver = :auto` factorizes it by dense QR or SPQR. The rows without "tall" solve the normal equations in ``J^T J``.
+- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton` on the normal equations: Gauss–Newton, since the Hessian it is given is ``\mathbf{J}^T \mathbf{J}``. It takes the full step, with no line search or trust region (a diagonal shift only when the system cannot be solved), so a step that raises the cost is caught only by the stall test, and the row then ends `not_converged`. **`CaNNOLeS`** (`method = :Newton_noFHess`) is Gauss–Newton too, globalized: an ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization of the augmented system ``[\mu \mathbf{I}\ \ \mathbf{J}^T;\ \mathbf{J}\ \ {-\mathbf{I}}]``, with ``\mu`` raised from 0 only when the factorization fails or has the wrong inertia, then an Armijo backtracking line search on ``\tfrac12\lVert\boldsymbol{\epsilon}\rVert^2``.
+- **`SecondOrderOptimization (LM, tall)`** is Levenberg–Marquardt on the residual-and-Jacobian form (`formulation = :jacobian`): each step solves the damped least-squares problem in ``\mathbf{J}`` by QR, without forming ``\mathbf{J}^T \mathbf{J}``, on the `NLLSModel` model. `storage = :auto` stores ``\mathbf{J}`` dense or sparse from its fill (sparse at the large sizes), and `linsolver = :auto` factorizes it by dense QR or SPQR. The rows without "tall" solve the normal equations in ``\mathbf{J}^T \mathbf{J}``.
 
 ---
 

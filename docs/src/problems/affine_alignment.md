@@ -12,13 +12,13 @@
 
 ## The Problem
 
-Two clouds of points in ``n`` dimensions, ``x_1, \dots, x_{2n}`` and ``y_1, \dots, y_{2n}``. The first cloud is to be moved by an unknown *affine map*, ``x \mapsto M x + t``: a matrix ``M`` that can rotate, stretch and shear it, and a shift ``t``. What is known is a table of distances ``D_{ij}``, from each moved point of the first cloud to each point of the second. The optimizer looks for the map that reproduces the whole table:
+Two clouds of points in ``n`` dimensions, ``\mathbf{x}_1, \dots, \mathbf{x}_{2n}`` and ``\mathbf{y}_1, \dots, \mathbf{y}_{2n}``. The first cloud is to be moved by an unknown *affine map*, ``\mathbf{x} \mapsto \mathbf{M} \mathbf{x} + \mathbf{t}``: a matrix ``\mathbf{M}`` that can rotate, stretch and shear it, and a shift ``\mathbf{t}``. What is known is a table of distances ``D_{ij}``, from each moved point of the first cloud to each point of the second. The optimizer looks for the map that reproduces the whole table:
 
 ```math
-f(M, t) = \tfrac12 \sum_{i=1}^{2n} \sum_{j=1}^{2n} \bigl(D_{ij} - \lVert M x_i + t - y_j \rVert\bigr)^2 .
+f(\mathbf{M}, \mathbf{t}) = \tfrac12 \sum_{i=1}^{2n} \sum_{j=1}^{2n} \bigl(D_{ij} - \lVert \mathbf{M} \mathbf{x}_i + \mathbf{t} - \mathbf{y}_j \rVert\bigr)^2 .
 ```
 
-The table is generated from a true map (``M`` close to the identity, ``t`` random) with no noise, so the minimum is zero. The optimizers start from ``M = I``, ``t = 0``.
+The table is generated from a true map (``\mathbf{M}`` close to the identity, ``\mathbf{t}`` random) with no noise, so the minimum is zero. The optimizers start from ``\mathbf{M} = \mathbf{I}``, ``\mathbf{t} = \mathbf{0}``.
 
 ### Where it is used
 
@@ -30,7 +30,7 @@ Dense problems in which every residual depends on every unknown, so there is no 
 
 ### How it scales
 
-The size is the dimension, ``n``. The unknowns (the ``n^2`` entries of ``M`` and the ``n`` of ``t``) and the residuals (one per pair of points) both grow as ``n^2``, so the Jacobian grows as ``n^4``, and assembling and factorizing ``J^T J`` as ``n^6``.
+The size is the dimension, ``n``. The unknowns (the ``n^2`` entries of ``\mathbf{M}`` and the ``n`` of ``\mathbf{t}``) and the residuals (one per pair of points) both grow as ``n^2``, so the Jacobian grows as ``n^4``, and assembling and factorizing ``\mathbf{J}^T \mathbf{J}`` as ``n^6``.
 
 | | In terms of the size | Smallest | Largest |
 |:---|:---|---:|---:|
@@ -40,13 +40,13 @@ The size is the dimension, ``n``. The unknowns (the ``n^2`` entries of ``M`` and
 | Costs | ``(2n)^2`` residuals, one per pair of points, each depending on the whole variable | 4 | 4096 |
 | Residuals in total | ``4n^2`` | 4 | 4096 |
 | Jacobian | ``4n^2 \times n(n+1)``, dense | 4 × 2 | 4096 × 1056 |
-| Hessian ``J^T J`` | ``n(n+1) \times n(n+1)``, dense | 2 × 2 | 1056 × 1056 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``n(n+1) \times n(n+1)``, dense | 2 × 2 | 1056 × 1056 |
 
 ---
 
 ## The SecondOrderOptimization rows
 
-- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton` on the normal equations: Gauss–Newton, since the Hessian it is given is ``J^T J``. It takes the full step, with no line search or trust region (a diagonal shift only when the system cannot be solved), so a step that raises the cost is caught only by the stall test, and the row then ends `not_converged`. **`CaNNOLeS`** (`method = :Newton_noFHess`) is Gauss–Newton too, globalized: an ``LDL^T`` factorization of the augmented system ``[\rho I\ \ J^T;\ J\ \ {-I}]``, with ``\rho`` raised from 0 only when the factorization fails or has the wrong inertia, then an Armijo backtracking line search on ``\tfrac12\|F\|^2``.
+- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton` on the normal equations: Gauss–Newton, since the Hessian it is given is ``\mathbf{J}^T \mathbf{J}``. It takes the full step, with no line search or trust region (a diagonal shift only when the system cannot be solved), so a step that raises the cost is caught only by the stall test, and the row then ends `not_converged`. **`CaNNOLeS`** (`method = :Newton_noFHess`) is Gauss–Newton too, globalized: an ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization of the augmented system ``[\mu \mathbf{I}\ \ \mathbf{J}^T;\ \mathbf{J}\ \ {-\mathbf{I}}]``, with ``\mu`` raised from 0 only when the factorization fails or has the wrong inertia, then an Armijo backtracking line search on ``\tfrac12\lVert\boldsymbol{\epsilon}\rVert^2``.
 
 ---
 

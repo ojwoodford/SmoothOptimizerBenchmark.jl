@@ -15,10 +15,10 @@
 Take many photographs of a scene from different places. Bundle adjustment works out, at the same time, where every camera was and where every visible point of the scene is in 3D, by making them agree with where each point actually appears in each photograph. For each observation of a point in a photograph there is a prediction (project the 3D point through the camera) and a measurement (the pixel where it was seen); their difference is the *reprojection error*, two numbers, and the optimizer minimizes the sum of the squares of all of them:
 
 ```math
-f(\text{cameras}, \text{points}) = \tfrac12 \sum_{(c,\,p)\ \text{observed}} \bigl\lVert \pi(\text{camera}_c, \text{point}_p) - z_{cp} \bigr\rVert^2 .
+f(\mathbf{c}_1, \dots, \mathbf{p}_1, \dots) = \tfrac12 \sum_{(j,\,i)\ \text{observed}} \bigl\lVert \pi(\mathbf{c}_j, \mathbf{p}_i) - \mathbf{z}_{ji} \bigr\rVert^2 ,
 ```
 
-A camera has 9 unknowns (3 for its orientation, 3 for its position, its focal length and 2 lens-distortion coefficients, the model of the "Bundle Adjustment in the Large" data sets); a point has 3. The scenes here are synthetic: ``N_{cam}`` cameras in a row, ``5 N_{cam}`` points, each point seen by a run of neighbouring cameras, 30 % of them (and at least 3). The observations are exact, so the minimum is zero; the optimizers start from the true scene with the points and the cameras' orientations and positions slightly perturbed.
+where ``\mathbf{c}_j`` holds camera ``j``'s parameters, ``\mathbf{p}_i`` is point ``i``'s position, ``\mathbf{z}_{ji}`` is where point ``i`` was seen in photograph ``j``, and ``\pi`` is the camera projection. A camera has 9 unknowns (3 for its orientation, 3 for its position, its focal length and 2 lens-distortion coefficients, the model of the "Bundle Adjustment in the Large" data sets); a point has 3. The scenes here are synthetic: ``N_{cam}`` cameras in a row, ``5 N_{cam}`` points, each point seen by a run of neighbouring cameras, 30 % of them (and at least 3). The observations are exact, so the minimum is zero; the optimizers start from the true scene with the points and the cameras' orientations and positions slightly perturbed.
 
 ### Where it is used
 
@@ -40,15 +40,15 @@ The size is the number of cameras, ``N_{cam}``. The unknowns grow in proportion 
 | Costs | one per observation, each of 2 residuals depending on one camera and one point (12 unknowns): about ``1.5\,N_{cam}^2`` (``15\,N_{cam}`` at the two smallest sizes) | 60 | 98304 |
 | Residuals in total | about ``3\,N_{cam}^2`` | 120 | 196608 |
 | Jacobian | residuals × unknowns, sparse: 24 non-zeros per observation | 120 × 96 | 196608 × 6144 |
-| Hessian ``J^T J`` | ``24 N_{cam} \times 24 N_{cam}``, block-sparse: a 9 × 9 block per camera, a 3 × 3 block per point, a 9 × 3 block per observation; ``9 N_{cam} \times 9 N_{cam}`` once the points are eliminated | 96 × 96 | 6144 × 6144 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``24 N_{cam} \times 24 N_{cam}``, block-sparse: a 9 × 9 block per camera, a 3 × 3 block per point, a 9 × 3 block per observation; ``9 N_{cam} \times 9 N_{cam}`` once the points are eliminated | 96 × 96 | 6144 × 6144 |
 
 ---
 
 ## The SecondOrderOptimization rows
 
-- **`SecondOrderOptimization (LM)`** and **`(Dogleg)`** solve the normal equations with the points eliminated by a Schur complement (`reduction = :eliminate`); LM uses `:levenbergmarquardt_dtd`, whose damping is scaled by the running maximum of the squared column norms of ``J`` (the diagonal of ``J^T J``).
-- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton`, with the same Schur elimination: the full Gauss–Newton step, with no line search or trust region, so a step that raises the cost is caught only by the stall test. **`CaNNOLeS`** (`method = :Newton_noFHess`, on `BundleAdjustmentModels`) is Gauss–Newton globalized by a regularized ``LDL^T`` factorization of the augmented system and an Armijo backtracking line search.
-- **`SecondOrderOptimization (LM, tall)`** uses the same iterator and `reduction = :eliminate` on the residual-and-Jacobian form (`formulation = :jacobian`): the points are eliminated by QR of their blocks (square-root bundle adjustment), and the reduced camera system is stored as `storage = :auto` chooses and factorized by QR, without forming ``J^T J``.
+- **`SecondOrderOptimization (LM)`** and **`(Dogleg)`** solve the normal equations with the points eliminated by a Schur complement (`reduction = :eliminate`); LM uses `:levenbergmarquardt_dtd`, whose damping is scaled by the running maximum of the squared column norms of ``\mathbf{J}`` (the diagonal of ``\mathbf{J}^T \mathbf{J}``).
+- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton`, with the same Schur elimination: the full Gauss–Newton step, with no line search or trust region, so a step that raises the cost is caught only by the stall test. **`CaNNOLeS`** (`method = :Newton_noFHess`, on `BundleAdjustmentModels`) is Gauss–Newton globalized by a regularized ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization of the augmented system and an Armijo backtracking line search.
+- **`SecondOrderOptimization (LM, tall)`** uses the same iterator and `reduction = :eliminate` on the residual-and-Jacobian form (`formulation = :jacobian`): the points are eliminated by QR of their blocks (square-root bundle adjustment), and the reduced camera system is stored as `storage = :auto` chooses and factorized by QR, without forming ``\mathbf{J}^T \mathbf{J}``.
 - **`SecondOrderOptimization (LM, tall, LSMR)`** is the tall row with `linsolver = :lsmr`: the reduced least-squares problem is solved iteratively by LSMR (Krylov.jl) instead of by QR.
 
 ---

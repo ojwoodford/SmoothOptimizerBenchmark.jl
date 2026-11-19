@@ -90,7 +90,7 @@ const DERIVATIVES_NOTES = Dict(
     "polynomial_fitting" => DERIV_ANALYTIC,
     "multilateration" => DERIV_ANALYTIC,
     "affine_alignment" => "**Derivatives: analytic, not yet in place.** A cost of this problem depends on more than $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) scalar inputs (all ``n(n+1)`` of the affine map's), so by the benchmark's rule its costs are to have hand-written Jacobians shared by every model. They do not yet: the problem has one model, `Standalone`, which computes the Jacobian of the whole residual vector by LeastSquaresOptim's forward-mode automatic differentiation (`autodiff = :forward`), and every row, SecondOrderOptimization's included, runs on it.",
-    "robust_procrustes" => "**Derivatives: analytic.** Each correspondence's residual depends on the rotation, ``d(d-1)/2`` scalar inputs (more than $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) from ``d = 5``), and every model has a hand-written Jacobian. `NLLSModel (ManifoldVar)` computes each correspondence's Jacobian in the orthonormal tangent basis of `Manifolds.jl`, through `computeresjac`; `NLLSModel (Specialized)` does the same for its own rotation type, with a specialized kernel; and the `Manifolds` model's per-correspondence Jacobian blocks, ``-p E_l b_i`` with the products ``E_l b_i`` precomputed, are hand-written as well (the Manopt row builds the same blocks).",
+    "robust_procrustes" => "**Derivatives: analytic.** Each correspondence's residual depends on the rotation, ``d(d-1)/2`` scalar inputs (more than $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) from ``d = 5``), and every model has a hand-written Jacobian. `NLLSModel (ManifoldVar)` computes each correspondence's Jacobian in the orthonormal tangent basis of `Manifolds.jl`, through `computeresjac`; `NLLSModel (Specialized)` does the same for its own rotation type, with a specialized kernel; and the `Manifolds` model's per-correspondence Jacobian blocks, ``-\\mathbf{R}\\,\\mathbf{E}_l \\mathbf{b}_i`` with the products ``\\mathbf{E}_l \\mathbf{b}_i`` precomputed, are hand-written as well (the Manopt row builds the same blocks).",
     "bundle_adjustment" => "**Derivatives: mixed, exempt from the rule.** Each observation depends on a camera and a point, 12 scalar inputs, but this problem is exempt from the rule: its two models are separate formulations of the problem, not two uses of the same per-cost code, so no equivalent pair of rows is being compared. The `NLLSModel` model differentiates each observation automatically (NLLSModel's `computeresjac`); `BundleAdjustmentModels` evaluates its own Jacobian.",
 )
 
@@ -199,14 +199,14 @@ end
 
 # What the Gauss-Newton row is against CaNNOLeS (IT2), on the page of every problem that has both
 const GN_ROW_NOTE = raw"""
-- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton` on the normal equations: Gauss–Newton, since the Hessian it is given is ``J^T J``. It takes the full step, with no line search or trust region (a diagonal shift only when the system cannot be solved), so a step that raises the cost is caught only by the stall test, and the row then ends `not_converged`. **`CaNNOLeS`** (`method = :Newton_noFHess`) is Gauss–Newton too, globalized: an ``LDL^T`` factorization of the augmented system ``[\rho I\ \ J^T;\ J\ \ {-I}]``, with ``\rho`` raised from 0 only when the factorization fails or has the wrong inertia, then an Armijo backtracking line search on ``\tfrac12\|F\|^2``.
+- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton` on the normal equations: Gauss–Newton, since the Hessian it is given is ``\mathbf{J}^T \mathbf{J}``. It takes the full step, with no line search or trust region (a diagonal shift only when the system cannot be solved), so a step that raises the cost is caught only by the stall test, and the row then ends `not_converged`. **`CaNNOLeS`** (`method = :Newton_noFHess`) is Gauss–Newton too, globalized: an ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization of the augmented system ``[\mu \mathbf{I}\ \ \mathbf{J}^T;\ \mathbf{J}\ \ {-\mathbf{I}}]``, with ``\mu`` raised from 0 only when the factorization fails or has the wrong inertia, then an Armijo backtracking line search on ``\tfrac12\lVert\boldsymbol{\epsilon}\rVert^2``.
 """
 const SOO_ROWS_HEADER = "## The SecondOrderOptimization rows\n\n"
 const SECTION_END = "\n---\n"
 
 # What the tall rows are (T4), on the pages of the problems that have them beyond the dense ones
 const TALL_ROW_NOTE = raw"""
-- **`SecondOrderOptimization (LM, tall)`** is Levenberg–Marquardt on the residual-and-Jacobian form (`formulation = :jacobian`): each step solves the damped least-squares problem in ``J`` by QR, without forming ``J^T J``, on the `NLLSModel` model. `storage = :auto` stores ``J`` dense or sparse from its fill (sparse at the large sizes), and `linsolver = :auto` factorizes it by dense QR or SPQR. The rows without "tall" solve the normal equations in ``J^T J``.
+- **`SecondOrderOptimization (LM, tall)`** is Levenberg–Marquardt on the residual-and-Jacobian form (`formulation = :jacobian`): each step solves the damped least-squares problem in ``\mathbf{J}`` by QR, without forming ``\mathbf{J}^T \mathbf{J}``, on the `NLLSModel` model. `storage = :auto` stores ``\mathbf{J}`` dense or sparse from its fill (sparse at the large sizes), and `linsolver = :auto` factorizes it by dense QR or SPQR. The rows without "tall" solve the normal equations in ``\mathbf{J}^T \mathbf{J}``.
 """
 const LSMR_ROW_NOTE = raw"""
 - **`SecondOrderOptimization (LM, tall, LSMR)`** is the tall row with `linsolver = :lsmr`: each step's least-squares problem is solved iteratively by LSMR (Krylov.jl) instead of by QR.
@@ -224,9 +224,9 @@ const PROBLEM_NOTES = Dict(
     "bundle_adjustment" => raw"""
 ## The SecondOrderOptimization rows
 
-- **`SecondOrderOptimization (LM)`** and **`(Dogleg)`** solve the normal equations with the points eliminated by a Schur complement (`reduction = :eliminate`); LM uses `:levenbergmarquardt_dtd`, whose damping is scaled by the running maximum of the squared column norms of ``J`` (the diagonal of ``J^T J``).
-- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton`, with the same Schur elimination: the full Gauss–Newton step, with no line search or trust region, so a step that raises the cost is caught only by the stall test. **`CaNNOLeS`** (`method = :Newton_noFHess`, on `BundleAdjustmentModels`) is Gauss–Newton globalized by a regularized ``LDL^T`` factorization of the augmented system and an Armijo backtracking line search.
-- **`SecondOrderOptimization (LM, tall)`** uses the same iterator and `reduction = :eliminate` on the residual-and-Jacobian form (`formulation = :jacobian`): the points are eliminated by QR of their blocks (square-root bundle adjustment), and the reduced camera system is stored as `storage = :auto` chooses and factorized by QR, without forming ``J^T J``.
+- **`SecondOrderOptimization (LM)`** and **`(Dogleg)`** solve the normal equations with the points eliminated by a Schur complement (`reduction = :eliminate`); LM uses `:levenbergmarquardt_dtd`, whose damping is scaled by the running maximum of the squared column norms of ``\mathbf{J}`` (the diagonal of ``\mathbf{J}^T \mathbf{J}``).
+- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton`, with the same Schur elimination: the full Gauss–Newton step, with no line search or trust region, so a step that raises the cost is caught only by the stall test. **`CaNNOLeS`** (`method = :Newton_noFHess`, on `BundleAdjustmentModels`) is Gauss–Newton globalized by a regularized ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization of the augmented system and an Armijo backtracking line search.
+- **`SecondOrderOptimization (LM, tall)`** uses the same iterator and `reduction = :eliminate` on the residual-and-Jacobian form (`formulation = :jacobian`): the points are eliminated by QR of their blocks (square-root bundle adjustment), and the reduced camera system is stored as `storage = :auto` chooses and factorized by QR, without forming ``\mathbf{J}^T \mathbf{J}``.
 - **`SecondOrderOptimization (LM, tall, LSMR)`** is the tall row with `linsolver = :lsmr`: the reduced least-squares problem is solved iteratively by LSMR (Krylov.jl) instead of by QR.
 
 ---
@@ -234,19 +234,19 @@ const PROBLEM_NOTES = Dict(
     "curve_fitting_robust" => raw"""
 ## How each row gets the robust cost
 
-- **Native rows.** `SecondOrderOptimization` (Dogleg, LM, Gauss-Newton, LM tall) run the `NLLSModel (Static)` model, which declares the kernel. The Gauss-Newton row is `iterator = :newton`, the full step with no line search or trust region; `CaNNOLeS (fudged)` is Gauss–Newton globalized by a regularized ``LDL^T`` factorization and an Armijo line search.
-- **Every other row runs `Standalone (fudged)`.** That includes the general solvers, whether or not the row's name says "fudged". The residuals are rewritten as ``\tilde r = \operatorname{sign}(r)\sqrt{\rho(r^2)}``, and each row of the Jacobian is scaled by ``\rho'(r^2)\,|r| / \sqrt{\rho(r^2)}``. Then ``\tfrac12\|\tilde r\|^2`` is the robust cost exactly and ``\tilde J^T \tilde r`` its gradient.
+- **Native rows.** `SecondOrderOptimization` (Dogleg, LM, Gauss-Newton, LM tall) run the `NLLSModel (Static)` model, which declares the kernel. The Gauss-Newton row is `iterator = :newton`, the full step with no line search or trust region; `CaNNOLeS (fudged)` is Gauss–Newton globalized by a regularized ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization and an Armijo line search.
+- **Every other row runs `Standalone (fudged)`.** That includes the general solvers, whether or not the row's name says "fudged". Each residual ``\epsilon`` is rewritten as ``\tilde\epsilon = \operatorname{sign}(\epsilon)\sqrt{\rho(\epsilon^2)}``, and its row of the Jacobian is scaled by ``\rho'(\epsilon^2)\,|\epsilon| / \sqrt{\rho(\epsilon^2)}``. Then ``\tfrac12\lVert\tilde{\boldsymbol{\epsilon}}\rVert^2`` is the robust cost exactly and ``\tilde{\mathbf{J}}^T \tilde{\boldsymbol{\epsilon}}`` its gradient.
   - LeastSquaresOptim, NonlinearSolve and CaNNOLeS have no kernel interface, and their rows are named "fudged".
   - So is the control row, `SecondOrderOptimization (LM, fudged)`: the native LM optimizer on the fudged model.
-  - Optim, JSOSolvers, Ipopt and MadNLP keep their standard names. They get the exact robust cost and gradient, but their Hessian is ``\tilde J^T \tilde J``.
+  - Optim, JSOSolvers, Ipopt and MadNLP keep their standard names. They get the exact robust cost and gradient, but their Hessian is ``\tilde{\mathbf{J}}^T \tilde{\mathbf{J}}``.
 
-The weight each form gives an outlier's ``J_i^T J_i`` (``|r| > w``; inliers have weight 1 in all three), **derived from the code, not measured**:
+The weight each form gives an outlier's ``\mathbf{j}_i \mathbf{j}_i^T``, with ``\mathbf{j}_i^T`` its row of the Jacobian (``|\epsilon| > w``; inliers have weight 1 in all three), **derived from the code, not measured**:
 
 | Form | Weight | Far from the width |
 |---|---|---|
-| Reweighting only (IRLS) | ``w / \lvert r\rvert`` | ``w / \lvert r\rvert`` |
-| NLLSModel, Triggs with its positive-definiteness guard | ``2w / (3\lvert r\rvert)`` | ``\tfrac23 \cdot w / \lvert r\rvert`` |
-| Rewritten residuals, Gauss–Newton | ``w^2 / (2w\lvert r\rvert - w^2)`` | ``\to \tfrac12 \cdot w / \lvert r\rvert`` |
+| Reweighting only (IRLS) | ``w / \lvert \epsilon\rvert`` | ``w / \lvert \epsilon\rvert`` |
+| NLLSModel, Triggs with its positive-definiteness guard | ``2w / (3\lvert \epsilon\rvert)`` | ``\tfrac23 \cdot w / \lvert \epsilon\rvert`` |
+| Rewritten residuals, Gauss–Newton | ``w^2 / (2w\lvert \epsilon\rvert - w^2)`` | ``\to \tfrac12 \cdot w / \lvert \epsilon\rvert`` |
 
 ---
 """,
@@ -260,10 +260,10 @@ const PROBLEM_DESCRIPTIONS = Dict(
 The Rosenbrock function is the classic test of an optimizer: its minimum lies at the bottom of a long, curved valley that is easy to reach and slow to follow. This problem chains ``n`` unknowns together. Each unknown is pulled towards 1, and each neighbouring pair is pulled onto the parabola ``x_{k+1} = x_k^2``:
 
 ```math
-f(x) = \tfrac12 \sum_{k=1}^{n} \bigl(10\,(x_k - 1)\bigr)^2 + \tfrac12 \sum_{k=1}^{n-1} \bigl(10\,(x_{k+1} - x_k^2)\bigr)^2 .
+f(\mathbf{x}) = \tfrac12 \sum_{k=1}^{n} \bigl(10\,(x_k - 1)\bigr)^2 + \tfrac12 \sum_{k=1}^{n-1} \bigl(10\,(x_{k+1} - x_k^2)\bigr)^2 .
 ```
 
-Every term is zero at ``x = (1, \dots, 1)``, which is the minimum. The optimizers start from ``x_k = 0.5``.
+Every term is zero at ``\mathbf{x} = (1, \dots, 1)``, which is the minimum. The optimizers start from ``x_k = 0.5``.
 
 ### Where it is used
 
@@ -285,7 +285,7 @@ The size is the number of unknowns, ``n``. Everything grows in proportion to it.
 | Costs | ``2n - 1``, each one residual: ``n`` depend on one variable, ``n - 1`` on two | 199 | 149999 |
 | Residuals in total | ``2n - 1`` | 199 | 149999 |
 | Jacobian | ``(2n - 1) \times n``, with ``3n - 2`` non-zeros (two per row at most) | 298 non-zeros | 224998 non-zeros |
-| Hessian ``J^T J`` | ``n \times n``, tridiagonal | 298 non-zeros | 224998 non-zeros |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``n \times n``, tridiagonal | 298 non-zeros | 224998 non-zeros |
 """,
     "curve_fitting" => raw"""
 Given ``m`` noisy measurements ``y_i`` taken at times ``t_i``, find the exponential decay curve that passes closest to them. The curve has three unknown numbers: its height ``a``, its decay rate ``b`` and the level ``c`` it settles to. The optimizer minimizes the sum of squared gaps between curve and data:
@@ -316,13 +316,13 @@ The size is the number of data points, ``m``. The number of unknowns is fixed; o
 | Costs | ``m``, each one residual depending on the whole variable | 64 | 65536 |
 | Residuals in total | ``m`` | 64 | 65536 |
 | Jacobian | ``m \times 3``, dense | 64 × 3 | 65536 × 3 |
-| Hessian ``J^T J`` | ``3 \times 3``, dense | 3 × 3 | 3 × 3 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``3 \times 3``, dense | 3 × 3 | 3 × 3 |
 """,
     "curve_fitting_robust" => raw"""
-The same decay curve as [Exponential Curve Fitting](curve_fitting.md), ``a\,e^{-b t} + c``, fitted to the same data, except that **30 % of the measurements are wrong**: each of those has been moved up by 1, fifty times the noise level of 0.02. Ordinary least squares squares every gap, so those points would drag the curve up towards them. A *robust* fit limits their pull: a gap is squared only while it is small, and counted in proportion to its size once it is large. With ``r_i = a\,e^{-b t_i} + c - y_i``, the optimizer minimizes
+The same decay curve as [Exponential Curve Fitting](curve_fitting.md), ``a\,e^{-b t} + c``, fitted to the same data, except that **30 % of the measurements are wrong**: each of those has been moved up by 1, fifty times the noise level of 0.02. Ordinary least squares squares every gap, so those points would drag the curve up towards them. A *robust* fit limits their pull: a gap is squared only while it is small, and counted in proportion to its size once it is large. The optimizer minimizes
 
 ```math
-f(a, b, c) = \tfrac12 \sum_{i=1}^{m} \rho\bigl(r_i^2\bigr), \qquad
+f(a, b, c) = \tfrac12 \sum_{i=1}^{m} \rho\Bigl(\bigl(a\,e^{-b t_i} + c - y_i\bigr)^2\Bigr), \qquad
 \rho(s) = \begin{cases} s & s \le w^2 \\ 2w\sqrt{s} - w^2 & s > w^2 \end{cases}
 ```
 
@@ -348,16 +348,16 @@ The size is the number of data points, ``m``, of which ``\operatorname{round}(0.
 | Costs | ``m``, each one residual with a Huber kernel, depending on the whole variable | 64 | 65536 |
 | Residuals in total | ``m`` | 64 | 65536 |
 | Jacobian | ``m \times 3``, dense | 64 × 3 | 65536 × 3 |
-| Hessian ``J^T J`` | ``3 \times 3``, dense | 3 × 3 | 3 × 3 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``3 \times 3``, dense | 3 × 3 | 3 × 3 |
 """,
     "polynomial_fitting" => raw"""
-Fit a polynomial of degree 13 to ``m`` samples of a smooth curve, ``y(t) = \sin(3t) + 0.01\cos(17t)``, at evenly spaced points in ``[0, 1]``. The unknowns are the polynomial's 14 coefficients ``c_0, \dots, c_{13}``:
+Fit a polynomial of degree 13 to ``m`` samples of a smooth curve, ``y_i = \sin(3t_i) + 0.01\cos(17t_i)``, at evenly spaced points ``t_i`` in ``[0, 1]``. The unknowns are the polynomial's 14 coefficients, ``\mathbf{c} = (c_0, \dots, c_{13})``:
 
 ```math
-f(c) = \tfrac12 \sum_{i=1}^{m} \Bigl(\sigma \bigl(\textstyle\sum_{k=0}^{13} c_k\, t_i^k - y(t_i)\bigr)\Bigr)^2, \qquad \sigma = 10^4 .
+f(\mathbf{c}) = \tfrac12 \sum_{i=1}^{m} \Bigl(\sigma \bigl(\textstyle\sum_{k=0}^{13} c_k\, t_i^k - y_i\bigr)\Bigr)^2, \qquad \sigma = 10^4 .
 ```
 
-The residuals are linear in the unknowns, so this is ordinary linear least squares, and in exact arithmetic one step from the starting point (all coefficients zero) would land on the answer. The difficulty is numerical. On ``[0, 1]`` the powers ``t^8, t^9, t^{10}, \dots`` look almost alike, so very different sets of coefficients give almost the same curve. The Jacobian's condition number is about ``4 \times 10^9``. Forming ``J^T J`` squares it, to about ``10^{19}``, which is more than double precision can represent (about ``10^{16}``). An optimizer that forms ``J^T J`` therefore loses the answer's accuracy before it starts; one that factorizes ``J`` itself does not. Because the cost of a computed answer is itself rounded, each row is scored by its excess cost over the true minimum, both computed in extended precision.
+The residuals are linear in the unknowns, so this is ordinary linear least squares, and in exact arithmetic one step from the starting point (all coefficients zero) would land on the answer. The difficulty is numerical. On ``[0, 1]`` the powers ``t^8, t^9, t^{10}, \dots`` look almost alike, so very different sets of coefficients give almost the same curve. The Jacobian's condition number is about ``4 \times 10^9``. Forming ``\mathbf{J}^T \mathbf{J}`` squares it, to about ``10^{19}``, which is more than double precision can represent (about ``10^{16}``). An optimizer that forms ``\mathbf{J}^T \mathbf{J}`` therefore loses the answer's accuracy before it starts; one that factorizes ``\mathbf{J}`` itself does not. Because the cost of a computed answer is itself rounded, each row is scored by its excess cost over the true minimum, both computed in extended precision.
 
 ### Where it is used
 
@@ -379,16 +379,16 @@ The size is the number of data points, ``m``. The number of unknowns is fixed at
 | Costs | ``m``, each one residual depending on the whole variable | 60 | 6400 |
 | Residuals in total | ``m`` | 60 | 6400 |
 | Jacobian | ``m \times 14``, dense | 60 × 14 | 6400 × 14 |
-| Hessian ``J^T J`` | ``14 \times 14``, dense | 14 × 14 | 14 × 14 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``14 \times 14``, dense | 14 × 14 | 14 × 14 |
 """,
     "rosenbrock_dense" => raw"""
 A Rosenbrock-style test function (a minimum at the bottom of a curved valley) in which **every pair** of unknowns is coupled, not only neighbours. Each of the ``n`` unknowns is pulled towards 1, and for every pair ``j < k`` the later one is pulled onto the parabola ``x_k = x_j^2``:
 
 ```math
-f(x) = \tfrac12 \sum_{k=1}^{n} \bigl(1.2\,(x_k - 1)\bigr)^2 + \tfrac12 \sum_{j < k} \bigl(x_k - x_j^2\bigr)^2 .
+f(\mathbf{x}) = \tfrac12 \sum_{k=1}^{n} \bigl(1.2\,(x_k - 1)\bigr)^2 + \tfrac12 \sum_{j < k} \bigl(x_k - x_j^2\bigr)^2 .
 ```
 
-Every term is zero at ``x = (1, \dots, 1)``, which is the minimum. The optimizers start from the classic Rosenbrock starting values, alternating ``-1.2`` and ``1``.
+Every term is zero at ``\mathbf{x} = (1, \dots, 1)``, which is the minimum. The optimizers start from the classic Rosenbrock starting values, alternating ``-1.2`` and ``1``.
 
 ### Where it is used
 
@@ -396,7 +396,7 @@ Nowhere directly: it is a synthetic test function. It is the dense counterpart o
 
 ### Similar problems
 
-Small problems in which everything interacts with everything else: calibrating a set of coupled parameters, or estimating ``n`` quantities from a measurement between every pair of them (clock offsets in a network, ratings from all-play-all results). Each residual touches only one or two unknowns, so the Jacobian is mostly zeros, but the matrix ``J^T J`` is completely full. A dense factorization is the right tool at these sizes.
+Small problems in which everything interacts with everything else: calibrating a set of coupled parameters, or estimating ``n`` quantities from a measurement between every pair of them (clock offsets in a network, ratings from all-play-all results). Each residual touches only one or two unknowns, so the Jacobian is mostly zeros, but the matrix ``\mathbf{J}^T \mathbf{J}`` is completely full. A dense factorization is the right tool at these sizes.
 
 ### How it scales
 
@@ -410,13 +410,13 @@ The size is the number of unknowns, ``n``. The number of residuals grows with th
 | Costs | ``n(n+1)/2``, each one residual: ``n`` depend on one variable, ``n(n-1)/2`` on two | 3 | 528 |
 | Residuals in total | ``n(n+1)/2`` | 3 | 528 |
 | Jacobian | ``n(n+1)/2 \times n``, with ``n^2`` non-zeros | 3 × 2 | 528 × 32 |
-| Hessian ``J^T J`` | ``n \times n``, dense | 2 × 2 | 32 × 32 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``n \times n``, dense | 2 × 2 | 32 × 32 |
 """,
     "multilateration" => raw"""
-Find where something is from its distances to known places, as a satellite-navigation receiver does. There are ``m`` anchors at known positions ``a_i``, and a measured range ``\rho_i`` to each. The unknown is the position ``x``, a point in ``d`` dimensions, and the optimizer looks for the point whose distances to the anchors best match the measured ranges:
+Find where something is from its distances to known places, as a satellite-navigation receiver does. There are ``m`` anchors at known positions ``\mathbf{a}_i``, and a measured range ``r_i`` to each. The unknown is the position ``\mathbf{x}``, a point in ``d`` dimensions, and the optimizer looks for the point whose distances to the anchors best match the measured ranges:
 
 ```math
-f(x) = \tfrac12 \sum_{i=1}^{m} \bigl(\lVert x - a_i \rVert - \rho_i\bigr)^2 .
+f(\mathbf{x}) = \tfrac12 \sum_{i=1}^{m} \bigl(\lVert \mathbf{x} - \mathbf{a}_i \rVert - r_i\bigr)^2 .
 ```
 
 Here there are ``m = 4d`` anchors, placed at random at distance 4 from the origin; the true position is at distance 1; and each range carries Gaussian noise of standard deviation 0.01. The optimizers start from the origin. The problem is well conditioned: the anchors surround the point, so every direction is measured about equally well.
@@ -431,7 +431,7 @@ Small, dense, well-conditioned problems with a single block of unknowns: the pos
 
 ### How it scales
 
-The size is the dimension, ``d``. The number of anchors grows with it (``4d``), so that assembling ``J^T J`` (``4d \cdot d^2`` operations) and factorizing it (``d^3``) grow at the same rate, ``d^3``.
+The size is the dimension, ``d``. The number of anchors grows with it (``4d``), so that assembling ``\mathbf{J}^T \mathbf{J}`` (``4d \cdot d^2`` operations) and factorizing it (``d^3``) grow at the same rate, ``d^3``.
 
 | | In terms of the size | Smallest | Largest |
 |:---|:---|---:|---:|
@@ -441,16 +441,16 @@ The size is the dimension, ``d``. The number of anchors grows with it (``4d``), 
 | Costs | ``4d``, each one residual depending on the whole variable | 8 | 64 |
 | Residuals in total | ``4d`` | 8 | 64 |
 | Jacobian | ``4d \times d``, dense | 8 × 2 | 64 × 16 |
-| Hessian ``J^T J`` | ``d \times d``, dense | 2 × 2 | 16 × 16 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``d \times d``, dense | 2 × 2 | 16 × 16 |
 """,
     "affine_alignment" => raw"""
-Two clouds of points in ``n`` dimensions, ``x_1, \dots, x_{2n}`` and ``y_1, \dots, y_{2n}``. The first cloud is to be moved by an unknown *affine map*, ``x \mapsto M x + t``: a matrix ``M`` that can rotate, stretch and shear it, and a shift ``t``. What is known is a table of distances ``D_{ij}``, from each moved point of the first cloud to each point of the second. The optimizer looks for the map that reproduces the whole table:
+Two clouds of points in ``n`` dimensions, ``\mathbf{x}_1, \dots, \mathbf{x}_{2n}`` and ``\mathbf{y}_1, \dots, \mathbf{y}_{2n}``. The first cloud is to be moved by an unknown *affine map*, ``\mathbf{x} \mapsto \mathbf{M} \mathbf{x} + \mathbf{t}``: a matrix ``\mathbf{M}`` that can rotate, stretch and shear it, and a shift ``\mathbf{t}``. What is known is a table of distances ``D_{ij}``, from each moved point of the first cloud to each point of the second. The optimizer looks for the map that reproduces the whole table:
 
 ```math
-f(M, t) = \tfrac12 \sum_{i=1}^{2n} \sum_{j=1}^{2n} \bigl(D_{ij} - \lVert M x_i + t - y_j \rVert\bigr)^2 .
+f(\mathbf{M}, \mathbf{t}) = \tfrac12 \sum_{i=1}^{2n} \sum_{j=1}^{2n} \bigl(D_{ij} - \lVert \mathbf{M} \mathbf{x}_i + \mathbf{t} - \mathbf{y}_j \rVert\bigr)^2 .
 ```
 
-The table is generated from a true map (``M`` close to the identity, ``t`` random) with no noise, so the minimum is zero. The optimizers start from ``M = I``, ``t = 0``.
+The table is generated from a true map (``\mathbf{M}`` close to the identity, ``\mathbf{t}`` random) with no noise, so the minimum is zero. The optimizers start from ``\mathbf{M} = \mathbf{I}``, ``\mathbf{t} = \mathbf{0}``.
 
 ### Where it is used
 
@@ -462,7 +462,7 @@ Dense problems in which every residual depends on every unknown, so there is no 
 
 ### How it scales
 
-The size is the dimension, ``n``. The unknowns (the ``n^2`` entries of ``M`` and the ``n`` of ``t``) and the residuals (one per pair of points) both grow as ``n^2``, so the Jacobian grows as ``n^4``, and assembling and factorizing ``J^T J`` as ``n^6``.
+The size is the dimension, ``n``. The unknowns (the ``n^2`` entries of ``\mathbf{M}`` and the ``n`` of ``\mathbf{t}``) and the residuals (one per pair of points) both grow as ``n^2``, so the Jacobian grows as ``n^4``, and assembling and factorizing ``\mathbf{J}^T \mathbf{J}`` as ``n^6``.
 
 | | In terms of the size | Smallest | Largest |
 |:---|:---|---:|---:|
@@ -472,18 +472,18 @@ The size is the dimension, ``n``. The unknowns (the ``n^2`` entries of ``M`` and
 | Costs | ``(2n)^2`` residuals, one per pair of points, each depending on the whole variable | 4 | 4096 |
 | Residuals in total | ``4n^2`` | 4 | 4096 |
 | Jacobian | ``4n^2 \times n(n+1)``, dense | 4 × 2 | 4096 × 1056 |
-| Hessian ``J^T J`` | ``n(n+1) \times n(n+1)``, dense | 2 × 2 | 1056 × 1056 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``n(n+1) \times n(n+1)``, dense | 2 × 2 | 1056 × 1056 |
 """,
     "pose_chain" => raw"""
 A robot moves along a path and records, at each step, how far it has moved since the last one. From those step measurements alone its position could be found by adding them up, but errors would accumulate. Now and then it also recognizes a place it has been before, which ties two distant points of the path together (a *loop closure*). The problem is to find the ``N`` positions, each a point in 3D, that agree best with all the measurements at once.
 
-Each measurement between two positions ``x_a`` and ``x_b`` contributes three residuals,
+Each measurement between two positions ``\mathbf{x}_a`` and ``\mathbf{x}_b`` contributes three residuals,
 
 ```math
-r(x_a, x_b) = x_b - x_a - o_{ab} + 0.1 \sin(x_a),
+\boldsymbol{\epsilon}(\mathbf{x}_a, \mathbf{x}_b) = \mathbf{x}_b - \mathbf{x}_a - \mathbf{o}_{ab} + 0.1 \sin(\mathbf{x}_a),
 ```
 
-where ``o_{ab}`` is the measured offset and the sine term (applied to each coordinate) makes the problem nonlinear. There is one such measurement between every consecutive pair, one loop closure from position ``i - 10`` to position ``i`` for every tenth ``i``, and one extra term that pins the first position, since otherwise the whole path could slide freely. The optimizers start from the path obtained by adding up slightly wrong steps.
+where ``\mathbf{o}_{ab}`` is the measured offset and the sine term (applied to each coordinate) makes the problem nonlinear. There is one such measurement between every consecutive pair, one loop closure from position ``i - 10`` to position ``i`` for every tenth ``i``, and one extra term that pins the first position, since otherwise the whole path could slide freely. The optimizers start from the path obtained by adding up slightly wrong steps.
 
 ### Where it is used
 
@@ -505,7 +505,7 @@ The size is the number of positions, ``N``. Variables, residuals and non-zeros a
 | Costs | ``N + \lfloor (N-1)/10 \rfloor``, each of 3 residuals: 1 on one variable, the others on two (``N - 1`` steps and ``\lfloor (N-1)/10 \rfloor`` loop closures) | 54 | 10999 |
 | Residuals in total | ``3\,(N + \lfloor (N-1)/10 \rfloor)`` | 162 | 32997 |
 | Jacobian | ``3\,(N + \lfloor (N-1)/10 \rfloor) \times 3N``, sparse: two 3 × 3 blocks per row block at most | 162 × 150 | 32997 × 30000 |
-| Hessian ``J^T J`` | ``3N \times 3N``, block-banded with 3 × 3 blocks and a half-bandwidth of 10 blocks | 150 × 150 | 30000 × 30000 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``3N \times 3N``, block-banded with 3 × 3 blocks and a half-bandwidth of 10 blocks | 150 × 150 | 30000 × 30000 |
 """,
     "ode_bvp" => raw"""
 A differential equation describes how a quantity varies along a line; a *boundary value problem* fixes its value at both ends and asks for everything in between. This one is the Bratu equation, a simple model of a material that generates heat by a reaction that speeds up as it warms, while losing heat by conduction to its two cooled ends:
@@ -517,10 +517,10 @@ A differential equation describes how a quantity varies along a line; a *boundar
 To solve it on a computer, the line is divided by ``N`` evenly spaced grid points, a distance ``h = 1/(N+1)`` apart, and the unknowns are the values ``u_1, \dots, u_N`` at those points. The equation becomes one algebraic equation per grid point, each involving a point and its two neighbours:
 
 ```math
-r_i(u) = \frac{-u_{i-1} + 2u_i - u_{i+1}}{h^2} - \lambda\, e^{u_i}, \qquad u_0 = u_{N+1} = 0 .
+\epsilon_i(\mathbf{u}) = \frac{-u_{i-1} + 2u_i - u_{i+1}}{h^2} - \lambda\, e^{u_i}, \qquad u_0 = u_{N+1} = 0 .
 ```
 
-The optimizer minimizes ``\tfrac12 \sum_i r_i^2``, starting from ``u = 0``. There are as many equations as unknowns, so at the solution every residual is zero: this is a system of nonlinear equations, solved as a least-squares problem.
+The optimizer minimizes ``\tfrac12 \sum_i \epsilon_i(\mathbf{u})^2``, starting from ``\mathbf{u} = \mathbf{0}``. There are as many equations as unknowns, so at the solution every residual is zero: this is a system of nonlinear equations, solved as a least-squares problem.
 
 ### Where it is used
 
@@ -528,7 +528,7 @@ Discretized differential equations are the daily work of scientific computing: h
 
 ### Similar problems
 
-Its structure is that of the [sparse Rosenbrock problem](rosenbrock_sparse.md), a chain in which each unknown is tied to its neighbours, with a tridiagonal Jacobian. Two things set it apart. It is square (as many residuals as unknowns). And it becomes badly conditioned as the grid is refined: the division by ``h^2`` makes the Jacobian's condition number grow as about ``0.4\,N^2``, and that of ``J^T J`` as its square. At the largest size that is about ``4 \times 10^8`` for ``J`` and ``10^{17}`` for ``J^T J``, beyond what double precision can represent, so, as in the [ill-conditioned polynomial fit](polynomial_fitting.md), optimizers that form ``J^T J`` are at a disadvantage against those that work with ``J``.
+Its structure is that of the [sparse Rosenbrock problem](rosenbrock_sparse.md), a chain in which each unknown is tied to its neighbours, with a tridiagonal Jacobian. Two things set it apart. It is square (as many residuals as unknowns). And it becomes badly conditioned as the grid is refined: the division by ``h^2`` makes the Jacobian's condition number grow as about ``0.4\,N^2``, and that of ``\mathbf{J}^T \mathbf{J}`` as its square. At the largest size that is about ``4 \times 10^8`` for ``\mathbf{J}`` and ``10^{17}`` for ``\mathbf{J}^T \mathbf{J}``, beyond what double precision can represent, so, as in the [ill-conditioned polynomial fit](polynomial_fitting.md), optimizers that form ``\mathbf{J}^T \mathbf{J}`` are at a disadvantage against those that work with ``\mathbf{J}``.
 
 ### How it scales
 
@@ -542,16 +542,16 @@ The size is the number of grid points, ``N``. Variables, residuals and non-zeros
 | Costs | ``N``, each one residual: ``N - 2`` depend on three variables, the 2 at the ends on two | 32 | 32768 |
 | Residuals in total | ``N`` | 32 | 32768 |
 | Jacobian | ``N \times N``, tridiagonal, ``3N - 2`` non-zeros | 94 non-zeros | 98302 non-zeros |
-| Hessian ``J^T J`` | ``N \times N``, pentadiagonal, ``5N - 6`` non-zeros | 154 non-zeros | 163834 non-zeros |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``N \times N``, pentadiagonal, ``5N - 6`` non-zeros | 154 non-zeros | 163834 non-zeros |
 """,
     "bundle_adjustment" => raw"""
 Take many photographs of a scene from different places. Bundle adjustment works out, at the same time, where every camera was and where every visible point of the scene is in 3D, by making them agree with where each point actually appears in each photograph. For each observation of a point in a photograph there is a prediction (project the 3D point through the camera) and a measurement (the pixel where it was seen); their difference is the *reprojection error*, two numbers, and the optimizer minimizes the sum of the squares of all of them:
 
 ```math
-f(\text{cameras}, \text{points}) = \tfrac12 \sum_{(c,\,p)\ \text{observed}} \bigl\lVert \pi(\text{camera}_c, \text{point}_p) - z_{cp} \bigr\rVert^2 .
+f(\mathbf{c}_1, \dots, \mathbf{p}_1, \dots) = \tfrac12 \sum_{(j,\,i)\ \text{observed}} \bigl\lVert \pi(\mathbf{c}_j, \mathbf{p}_i) - \mathbf{z}_{ji} \bigr\rVert^2 ,
 ```
 
-A camera has 9 unknowns (3 for its orientation, 3 for its position, its focal length and 2 lens-distortion coefficients, the model of the "Bundle Adjustment in the Large" data sets); a point has 3. The scenes here are synthetic: ``N_{cam}`` cameras in a row, ``5 N_{cam}`` points, each point seen by a run of neighbouring cameras, 30 % of them (and at least 3). The observations are exact, so the minimum is zero; the optimizers start from the true scene with the points and the cameras' orientations and positions slightly perturbed.
+where ``\mathbf{c}_j`` holds camera ``j``'s parameters, ``\mathbf{p}_i`` is point ``i``'s position, ``\mathbf{z}_{ji}`` is where point ``i`` was seen in photograph ``j``, and ``\pi`` is the camera projection. A camera has 9 unknowns (3 for its orientation, 3 for its position, its focal length and 2 lens-distortion coefficients, the model of the "Bundle Adjustment in the Large" data sets); a point has 3. The scenes here are synthetic: ``N_{cam}`` cameras in a row, ``5 N_{cam}`` points, each point seen by a run of neighbouring cameras, 30 % of them (and at least 3). The observations are exact, so the minimum is zero; the optimizers start from the true scene with the points and the cameras' orientations and positions slightly perturbed.
 
 ### Where it is used
 
@@ -573,19 +573,19 @@ The size is the number of cameras, ``N_{cam}``. The unknowns grow in proportion 
 | Costs | one per observation, each of 2 residuals depending on one camera and one point (12 unknowns): about ``1.5\,N_{cam}^2`` (``15\,N_{cam}`` at the two smallest sizes) | 60 | 98304 |
 | Residuals in total | about ``3\,N_{cam}^2`` | 120 | 196608 |
 | Jacobian | residuals × unknowns, sparse: 24 non-zeros per observation | 120 × 96 | 196608 × 6144 |
-| Hessian ``J^T J`` | ``24 N_{cam} \times 24 N_{cam}``, block-sparse: a 9 × 9 block per camera, a 3 × 3 block per point, a 9 × 3 block per observation; ``9 N_{cam} \times 9 N_{cam}`` once the points are eliminated | 96 × 96 | 6144 × 6144 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``24 N_{cam} \times 24 N_{cam}``, block-sparse: a 9 × 9 block per camera, a 3 × 3 block per point, a 9 × 3 block per observation; ``9 N_{cam} \times 9 N_{cam}`` once the points are eliminated | 96 × 96 | 6144 × 6144 |
 """,
     "robust_procrustes" => raw"""
-Two sets of matching points are given, and one is to be turned so that it lies on top of the other. The unknown is a rotation ``R``; the points ``a_i`` and ``b_i`` come in pairs, and the optimizer looks for the rotation that brings each ``R\,b_i`` closest to its ``a_i``. A few of the pairs are wrong (outliers), so the fit is made robust with a Huber kernel, which counts a small mismatch by its square and a large one only in proportion to its size:
+Two sets of matching points are given, and one is to be turned so that it lies on top of the other. The unknown is a rotation ``\mathbf{R}``; the points ``\mathbf{a}_i`` and ``\mathbf{b}_i`` come in pairs, and the optimizer looks for the rotation that brings each ``\mathbf{R}\,\mathbf{b}_i`` closest to its ``\mathbf{a}_i``. A few of the pairs are wrong (outliers), so the fit is made robust with a Huber kernel, which counts a small mismatch by its square and a large one only in proportion to its size:
 
 ```math
-f(R) = \tfrac12 \sum_{i=1}^{n} \rho\bigl(\lVert a_i - R\,b_i \rVert^2\bigr), \qquad
+f(\mathbf{R}) = \tfrac12 \sum_{i=1}^{n} \rho\bigl(\lVert \mathbf{a}_i - \mathbf{R}\,\mathbf{b}_i \rVert^2\bigr), \qquad
 \rho(s) = \begin{cases} s & s \le w^2 \\ 2w\sqrt{s} - w^2 & s > w^2 \end{cases}
 ```
 
 The points are in ``d`` dimensions, and there are ``n = d(d+1)/2`` pairs. They are generated from a known rotation with no noise, apart from four pairs displaced by 0.1; the kernel's width is ``w = 10^{-5}``, so that away from the answer nearly every pair is on the kernel's linear part. The optimizers start from the identity.
 
-A rotation is not a list of freely adjustable numbers: a ``d \times d`` matrix has ``d^2`` entries, but only those matrices with ``R^T R = I`` and determinant 1 are rotations. They form a curved space, the manifold ``SO(d)``, of dimension ``d(d-1)/2``. The optimizers work on that space directly, taking each step in the flat space of small rotations about the current estimate and mapping the result back onto the manifold.
+A rotation is not a list of freely adjustable numbers: a ``d \times d`` matrix has ``d^2`` entries, but only those matrices with ``\mathbf{R}^T \mathbf{R} = \mathbf{I}`` and determinant 1 are rotations. They form a curved space, the manifold ``SO(d)``, of dimension ``d(d-1)/2``. The optimizers work on that space directly, taking each step in the flat space of small rotations about the current estimate and mapping the result back onto the manifold.
 
 ### Where it is used
 
@@ -607,7 +607,7 @@ The size is the dimension, ``d``. The rotation's degrees of freedom grow as ``d^
 | Costs | ``d(d+1)/2`` pairs, each of ``d`` residuals with a Huber kernel, depending on the whole variable | 6 | 528 |
 | Residuals in total | ``d^2(d+1)/2`` | 18 | 16896 |
 | Jacobian | ``d^2(d+1)/2 \times d(d-1)/2``, dense | 18 × 3 | 16896 × 496 |
-| Hessian ``J^T J`` | ``d(d-1)/2 \times d(d-1)/2``, dense | 3 × 3 | 496 × 496 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``d(d-1)/2 \times d(d-1)/2``, dense | 3 × 3 | 496 × 496 |
 """,
 )
 

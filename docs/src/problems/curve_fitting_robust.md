@@ -12,10 +12,10 @@
 
 ## The Problem
 
-The same decay curve as [Exponential Curve Fitting](curve_fitting.md), ``a\,e^{-b t} + c``, fitted to the same data, except that **30 % of the measurements are wrong**: each of those has been moved up by 1, fifty times the noise level of 0.02. Ordinary least squares squares every gap, so those points would drag the curve up towards them. A *robust* fit limits their pull: a gap is squared only while it is small, and counted in proportion to its size once it is large. With ``r_i = a\,e^{-b t_i} + c - y_i``, the optimizer minimizes
+The same decay curve as [Exponential Curve Fitting](curve_fitting.md), ``a\,e^{-b t} + c``, fitted to the same data, except that **30 % of the measurements are wrong**: each of those has been moved up by 1, fifty times the noise level of 0.02. Ordinary least squares squares every gap, so those points would drag the curve up towards them. A *robust* fit limits their pull: a gap is squared only while it is small, and counted in proportion to its size once it is large. The optimizer minimizes
 
 ```math
-f(a, b, c) = \tfrac12 \sum_{i=1}^{m} \rho\bigl(r_i^2\bigr), \qquad
+f(a, b, c) = \tfrac12 \sum_{i=1}^{m} \rho\Bigl(\bigl(a\,e^{-b t_i} + c - y_i\bigr)^2\Bigr), \qquad
 \rho(s) = \begin{cases} s & s \le w^2 \\ 2w\sqrt{s} - w^2 & s > w^2 \end{cases}
 ```
 
@@ -41,25 +41,25 @@ The size is the number of data points, ``m``, of which ``\operatorname{round}(0.
 | Costs | ``m``, each one residual with a Huber kernel, depending on the whole variable | 64 | 65536 |
 | Residuals in total | ``m`` | 64 | 65536 |
 | Jacobian | ``m \times 3``, dense | 64 × 3 | 65536 × 3 |
-| Hessian ``J^T J`` | ``3 \times 3``, dense | 3 × 3 | 3 × 3 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``3 \times 3``, dense | 3 × 3 | 3 × 3 |
 
 ---
 
 ## How each row gets the robust cost
 
-- **Native rows.** `SecondOrderOptimization` (Dogleg, LM, Gauss-Newton, LM tall) run the `NLLSModel (Static)` model, which declares the kernel. The Gauss-Newton row is `iterator = :newton`, the full step with no line search or trust region; `CaNNOLeS (fudged)` is Gauss–Newton globalized by a regularized ``LDL^T`` factorization and an Armijo line search.
-- **Every other row runs `Standalone (fudged)`.** That includes the general solvers, whether or not the row's name says "fudged". The residuals are rewritten as ``\tilde r = \operatorname{sign}(r)\sqrt{\rho(r^2)}``, and each row of the Jacobian is scaled by ``\rho'(r^2)\,|r| / \sqrt{\rho(r^2)}``. Then ``\tfrac12\|\tilde r\|^2`` is the robust cost exactly and ``\tilde J^T \tilde r`` its gradient.
+- **Native rows.** `SecondOrderOptimization` (Dogleg, LM, Gauss-Newton, LM tall) run the `NLLSModel (Static)` model, which declares the kernel. The Gauss-Newton row is `iterator = :newton`, the full step with no line search or trust region; `CaNNOLeS (fudged)` is Gauss–Newton globalized by a regularized ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization and an Armijo line search.
+- **Every other row runs `Standalone (fudged)`.** That includes the general solvers, whether or not the row's name says "fudged". Each residual ``\epsilon`` is rewritten as ``\tilde\epsilon = \operatorname{sign}(\epsilon)\sqrt{\rho(\epsilon^2)}``, and its row of the Jacobian is scaled by ``\rho'(\epsilon^2)\,|\epsilon| / \sqrt{\rho(\epsilon^2)}``. Then ``\tfrac12\lVert\tilde{\boldsymbol{\epsilon}}\rVert^2`` is the robust cost exactly and ``\tilde{\mathbf{J}}^T \tilde{\boldsymbol{\epsilon}}`` its gradient.
   - LeastSquaresOptim, NonlinearSolve and CaNNOLeS have no kernel interface, and their rows are named "fudged".
   - So is the control row, `SecondOrderOptimization (LM, fudged)`: the native LM optimizer on the fudged model.
-  - Optim, JSOSolvers, Ipopt and MadNLP keep their standard names. They get the exact robust cost and gradient, but their Hessian is ``\tilde J^T \tilde J``.
+  - Optim, JSOSolvers, Ipopt and MadNLP keep their standard names. They get the exact robust cost and gradient, but their Hessian is ``\tilde{\mathbf{J}}^T \tilde{\mathbf{J}}``.
 
-The weight each form gives an outlier's ``J_i^T J_i`` (``|r| > w``; inliers have weight 1 in all three), **derived from the code, not measured**:
+The weight each form gives an outlier's ``\mathbf{j}_i \mathbf{j}_i^T``, with ``\mathbf{j}_i^T`` its row of the Jacobian (``|\epsilon| > w``; inliers have weight 1 in all three), **derived from the code, not measured**:
 
 | Form | Weight | Far from the width |
 |---|---|---|
-| Reweighting only (IRLS) | ``w / \lvert r\rvert`` | ``w / \lvert r\rvert`` |
-| NLLSModel, Triggs with its positive-definiteness guard | ``2w / (3\lvert r\rvert)`` | ``\tfrac23 \cdot w / \lvert r\rvert`` |
-| Rewritten residuals, Gauss–Newton | ``w^2 / (2w\lvert r\rvert - w^2)`` | ``\to \tfrac12 \cdot w / \lvert r\rvert`` |
+| Reweighting only (IRLS) | ``w / \lvert \epsilon\rvert`` | ``w / \lvert \epsilon\rvert`` |
+| NLLSModel, Triggs with its positive-definiteness guard | ``2w / (3\lvert \epsilon\rvert)`` | ``\tfrac23 \cdot w / \lvert \epsilon\rvert`` |
+| Rewritten residuals, Gauss–Newton | ``w^2 / (2w\lvert \epsilon\rvert - w^2)`` | ``\to \tfrac12 \cdot w / \lvert \epsilon\rvert`` |
 
 ---
 
