@@ -25,6 +25,7 @@ const TEST_FILES = [
     ("The Standalone model, built from the costs (DM2)", "standalone.jl", :serial),
     ("One derivative mode per problem (DM11)", "derivative_modes.jl", :serial),
     ("The JuMP models agree with the Standalone models (IND3)", "jump_models.jl", :serial),
+    ("Stopping criteria: each one given can stop the run (IND5)", "stopping_criteria.jl", :integration),
     ("Cold-Start NLLSModel + SecondOrderOptimization & BAL Equivalence", "cold_start.jl", :serial),
     ("Thread counts and NLLSModel threading thresholds (M17, F4)", "thread_counts.jl", :threaded),
     ("Single-variable NLLSModel rows use the linear system's own buffer types (M18)", "static_buffers.jl", :serial),

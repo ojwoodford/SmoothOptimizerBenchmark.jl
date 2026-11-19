@@ -429,6 +429,10 @@ function create_robust_procrustes_problem()
                 actual_maxiters = (time_limit !== nothing && time_limit <= 1.0) ? min(maxiters, 5) : maxiters
                 actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
                 stop_time = Manopt.StopAfter(Dates.Millisecond(max(1, round(Int, actual_maxtime * 1000))))
+                # The gradient and the step (IND5). No cost-change criterion: Manopt 0.6.15's StopWhenCostChangeLess is an
+                # absolute change, and StopWhenRelativeAPosterioriCostChangeLessOrEqual scales the change by
+                # max(|f|, 1), so it is absolute below a cost of 1: on this problem (costs near 1e-6) it stopped Manopt
+                # 0.5 % above the minimum at d = 4 (measured 2026-11-19)
                 stop_crit = (StopWhenGradientNormLess(gtol) | StopWhenChangeLess(M, xtol) | StopAfterIteration(actual_maxiters) | stop_time)
                 t_start = time_ns()
                 timed = @timed Manopt.LevenbergMarquardt(M, blocks, copy(p0);

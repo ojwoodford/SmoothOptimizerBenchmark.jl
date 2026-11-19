@@ -1017,9 +1017,11 @@ function optim_result(t_total, timed, iterations, start_c, final_c)
         timed_out, message=timed_out ? "time limit" : converged ? "converged" : "not converged")
 end
 
-# OptimizerResult for a solver that reports a status symbol (JSOSolvers, Ipopt, CaNNOLeS)
-function stats_result(t_total, timed, iterations, start_c, final_c, status)
-    converged = status in (:first_order, :acceptable)
+# OptimizerResult for a solver that reports a status symbol (JSOSolvers, Ipopt, CaNNOLeS). `converged_statuses`: the
+# statuses that are convergence for the adapter (Ipopt adds its tiny-step stop, IND5); the harness's cost test still
+# decides `ok`
+function stats_result(t_total, timed, iterations, start_c, final_c, status; converged_statuses=(:first_order, :acceptable))
+    converged = status in converged_statuses
     return OptimizerResult(Float64(t_total), Base.gc_alloc_count(timed.gcstats), timed.bytes, iterations, start_c, final_c, converged;
         timed_out=status === :max_time, message=string(status))
 end
@@ -1054,23 +1056,35 @@ function optimize_jsosolvers(target; solver=:trunk, solution=nothing, gtol=DEFAU
 end
 
 """
-    optimize_ipopt(model; solution=nothing, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, print_level=0, time_limit=nothing, kwargs...) -> OptimizerResult
+    optimize_ipopt(model; solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, print_level=0, time_limit=nothing, kwargs...) -> OptimizerResult
 
-Optimizes a model using `Ipopt` via `NLPModelsIpopt`.
+Optimizes a model using `Ipopt` via `NLPModelsIpopt`, with the benchmark's three criteria where Ipopt offers them (IND5):
+the gradient through its optimality and dual-infeasibility tolerances (`tol = dual_inf_tol = gtol`), the step through
+`tiny_step_tol = xtol` (a search direction below `xtol` in every component relative to the iterate), and the relative cost
+change through the acceptable test: `acceptable_obj_change_tol = ftol` (Ipopt scales the change by `max(1, |f|)`),
+`acceptable_iter = 1`, and `acceptable_tol = 1e20`, so that the test is decided by the objective change and not by the
+optimality error. Ipopt's acceptable (`:acceptable`) and tiny-step (`:small_step`) stops count as converged for the adapter,
+as SecondOrderOptimization's cost-change and step stops do; the harness's cost test still decides `ok`.
 """
-function optimize_ipopt(target; solution=nothing, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, print_level=0, time_limit=nothing, kwargs...)
+function optimize_ipopt(target; solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, print_level=0, time_limit=nothing, kwargs...)
     nlp = as_nlpmodel(target)
     NLPModels.reset!(nlp)
     start_c = NLPModels.obj(nlp, nlp.meta.x0)
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
 
     t_start = time_ns()
-    timed = @timed NLPModelsIpopt.ipopt(nlp; tol=gtol, dual_inf_tol=gtol, acceptable_tol=gtol, max_iter=maxiters, max_wall_time=actual_maxtime, print_level=print_level, kwargs...)
+    timed = @timed NLPModelsIpopt.ipopt(nlp; tol=gtol, dual_inf_tol=gtol, tiny_step_tol=xtol, acceptable_obj_change_tol=ftol,
+        acceptable_iter=1, acceptable_tol=IPOPT_ACCEPTABLE_TOL, max_iter=maxiters, max_wall_time=actual_maxtime, print_level=print_level, kwargs...)
     t_total = time_ns() - t_start
     res = timed.value
     store_solution!(solution, res.solution)
-    return stats_result(t_total, timed, res.iter, start_c, res.objective, res.status)
+    return stats_result(t_total, timed, res.iter, start_c, res.objective, res.status; converged_statuses=IPOPT_CONVERGED)
 end
+
+# Ipopt's acceptable test passes only when every one of its conditions holds; this tolerance on the optimality error is
+# Ipopt's own "infinity", so that the objective change decides (IND5)
+const IPOPT_ACCEPTABLE_TOL = 1e20
+const IPOPT_CONVERGED = (:first_order, :acceptable, :small_step)
 
 """
     UnconstrainedHessView(nlp)
@@ -1124,12 +1138,18 @@ function optimize_madnlp(target; solution=nothing, gtol=DEFAULT_GTOL, maxiters=D
 end
 
 """
-    optimize_nonlinearsolve(model; method=:lm, solution=nothing, gtol=DEFAULT_GTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
+    optimize_nonlinearsolve(model; method=:lm, solution=nothing, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `NonlinearSolve.jl`.
 Supported methods: `:lm`, `:trust_region`, `:gauss_newton`.
+
+No tolerance is passed (IND5): the default termination mode for a `NonlinearLeastSquaresProblem` (NonlinearSolveBase
+2.55, `AbsNormSafeBestTerminationMode` on the 2-norm) tests the residual norm against `abstol` and stops on a stall of
+the residual or of the step, both measured against that same `abstol`; it has no gradient test and no cost-change test,
+and does not use `reltol`. So NonlinearSolve runs with its own residual test at its defaults (decision 21), and the
+adapter takes none of the benchmark's `gtol`, `xtol` and `ftol`. Other keywords go to `solve`.
 """
-function optimize_nonlinearsolve(target; method=:lm, solution=nothing, gtol=DEFAULT_GTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
+function optimize_nonlinearsolve(target; method=:lm, solution=nothing, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     m = target isa ModelDefinition ? target.model : target
 
     if m isa NLLSModel.Model
@@ -1162,7 +1182,7 @@ function optimize_nonlinearsolve(target; method=:lm, solution=nothing, gtol=DEFA
         end
 
         t_start = time_ns()
-        timed = @timed solve(prob, solver; abstol=gtol, reltol=ftol, maxiters=maxiters, maxtime=actual_maxtime, kwargs...)
+        timed = @timed solve(prob, solver; maxiters=maxiters, maxtime=actual_maxtime, kwargs...)
         t_total = time_ns() - t_start
         store_solution!(solution, timed.value.u)
         return nonlinearsolve_result(t_total, timed, njac[], start_c)
@@ -1203,7 +1223,7 @@ function optimize_nonlinearsolve(target; method=:lm, solution=nothing, gtol=DEFA
     end
 
     t_start = time_ns()
-    timed = @timed solve(prob, solver; abstol=gtol, reltol=ftol, maxiters=maxiters, maxtime=actual_maxtime, kwargs...)
+    timed = @timed solve(prob, solver; maxiters=maxiters, maxtime=actual_maxtime, kwargs...)
     t_total = time_ns() - t_start
     store_solution!(solution, timed.value.u)
     return nonlinearsolve_result(t_total, timed, njac[], start_c)
