@@ -96,11 +96,14 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
                                  evaluator=point_evaluator(target_model), reference=nothing,
                                  timed_out_at::AbstractDict=Dict{String, Any}())
     results = Dict{String, OptimizerResult}()
+    # The BLAS count of the table, put back after any row that changes it (IND7: a package may set BLAS itself)
+    blas0 = BLAS.get_num_threads()
     # The point each row handed back and the model it ran on, for the status test
     points = Dict{String, Tuple{Vector{Float64}, ModelDefinition}}()
     effective_max = samples !== nothing ? max(1, Int(samples)) : max_samples
 
     for opt in optimizers
+        restore_blas_threads!(blas0, opt.name)
         # A row that timed out at a smaller size of this table is not run again (decision 17)
         if haskey(timed_out_at, opt.name)
             results[opt.name] = timed_out_earlier_result(timed_out_at[opt.name])
@@ -188,6 +191,7 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
 
         results[opt.name] = sample_err === nothing ? with_timing(init_res, median(times), allocs, bytes) : error_result(sample_err)
     end
+    restore_blas_threads!(blas0, "the last row")
     assign_statuses!(results, points, evaluator, reference)
     if on_result !== nothing
         for opt in optimizers
@@ -195,6 +199,14 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
         end
     end
     return results
+end
+
+# Put BLAS back at the table's count if a row (before `name`) changed it, with a warning: a package may set BLAS itself
+function restore_blas_threads!(blas0::Integer, name)
+    BLAS.get_num_threads() == blas0 && return false
+    @warn "BLAS threads changed to $(BLAS.get_num_threads()) before $(name); restored to $(blas0)" maxlog=10
+    BLAS.set_num_threads(blas0)
+    return true
 end
 
 # The row of a size not run because the row timed out at a smaller size of the same table (decision 17)
@@ -243,6 +255,7 @@ function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model
             get_standard_optimizer_model(models)
         end
 
+        blas0 = BLAS.get_num_threads()
         for opt in prob.compatible_optimizers
             opt_model = resolve_optimizer_model(opt, models)
             is_built(opt_model) || continue
@@ -254,6 +267,7 @@ function warmup_problem_optimizers!(prob::ProblemDefinition, sizes; target_model
                 @warn "Warm-up of optimizer $(opt.name) threw on model $(opt_model.name)" exception=(err, catch_backtrace()) maxlog=3
             finally
                 opt_model.reset!()
+                restore_blas_threads!(blas0, "after the warm-up of $(opt.name)")
             end
         end
     end

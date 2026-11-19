@@ -1106,7 +1106,8 @@ NLPModels.hess_coord!(v::UnconstrainedHessView, x::AbstractVector, y::AbstractVe
 """
     optimize_madnlp(model; solution=nothing, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...) -> OptimizerResult
 
-Optimizes a model using `MadNLP.jl`.
+Optimizes a model using `MadNLP.jl`, with `blas_num_threads` the BLAS count in force (MadNLP's default, 1, would set BLAS
+to one thread for the rest of the process).
 """
 function optimize_madnlp(target; solution=nothing, gtol=DEFAULT_GTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, time_limit=nothing, kwargs...)
     nlp = as_nlpmodel(target)
@@ -1118,7 +1119,10 @@ function optimize_madnlp(target; solution=nothing, gtol=DEFAULT_GTOL, maxiters=D
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
 
     t_start = time_ns()
-    timed = @timed MadNLP.madnlp(nlp; tol=gtol, acceptable_tol=gtol, max_iter=maxiters, max_wall_time=actual_maxtime, print_level=MadNLP.ERROR, kwargs...)
+    # blas_num_threads: MadNLP sets BLAS to this count when its solver is created, and leaves it set (default 1); it is
+    # given the count in force, so that it does not constrain BLAS in the multi-threaded table (IND7)
+    timed = @timed MadNLP.madnlp(nlp; tol=gtol, acceptable_tol=gtol, max_iter=maxiters, max_wall_time=actual_maxtime, print_level=MadNLP.ERROR,
+        blas_num_threads=BLAS.get_num_threads(), kwargs...)
     t_total = time_ns() - t_start
     res = timed.value
     store_solution!(solution, res.solution)
