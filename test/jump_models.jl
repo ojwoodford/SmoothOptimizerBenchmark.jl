@@ -8,6 +8,7 @@ const JUMP_MODEL_NAMES = Dict(
     "Robust Exponential Curve Fitting" => "JuMP (fudged)",
     "Ill-Conditioned Polynomial Fitting" => "JuMP",
     "Multilateration" => "JuMP",
+    "Nonlinear 3D Pose Chain" => "JuMP",
     "Dense Affine Alignment" => "JuMP",
     "1D ODE Boundary Value Problem" => "JuMP",
     "Dense Multi-dimensional Rosenbrock" => "JuMP",

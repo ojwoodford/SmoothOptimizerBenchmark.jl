@@ -41,8 +41,9 @@ const PAIRED_MODELS = Dict(
         "Standalone" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "Nonlinear 3D Pose Chain" => Dict(
+        "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
         "NLLSModel (Sparse)" => ["SecondOrderOptimization (Dogleg)", "SecondOrderOptimization (LM)", "SecondOrderOptimization (Gauss-Newton)", "SecondOrderOptimization (LM, tall)", "SecondOrderOptimization (LM, tall, LSMR)"],
-        "Standalone (Sparse)" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (Newton)", "JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)", "CaNNOLeS"],
+        "Standalone (Sparse)" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "1D ODE Boundary Value Problem" => Dict(
         "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],

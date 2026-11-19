@@ -77,6 +77,24 @@ function build_chain_nlls(n_poses::Int)
     return build_chain_nlls(n_poses, link_offsets, lcs, start_vars)
 end
 
+# Model 3: JuMP (IND3g). One 3-vector per pose, flattened in pose order (pose i is x[3i − 2 : 3i], the Standalone model's
+# layout); the residuals of `build_chain_nlls`, coordinate by coordinate: the anchor (pose 1), the links between
+# consecutive poses, then the loop closures, each x_b − x_a − offset + 0.1·sin(x_a)
+function build_jump_pose_chain(n_poses::Int, link_offsets::Vector{SVector{3, Float64}}, lcs::Vector{Tuple{Int, Int, SVector{3, Float64}}},
+                               start_vars::Vector{SVector{3, Float64}})
+    x0 = reduce(vcat, [collect(v) for v in start_vars])
+    model = JuMP.Model()
+    @variable(model, x[l = 1:(3 * n_poses)], start = x0[l])
+    F = Any[@expression(model, x[k]) for k in 1:3]
+    links = [[(i, i + 1, link_offsets[i]) for i in 1:n_poses-1]; lcs]
+    for (a, b, off) in links, k in 1:3
+        xa, xb = x[3 * (a - 1) + k], x[3 * (b - 1) + k]
+        push!(F, @NLexpression(model, xb - xa - off[k] + 0.1 * sin(xa)))
+    end
+    return MathOptNLSModel(model, F)
+end
+build_jump_pose_chain(n_poses::Int) = build_jump_pose_chain(n_poses, get_chain_measurements(n_poses)..., generate_chain_start_vars(n_poses))
+
 function create_pose_chain_problem()
     ProblemDefinition(
         "Nonlinear 3D Pose Chain",
@@ -126,7 +144,9 @@ function create_pose_chain_problem()
                 () -> copyto!(lsp.x, x0_sa)
             )
 
-            return [m_nlls, m_lso]
+            m_jump = jump_model("JuMP", build_jump_pose_chain(n_poses, link_offsets, lcs, start_vars), x0_sa)
+
+            return [m_nlls, m_lso, m_jump]
         end,
         [
             OptimizerDefinition("SecondOrderOptimization (Dogleg)", (m; kwargs...) -> optimize_soo(m; method=:dogleg, kwargs...)),
