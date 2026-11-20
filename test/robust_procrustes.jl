@@ -10,6 +10,14 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     @test k != SOB.NLLSModel.Huber2oKernel(SOB.PROCRUSTES_HUBER_WIDTH)
     @test SOB.NLLSModel.robustifydcost(k, 1.0)[3] == 0
 
+    # CN8: the fraction of outliers is between 1/11 and 1/6 at every size
+    for d in create_robust_procrustes_problem().default_sizes
+        n = d * (d + 1) ÷ 2
+        o = SOB.procrustes_outliers(n)
+        @test allunique(o) && all(in(1:n), o)
+        @test 1 / 11 <= length(o) / n <= 1 / 6
+    end
+
     # The three SecondOrderOptimization rows still reach Manopt's cost at d = 3 and 4, through the harness; Manopt, which
     # stops on its gradient norm about 1e-8 relative above them, is ok under the cost test's 1e-4
     prob = create_robust_procrustes_problem()

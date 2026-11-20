@@ -140,7 +140,7 @@ Each problem shows how performance changes with one thing, its size (or, for the
 | Nonlinear 3D Pose Chain | poses ``N`` | links, a loop closure every 10 poses, the self-term | 17.0, 21.4, 22.2 (``N`` = 50, 200, 400) |
 | 1D ODE Boundary Value Problem | grid points ``N`` | the spacing, 0.1; the reaction term | 112, 156, 157 (``N`` = 32, 256, 2048) |
 | Sparse Bundle Adjustment | cameras ``N_{cam}`` | a ring of cameras around a ball of points; focal length 1; each point seen by half the cameras | 856, 398, 275 (``N_{cam}`` = 4, 16, 32) |
-| Robust Procrustes on SO(d) | dimension ``d`` | **not yet:** the points lie along ``d`` directions, and 4 of them are outliers at every ``d`` | 2.50, 273, 710 (``d`` = 3, 8, 20) |
+| Robust Procrustes on SO(d) | dimension ``d`` | random unit points, spread in every direction; one outlier in about ten | 1.43, 1.99, 1.72 (``d`` = 3, 8, 20) |
 """
 
 function generate_docs_markdown(results::Vector{ProblemScalingBenchmarkResult}; single_threaded::Vector{ProblemScalingBenchmarkResult}=ProblemScalingBenchmarkResult[], docs_dir=DEFAULT_DOCS_DIR)
@@ -738,7 +738,7 @@ f(\mathbf{R}) = \tfrac12 \sum_{i=1}^{n} \rho\bigl(\lVert \mathbf{a}_i - \mathbf{
 \rho(s) = \begin{cases} s & s \le w^2 \\ 2w\sqrt{s} - w^2 & s > w^2 \end{cases}
 ```
 
-The points are in ``d`` dimensions, and there are ``n = d(d+1)/2`` pairs. They are generated from a known rotation with no noise, apart from four pairs displaced by 0.1; the kernel's width is ``w = 10^{-5}``, so that away from the answer nearly every pair is on the kernel's linear part. The optimizers start from the identity.
+The points are in ``d`` dimensions, and there are ``n = d(d+1)/2`` pairs. The points ``\mathbf{a}_i`` are random unit vectors, spread in every direction. The pairs are generated from a known rotation with no noise, apart from one pair in about ten, which is displaced by 0.1; the kernel's width is ``w = 10^{-5}``, so that away from the answer nearly every pair is on the kernel's linear part. The optimizers start from the identity.
 
 A rotation is not a list of freely adjustable numbers: a ``d \times d`` matrix has ``d^2`` entries, but only those matrices with ``\mathbf{R}^T \mathbf{R} = \mathbf{I}`` and determinant 1 are rotations. They form a curved space, the manifold ``SO(d)``, of dimension ``d(d-1)/2``. The optimizers work on that space directly, taking each step in the flat space of small rotations about the current estimate and mapping the result back onto the manifold.
 

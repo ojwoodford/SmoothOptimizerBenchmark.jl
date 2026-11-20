@@ -2,24 +2,19 @@
 using LinearAlgebra, Manopt, Manifolds, Random, Static, StaticArrays, Dates
 using NLLSModel, SecondOrderOptimization, OptimizationVariableInterface
 
-# Generate deterministic data matrix A (d x n)
+# The data matrix A (d × n), n = d(d + 1)/2 points: random unit vectors, so that the points are spread in every direction
+# at every d (CN8; before, they lay along d directions and the conditioning grew with d)
 function generate_procrustes_data(d::Int)
-    n = Int(d * (d + 1) / 2)
-    A = zeros(d, n)
-    A[1, 1] = 1.0
-    k = 2
-    dir = zeros(d)
-    for i in 2:d
-        dir[1:i] .= 1 / sqrt(i)
-        dir[(i + 1):end] .= 0
-        v = range(0.0, 1.0, i + 2)[2:(end - 1)]
-        for vi in v
-            A[:, k] .= vi * dir
-            k += 1
-        end
-    end
+    n = d * (d + 1) ÷ 2
+    A = randn(MersenneTwister(142 + d), d, n)
+    A ./= sqrt.(sum(abs2, A; dims=1))
     return A
 end
+
+# The outliers, one in every ten points (at least one), spread evenly: the points round((k − ½)·n/K), k = 1 … K, with
+# K = max(1, round(n/10)). Their fraction is between 1/11 and 1/6 at every size (CN8; before, exactly four points at
+# every d, 4 of 6 at d = 3 and 4 of 528 at d = 32). The "every tenth point" of the specification gives 1/15 at d = 5
+procrustes_outliers(n::Int) = (K = max(1, round(Int, n / 10)); [round(Int, (k - 0.5) * n / K) for k in 1:K])
 
 function generate_procrustes_experiment(d::Int)
     A = generate_procrustes_data(d)
@@ -29,12 +24,9 @@ function generate_procrustes_experiment(d::Int)
     e = Matrix{Float64}(I, d, d)
     p_star = exp(M, e, rand(M; vector_at=e, σ = 0.5/d))
     B = copy(A)
-    # Outliers, when there are enough points
-    if n >= 6 && d >= 3
-        B[2, 4] += 0.1
-        B[3, 1] += 0.1
-        B[3, 2] += 0.1
-        B[1, 6] += 0.1
+    # The q-th outlier is moved by 0.1 along coordinate mod1(q, d)
+    for (q, i) in enumerate(procrustes_outliers(n))
+        B[mod1(q, d), i] += 0.1
     end
     B = transpose(p_star) * B
     return A, B, M, p_star

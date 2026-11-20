@@ -33,11 +33,11 @@ const CONDITIONING_TABLE = [
     (problem = "Dense Affine Alignment", sizes = Any[2, 8, 32],
      cond_max = WELL_CONDITIONED_MAX, growth_max = 2.5, spread_max = ITERATION_SPREAD_MAX, nullity = 0,
      note = "exception: cond(J) grows 2.3-fold from n = 8 to 32, about as √n (CN7, accepted)"),
-    # CN8 was reverted (its design's iterations were 9, 6, 5 at d = 3, 8, 20), so the problem is as before: cond(J) of the
-    # weighted Jacobian 2.5, 273, 710 and 26, 12, 12 iterations at d = 3, 8, 20 (measured 2026-11-20)
+    # CN8's design, accepted by the maintainer (2026-11-20) with its iteration spread: cond(J) of the weighted Jacobian
+    # 1.43, 1.99, 1.72 and 9, 6, 5 iterations at d = 3, 8, 20 (one point in six an outlier at d = 3)
     (problem = "Robust Procrustes on SO(d)", sizes = Any[3, 8, 20],
-     cond_max = WELL_CONDITIONED_MAX, growth_max = 3, spread_max = 16, nullity = 0,
-     note = "exception: cond(J) grows 2.6-fold from d = 8 to 20, and the iterations fall from 26 at d = 3 to 12 (CN8 reverted)"),
+     cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = 4, nullity = 0,
+     note = "exception: the iterations spread 4, 9 at d = 3 to 5 at d = 20 (CN8, accepted)"),
     # Measured without its 7 gauge directions (rigid motion and scale); 4 cameras give each point 4 views, the others 8 or more
     (problem = "Sparse Bundle Adjustment", sizes = Any[4, 16, 32],
      cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = 3, nullity = 7,
