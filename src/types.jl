@@ -146,6 +146,11 @@ Results from running an optimizer on a benchmark model:
 - `excess_cost`: final cost minus the problem's least-squares minimum, both in extended precision,
   for problems that provide a reference minimum (`NaN` otherwise). Formulations are compared on this,
   not on the final gradient norm, which is rounding noise at an accurate minimum of an ill-conditioned problem.
+- `solution_error`: the relative error in the solution, `‖x − x*‖ / ‖x*‖`, with `x` the point the row handed back (in the
+  standard model's layout) and `x*` the solution the problem states (`ProblemDefinition`'s `reference_solution`); `NaN`
+  where the problem states none, or the row handed back no point (a skip, an error). On a zero-residual problem the cost
+  does not see the weak directions of an ill-conditioned Jacobian, so this, not the cost, compares rows there. It changes
+  no status.
 """
 struct OptimizerResult
     time_ns::Float64
@@ -158,12 +163,18 @@ struct OptimizerResult
     status::Symbol
     message::String
     excess_cost::Float64
-    function OptimizerResult(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged::Bool, status::Symbol, message::AbstractString, excess_cost::Real)
+    solution_error::Float64
+    function OptimizerResult(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged::Bool, status::Symbol, message::AbstractString, excess_cost::Real,
+                             solution_error::Real)
         status in OPTIMIZER_STATUSES || throw(ArgumentError("Unknown optimizer status $(repr(status)); expected one of $(OPTIMIZER_STATUSES)"))
         converged == (status === :ok) || throw(ArgumentError("converged = $converged is inconsistent with status = $(repr(status))"))
-        return new(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged, status, String(message), Float64(excess_cost))
+        return new(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged, status, String(message), Float64(excess_cost),
+                   Float64(solution_error))
     end
 end
+
+OptimizerResult(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged::Bool, status::Symbol, message::AbstractString, excess_cost::Real) =
+    OptimizerResult(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged, status, message, excess_cost, NaN)
 
 OptimizerResult(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged::Bool, status::Symbol, message::AbstractString) =
     OptimizerResult(time_ns, allocs, bytes, iterations, start_cost, final_cost, converged, status, message, NaN)
@@ -191,19 +202,23 @@ error_result(err) = OptimizerResult(NaN, 0, 0, 0, NaN, NaN, false, :error, sprin
 
 # Copy of `r` with the timing fields replaced
 with_timing(r::OptimizerResult, time_ns, allocs, bytes) =
-    OptimizerResult(time_ns, allocs, bytes, r.iterations, r.start_cost, r.final_cost, r.converged, r.status, r.message, r.excess_cost)
+    OptimizerResult(time_ns, allocs, bytes, r.iterations, r.start_cost, r.final_cost, r.converged, r.status, r.message, r.excess_cost, r.solution_error)
 
 # Copy of `r` with its status and message replaced (IT4)
 with_status(r::OptimizerResult, status::Symbol, message::AbstractString) =
-    OptimizerResult(r.time_ns, r.allocs, r.bytes, r.iterations, r.start_cost, r.final_cost, status === :ok, status, message, r.excess_cost)
+    OptimizerResult(r.time_ns, r.allocs, r.bytes, r.iterations, r.start_cost, r.final_cost, status === :ok, status, message, r.excess_cost, r.solution_error)
 
 # Copy of `r` with the start and final costs replaced by the harness's evaluation (IT1)
 with_costs(r::OptimizerResult, start_cost, final_cost) =
-    OptimizerResult(r.time_ns, r.allocs, r.bytes, r.iterations, start_cost, final_cost, r.converged, r.status, r.message, r.excess_cost)
+    OptimizerResult(r.time_ns, r.allocs, r.bytes, r.iterations, start_cost, final_cost, r.converged, r.status, r.message, r.excess_cost, r.solution_error)
 
 # Copy of `r` with the excess cost over the reference minimum set
 with_excess_cost(r::OptimizerResult, excess_cost) =
-    OptimizerResult(r.time_ns, r.allocs, r.bytes, r.iterations, r.start_cost, r.final_cost, r.converged, r.status, r.message, excess_cost)
+    OptimizerResult(r.time_ns, r.allocs, r.bytes, r.iterations, r.start_cost, r.final_cost, r.converged, r.status, r.message, excess_cost, r.solution_error)
+
+# Copy of `r` with the relative error in the solution set
+with_solution_error(r::OptimizerResult, solution_error) =
+    OptimizerResult(r.time_ns, r.allocs, r.bytes, r.iterations, r.start_cost, r.final_cost, r.converged, r.status, r.message, r.excess_cost, solution_error)
 
 """
     OptimizerDefinition
@@ -241,6 +256,10 @@ Defines a parameterized benchmark problem:
   on) at every size of its sweep, so that each cost's Jacobian is computed by NLLSModel's forward-mode automatic
   differentiation, and `:analytic` otherwise, each cost then having a hand-written Jacobian. `:mixed` is for a problem
   exempt from the rule, whose models do not share their per-cost derivatives (bundle adjustment).
+- `reference_solution`: Function `(size) -> Union{Nothing, Vector{Float64}}`, the problem's solution at that size in the
+  standard model's layout (the point evaluator's), set by the keyword `reference_solution` of every constructor; `nothing`
+  (the default) where the problem states none. Where it is stated, each row's `solution_error` is measured
+  (`OptimizerResult`); the status is still decided on the cost
 """
 struct ProblemDefinition
     name::String
@@ -251,18 +270,23 @@ struct ProblemDefinition
     size_metric_name::String
     reference_cost::Function
     derivatives::Symbol
+    reference_solution::Function
     function ProblemDefinition(name::String, category::Symbol, default_sizes::Vector{Any}, generate_models::Function,
                                compatible_optimizers::Vector{OptimizerDefinition}, size_metric_name::String,
-                               reference_cost::Function; derivatives::Symbol)
+                               reference_cost::Function; derivatives::Symbol, reference_solution::Function=no_reference_solution)
         derivatives in DERIVATIVE_MODES || throw(ArgumentError(
             "Unknown derivative mode $(repr(derivatives)); expected one of :autodiff, :analytic or :mixed"))
-        return new(name, category, default_sizes, generate_models, compatible_optimizers, size_metric_name, reference_cost, derivatives)
+        return new(name, category, default_sizes, generate_models, compatible_optimizers, size_metric_name, reference_cost, derivatives,
+                   reference_solution)
     end
 end
 ProblemDefinition(name::String, category::Symbol, default_sizes::Vector{Any}, generate_models::Function,
-                  compatible_optimizers::Vector{OptimizerDefinition}, size_metric_name::String; derivatives::Symbol) =
-    ProblemDefinition(name, category, default_sizes, generate_models, compatible_optimizers, size_metric_name, no_reference_cost; derivatives)
+                  compatible_optimizers::Vector{OptimizerDefinition}, size_metric_name::String; derivatives::Symbol,
+                  reference_solution::Function=no_reference_solution) =
+    ProblemDefinition(name, category, default_sizes, generate_models, compatible_optimizers, size_metric_name, no_reference_cost;
+                      derivatives, reference_solution)
 no_reference_cost(_) = nothing
+no_reference_solution(_) = nothing
 
 # Backward-compatible constructor when size_metric_name is omitted
 function ProblemDefinition(
@@ -271,9 +295,10 @@ function ProblemDefinition(
     default_sizes::Vector{Any},
     generate_models::Function,
     compatible_optimizers::Vector{OptimizerDefinition};
-    derivatives::Symbol
+    derivatives::Symbol,
+    reference_solution::Function=no_reference_solution
 )
-    return ProblemDefinition(name, category, default_sizes, generate_models, compatible_optimizers, "Size"; derivatives)
+    return ProblemDefinition(name, category, default_sizes, generate_models, compatible_optimizers, "Size"; derivatives, reference_solution)
 end
 
 # The derivative modes a problem can declare (DM1); see `ProblemDefinition`

@@ -54,11 +54,21 @@ function point_evaluator(m::NLLSModel.Model)
         x -> (cb.res!(r, x); cb.jac!(J, x); (copy(r), copy(J))))
 end
 
-# The start and final costs of a row, from the problem's evaluator and the point the row handed back. A row that did
-# not hand one back (a skip, an error, an adapter that returned none) keeps NaN as its final cost
-function evaluated_result(r::OptimizerResult, point::Vector{Float64}, model::ModelDefinition, evaluator)
+# The start and final costs of a row, from the problem's evaluator and the point the row handed back, and, where the
+# problem states its solution `xstar` (in the evaluator's layout), the relative error in the solution there (CN2). A row
+# that did not hand back a point (a skip, an error, an adapter that returned none) keeps NaN as its final cost and its
+# error
+function evaluated_result(r::OptimizerResult, point::Vector{Float64}, model::ModelDefinition, evaluator, xstar=nothing)
+    has_point = !(r.status in (:skipped, :error) || isempty(point))
+    r = with_solution_error(r, (has_point && xstar !== nothing) ? solution_error(model.to_point(point), xstar) : NaN)
     evaluator === nothing && return with_costs(r, NaN, NaN)
     start_cost = evaluator.cost(evaluator.x0)
-    final_cost = (r.status in (:skipped, :error) || isempty(point)) ? NaN : evaluator.cost(model.to_point(point))
+    final_cost = has_point ? evaluator.cost(model.to_point(point)) : NaN
     return with_costs(r, start_cost, final_cost)
+end
+
+# ‖x − x*‖ / ‖x*‖; NaN for a point of another length
+function solution_error(x::AbstractVector, xstar::AbstractVector)
+    length(x) == length(xstar) || return NaN
+    return norm(x - xstar) / norm(xstar)
 end

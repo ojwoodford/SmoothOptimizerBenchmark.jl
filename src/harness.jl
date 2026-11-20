@@ -85,7 +85,9 @@ out at size N" (decision 17, from `run_scaling_benchmark`).
 
 When every row has run, the harness decides each row's status (IT4, `assign_statuses!`): a row the solver says
 converged is `:ok` only if its cost passes the cost test against `reference` (the problem's known minimum at this size,
-`nothing` for the lowest cost of any row here), and `:local_minimum` or `:above_reference` otherwise. Only then is
+`nothing` for the lowest cost of any row here), and `:local_minimum` or `:above_reference` otherwise. Where
+`reference_solution` is given (the problem's solution at this size, in the evaluator's layout), each row that handed back a
+point records its relative error in the solution (`solution_error`), from the first run; it changes no status. Only then is
 `on_result` called, for each row in the order of `optimizers`: so a results file streamed from it holds whole sizes,
 and an interrupted run leaves no row reading `ok` that was not tested.
 """
@@ -93,7 +95,7 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
                                  all_models::Vector{<:ModelDefinition}=ModelDefinition[target_model],
                                  max_samples::Int=50, target_total_time_sec::Float64=1.0, samples=nothing,
                                  on_result=nothing, warmed_signatures::Set{Any}=Set{Any}(),
-                                 evaluator=point_evaluator(target_model), reference=nothing,
+                                 evaluator=point_evaluator(target_model), reference=nothing, reference_solution=nothing,
                                  timed_out_at::AbstractDict=Dict{String, Any}())
     results = Dict{String, OptimizerResult}()
     # The BLAS count of the table, put back after any row that changes it (IND7: a package may set BLAS itself)
@@ -145,7 +147,7 @@ function run_optimizer_benchmarks(optimizers::Vector{OptimizerDefinition}, targe
         end
         t1_wall_ns = Float64(time_ns() - t1_wall_start)
         t1_wall_sec = t1_wall_ns / 1e9
-        init_res = evaluated_result(init_res, point, opt_model, evaluator)
+        init_res = evaluated_result(init_res, point, opt_model, evaluator, reference_solution)
         points[opt.name] = (point, opt_model)
 
         if isnan(init_res.time_ns) || !init_res.converged
@@ -301,7 +303,7 @@ function run_problem_benchmark(prob::ProblemDefinition, size; target_model_name=
     # the standard model's evaluator
     evaluator = point_evaluator(get_standard_optimizer_model(models))
     optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples, evaluator,
-        reference=prob.reference_cost(size))
+        reference=prob.reference_cost(size), reference_solution=prob.reference_solution(size))
 
     return SingleSizeBenchmarkResult(
         prob.name,
@@ -430,7 +432,7 @@ function run_scaling_benchmark(prob::ProblemDefinition; sizes=prob.default_sizes
         # Run each optimizer on the model the pairing gives it, streaming each size's rows to file once all have run
         optimizer_results = run_optimizer_benchmarks(prob.compatible_optimizers, target_model; all_models=models, samples=samples,
             warmed_signatures=warmed_signatures, evaluator=point_evaluator(get_standard_optimizer_model(models)),
-            reference=prob.reference_cost(sz), timed_out_at,
+            reference=prob.reference_cost(sz), reference_solution=prob.reference_solution(sz), timed_out_at,
             on_result = (opt_name, r) -> append_optimizer_evaluation(data_file, sz, opt_name, r)
         )
         for (name, r) in optimizer_results

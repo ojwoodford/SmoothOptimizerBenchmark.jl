@@ -26,11 +26,10 @@ function solution_point(prob, size)
     r = CNH.evaluated_result(r, x, m, evaluator)
     results = Dict(row.name => r)
     CNH.assign_statuses!(results, Dict(row.name => (x, m)), evaluator, prob.reference_cost(size))
-    stated = cn_stated_solution(prob, size)
+    stated = prob.reference_solution(size)
     point = stated === nothing ? m.to_point(x) : stated
     return point, results[row.name].iterations, results[row.name].status
 end
-cn_stated_solution(prob, size) = hasproperty(prob, :reference_solution) ? prob.reference_solution(size) : nothing
 
 """
     solution_jacobian(prob, size; point = first(solution_point(prob, size))) -> J

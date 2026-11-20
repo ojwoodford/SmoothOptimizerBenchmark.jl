@@ -89,3 +89,72 @@ end
     @test SOB.point_evaluator(:not_a_model) === nothing
     @test isnan(SOB.evaluated_result(r_lm, x_lm, cf_std, nothing).final_cost)
 end
+
+# CN2: a problem that states its solution gives each row its relative error in the solution, at the point it handed back,
+# from the first run; without a stated solution, and for a skipped or failed row, the error is NaN. It survives the data
+# file's round trip, and a file written before the column existed loads it as NaN
+@testset "A row's error in the solution (CN2)" begin
+    SOB = SmoothOptimizerBenchmark
+    cf = create_curve_fitting_problem()
+    models = cf.generate_models(64)
+    std = get_standard_optimizer_model(models)
+    x_lm = Float64[]
+    optimize_soo(std; method=:lm, solution=x_lm)
+    xstar = x_lm .+ [0.1, -0.2, 0.3]
+    handing(x) = (m; solution=nothing, kwargs...) -> begin
+        solution === nothing || append!(empty!(solution), x)
+        OptimizerResult(1.0e3, 0, 0, 7, 1.0, 1.0, true)
+    end
+    rows = [OptimizerDefinition("At the LM point", handing(x_lm), "Standalone"),
+            OptimizerDefinition("At the solution", handing(xstar), "Standalone"),
+            OptimizerDefinition("No point", (m; kwargs...) -> OptimizerResult(1.0e3, 0, 0, 7, 1.0, 1.0, true), "Standalone"),
+            OptimizerDefinition("Skipping adapter", (m; kwargs...) -> skipped_result("not applicable"), "Standalone"),
+            OptimizerDefinition("Throwing adapter", (m; kwargs...) -> error("boom"), "Standalone")]
+    res = run_optimizer_benchmarks(rows, std; all_models=models, samples=1, reference_solution=xstar)
+    @test res["At the LM point"].solution_error ≈ SOB.norm(x_lm - xstar) / SOB.norm(xstar) rtol=1e-14
+    @test res["At the solution"].solution_error == 0.0
+    @test isnan(res["No point"].solution_error)
+    @test isnan(res["Skipping adapter"].solution_error)
+    @test res["Throwing adapter"].status === :error && isnan(res["Throwing adapter"].solution_error)
+    # It changes no status: the rows' costs decide them
+    res_none = run_optimizer_benchmarks(rows[1:2], std; all_models=models, samples=1)
+    @test all(r -> isnan(r.solution_error), values(res_none))
+    @test [res_none[o.name].status for o in rows[1:2]] == [res[o.name].status for o in rows[1:2]]
+    # The copies keep it
+    r = res["At the LM point"]
+    @test SOB.with_timing(r, 1.0, 0, 0).solution_error == r.solution_error
+    @test SOB.with_status(r, :local_minimum, "x").solution_error == r.solution_error
+    @test SOB.with_costs(r, 1.0, 2.0).solution_error == r.solution_error
+    @test SOB.with_excess_cost(r, 1.0).solution_error == r.solution_error
+    @test isnan(OptimizerResult(1.0, 0, 0, 1, 1.0, 1.0, true).solution_error)
+    # A problem states it through its definition, and the harness passes it on; by default it states none
+    @test cf.reference_solution(64) === nothing
+    stated = ProblemDefinition("Stated", :small_dense, Any[64], cf.generate_models, rows[1:1], "m", _ -> 0.0;
+                               derivatives=:autodiff, reference_solution=_ -> xstar)
+    @test stated.reference_solution(64) == xstar
+    @test run_problem_benchmark(stated, 64; samples=1).optimizer_results["At the LM point"].solution_error ≈ r.solution_error rtol=1e-14
+    @test ProblemDefinition("S", :small_dense, Any[1], n -> ModelDefinition[], OptimizerDefinition[], "n";
+                            derivatives=:analytic, reference_solution=_ -> [1.0]).reference_solution(1) == [1.0]
+    @test ProblemDefinition("S", :small_dense, Any[1], n -> ModelDefinition[], OptimizerDefinition[];
+                            derivatives=:analytic, reference_solution=_ -> [1.0]).reference_solution(1) == [1.0]
+    # The data file's round trip, and a file without the column
+    dir = mktempdir()
+    f = joinpath(dir, "stated.md")
+    init_problem_markdown(f, "Stated", :small_dense, "m", std.name; derivatives=:autodiff)
+    init_optimizer_section(f, std.name)
+    for o in rows
+        append_optimizer_evaluation(f, 64, o.name, res[o.name])
+    end
+    loaded = load_problem_markdown(f).size_results[1].optimizer_results
+    @test loaded["At the LM point"].solution_error ≈ r.solution_error rtol=1e-4
+    @test loaded["At the solution"].solution_error == 0.0
+    @test isnan(loaded["No point"].solution_error)
+    old = replace(read(f, String), " Solution Error |" => "", "|---:|---:|:---|\n" => "|---:|:---|\n")
+    old_lines = [occursin(r"^\| 64 \|", l) ? join(deleteat!(split(l, " | "), 11), " | ") : l for l in split(old, '\n')]
+    old_file = joinpath(dir, "old.md")
+    write(old_file, join(old_lines, '\n'))
+    old_loaded = load_problem_markdown(old_file).size_results[1].optimizer_results
+    @test all(r -> isnan(r.solution_error), values(old_loaded))
+    @test old_loaded["At the LM point"].status === loaded["At the LM point"].status
+    @test old_loaded["At the LM point"].iterations == 7
+end
