@@ -3,7 +3,7 @@ ENV["GKSwstype"] = "100" # Headless GR backend
 using Plots
 using Printf
 
-export problem_slug, plot_model_scaling, plot_optimizer_scaling, generate_all_plots
+export problem_slug, plot_model_scaling, plot_optimizer_scaling, plot_solution_error, plot_iterations, generate_all_plots
 
 """
     problem_slug(name::String) -> String
@@ -393,14 +393,87 @@ end
 """
     generate_all_plots(results::Vector{ProblemScalingBenchmarkResult}; outdir=DEFAULT_PLOTS_DIR, title_suffix="") -> Dict{String, Tuple{String, String}}
 
-Generates both model and optimizer log-log scaling plots for all benchmarked problems.
+Generates both model and optimizer log-log scaling plots for all benchmarked problems, and, for a problem whose rows
+carry an error in the solution, its solution-error and iteration plots (`plot_solution_error`, `plot_iterations`).
 """
 function generate_all_plots(results::Vector{ProblemScalingBenchmarkResult}; outdir=DEFAULT_PLOTS_DIR, title_suffix::AbstractString="")
     paths = Dict{String, Tuple{String, String}}()
     for res in results
         m_path = plot_model_scaling(res; outdir, title_suffix)
         o_path = plot_optimizer_scaling(res; outdir, title_suffix)
+        # The solution-error and iteration plots, where the rows carry an error in the solution (CN3)
+        plot_solution_error_and_iterations(res; outdir, title_suffix)
         paths[res.problem] = (m_path, o_path)
     end
     return paths
+end
+
+# The two plots of a problem whose rows carry an error in the solution (CN3): only a problem that states its solution has
+# them (the two conditioning sweeps)
+
+"""
+    has_solution_errors(res::ProblemScalingBenchmarkResult) -> Bool
+
+Whether some row of `res` has a finite error in the solution: exactly then are its solution-error and iteration plots made.
+"""
+has_solution_errors(res::ProblemScalingBenchmarkResult) =
+    any(sr -> any(r -> isfinite(r.solution_error), values(sr.optimizer_results)), res.size_results)
+
+# The smallest error drawn: an error below it is drawn at it
+const SOLUTION_ERROR_FLOOR = 1e-16
+
+# One line per row against the sweep value, both axes logarithmic, from `value(r)` of each `ok` row (NaN to leave a point
+# out), saved to `filepath`
+function plot_rows_against_sweep(res::ProblemScalingBenchmarkResult, filepath::String, value::Function; title::String, ylabel::String)
+    sizes = [Float64(s) for s in res.sizes]
+    names = sort!(unique!([k for sr in res.size_results for k in keys(sr.optimizer_results)]))
+    p = plot(title = title, xlabel = res.size_metric_name * " (log scale)", ylabel = ylabel, xscale = :log10, yscale = :log10,
+             legend = :outertopright, grid = true, size = (950, 550), dpi = 150)
+    plotted = 0
+    for name in names
+        ys = [begin
+                  r = get(sr.optimizer_results, name, nothing)
+                  r !== nothing && r.status === :ok ? Float64(value(r)) : NaN
+              end for sr in res.size_results]
+        any(isfinite, ys) || continue
+        plotted += 1
+        c, ls, mk = optimizer_style(name)
+        plot!(p, sizes, ys; label = name, color = c, linestyle = ls, markershape = mk, markerstrokecolor = c, markersize = 5,
+              linewidth = 2.0)
+    end
+    plotted == 0 && plot!(p, [sizes[1]], [NaN]; label = "(no ok rows)", ylims = (1e-16, 1.0))
+    savefig(p, filepath)
+    return filepath
+end
+
+"""
+    plot_solution_error(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR, title_suffix="") -> String
+
+The relative error in the solution of each `ok` row against the sweep value, both axes logarithmic, an error below
+$(SOLUTION_ERROR_FLOOR) drawn at $(SOLUTION_ERROR_FLOOR); saved as `<slug>_solution_error.png` in `outdir`.
+"""
+function plot_solution_error(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR, title_suffix::AbstractString="")
+    mkpath(outdir)
+    filepath = joinpath(outdir, "$(problem_slug(res.problem))_solution_error.png")
+    return plot_rows_against_sweep(res, filepath, r -> isfinite(r.solution_error) ? max(r.solution_error, SOLUTION_ERROR_FLOOR) : NaN;
+        title = "$(res.problem): Error in the Solution$(title_suffix)", ylabel = "‖x − x*‖ / ‖x*‖ (log scale)")
+end
+
+"""
+    plot_iterations(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR, title_suffix="") -> String
+
+The iteration count of each `ok` row against the sweep value, both axes logarithmic; saved as `<slug>_iterations.png`
+in `outdir`.
+"""
+function plot_iterations(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR, title_suffix::AbstractString="")
+    mkpath(outdir)
+    filepath = joinpath(outdir, "$(problem_slug(res.problem))_iterations.png")
+    return plot_rows_against_sweep(res, filepath, r -> r.iterations > 0 ? r.iterations : NaN;
+        title = "$(res.problem): Iterations$(title_suffix)", ylabel = "Iterations (log scale)")
+end
+
+# The two plots, where `res` has solution errors (CN3)
+function plot_solution_error_and_iterations(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR, title_suffix::AbstractString="")
+    has_solution_errors(res) || return nothing
+    return (plot_solution_error(res; outdir, title_suffix), plot_iterations(res; outdir, title_suffix))
 end

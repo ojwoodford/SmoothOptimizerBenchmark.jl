@@ -325,7 +325,8 @@ end
 """
     update_problem_plots(slug::String; data_dir=DEFAULT_DATA_DIR, outdir=DEFAULT_PLOTS_DIR) -> Tuple{String, String}
 
-Regenerates the model and optimizer plots for a single problem using its Markdown data file.
+Regenerates the model and optimizer plots for a single problem using its Markdown data file, and its solution-error and
+iteration plots where its rows carry an error in the solution.
 """
 function update_problem_plots(slug::String; data_dir=DEFAULT_DATA_DIR, outdir=DEFAULT_PLOTS_DIR)
     md_file = joinpath(data_dir, "$(slug).md")
@@ -333,5 +334,6 @@ function update_problem_plots(slug::String; data_dir=DEFAULT_DATA_DIR, outdir=DE
     res = load_problem_markdown(md_file)
     m_path = plot_model_scaling(res; outdir=outdir)
     o_path = plot_optimizer_scaling(res; outdir=outdir)
+    plot_solution_error_and_iterations(res; outdir)   # where the rows carry an error in the solution (CN3)
     return (m_path, o_path)
 end

@@ -74,7 +74,36 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     o_plot = plot_optimizer_scaling(scaling_res; outdir=tmp_plot_dir)
     @test isfile(m_plot)
     @test isfile(o_plot)
-    rm(tmp_plot_dir; recursive=true, force=true)
+    # CN3: the solution-error and iteration plots are made exactly when some row carries an error in the solution
+    slug = problem_slug(scaling_res.problem)
+    extra(dir) = filter(f -> endswith(f, "_solution_error.png") || endswith(f, "_iterations.png"), readdir(dir))
+    @test !SmoothOptimizerBenchmark.has_solution_errors(scaling_res)
+    paths = generate_all_plots([scaling_res]; outdir=tmp_plot_dir)
+    @test paths isa Dict{String, Tuple{String, String}}
+    @test isempty(extra(tmp_plot_dir))
+    with_errors = ProblemScalingBenchmarkResult(scaling_res.problem, scaling_res.category, scaling_res.size_metric_name, scaling_res.sizes,
+        [SingleSizeBenchmarkResult(sr.problem, sr.category, sr.size, sr.size_metric_name, sr.model_results, sr.target_model,
+             Dict(k => SmoothOptimizerBenchmark.with_solution_error(r, 10.0^(-2j)) for (k, r) in sr.optimizer_results))
+         for (j, sr) in enumerate(scaling_res.size_results)])
+    @test SmoothOptimizerBenchmark.has_solution_errors(with_errors)
+    err_dir = mktempdir()
+    paths = generate_all_plots([with_errors]; outdir=err_dir, title_suffix=" (1 thread)")
+    @test paths isa Dict{String, Tuple{String, String}}
+    @test sort(extra(err_dir)) == ["$(slug)_iterations.png", "$(slug)_solution_error.png"]
+    @test plot_solution_error(with_errors; outdir=err_dir) == joinpath(err_dir, "$(slug)_solution_error.png")
+    @test plot_iterations(with_errors; outdir=err_dir) == joinpath(err_dir, "$(slug)_iterations.png")
+    # update_problem_plots, from a data file, likewise
+    data_dir = mktempdir()
+    f = joinpath(data_dir, "$(slug).md")
+    init_problem_markdown(f, with_errors.problem, with_errors.category, with_errors.size_metric_name, "Standalone (Sparse)"; derivatives=:autodiff)
+    init_optimizer_section(f, "Standalone (Sparse)")
+    for sr in with_errors.size_results, (k, r) in sr.optimizer_results
+        append_optimizer_evaluation(f, sr.size, k, r)
+    end
+    up_dir = mktempdir()
+    @test update_problem_plots(slug; data_dir, outdir=up_dir) isa Tuple{String, String}
+    @test sort(extra(up_dir)) == ["$(slug)_iterations.png", "$(slug)_solution_error.png"]
+    rm.((tmp_plot_dir, err_dir, data_dir, up_dir); recursive=true, force=true)
 
     # The single-threaded table is in scaling_single_threaded.jl (the threaded group)
 end

@@ -663,6 +663,20 @@ The size is the dimension, ``d``. The rotation's degrees of freedom grow as ``d^
 """,
 )
 
+# The subsection of a problem whose rows carry an error in the solution (CN3): its two plots, from `plotdir`
+function solution_error_section(res::ProblemScalingBenchmarkResult, slug::AbstractString, plotdir::AbstractString, label::AbstractString)
+    return """
+
+### Error in the solution and iterations$(label)
+
+The first plot shows each row's relative error in the solution, ``\\lVert \\mathbf{x} - \\mathbf{x}^\\star \\rVert / \\lVert \\mathbf{x}^\\star \\rVert``, at the point it stopped, against $(res.size_metric_name) (an error below 1e-16 is drawn at 1e-16), and the second its iteration count. A row that is not `ok` at a value is missing there.
+
+![$(res.problem) Error in the Solution$(label)]($(plotdir)/$(slug)_solution_error.png)
+
+![$(res.problem) Iterations$(label)]($(plotdir)/$(slug)_iterations.png)
+"""
+end
+
 function generate_problem_markdown(res::ProblemScalingBenchmarkResult, slug::String; single_threaded=nothing)
     target_model_name = isempty(res.size_results) ? "Standard" : first(res.size_results).target_model
     num_sizes = length(res.sizes)
@@ -717,6 +731,8 @@ This problem uses `$(target_model_name)` universally across all solvers via its 
     else
         st_phase1 = any(sr -> length(sr.model_results) > 1, single_threaded.size_results)
         model_plot = st_phase1 ? "\n![$(res.problem) Model Evaluation Scaling, 1 thread](../assets/plots/single_threaded/$(slug)_models.png)\n" : ""
+        st_error_plots = SmoothOptimizerBenchmark.has_solution_errors(single_threaded) ?
+            solution_error_section(single_threaded, slug, "../assets/plots/single_threaded", ", 1 thread") : ""
         """
 ## 3. Single-Threaded Results
 
@@ -724,7 +740,7 @@ The same benchmark with NLLSModel and BLAS on one thread (`set_benchmark_threads
 stored separately from the multi-threaded table. Comparing the two shows what threading gains or costs at each size.
 $(model_plot)
 ![$(res.problem) Optimizer Scaling, 1 thread](../assets/plots/single_threaded/$(slug)_optimizers.png)
-
+$(st_error_plots)
 - [View Single-Threaded Raw Benchmark Results Data (Markdown Table)](../data/single_threaded/$(slug).md)
 
 ---
@@ -763,7 +779,7 @@ $(phase1_section)
 The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, each on the model given in the table above (its package's native model, or the `Standalone` model). Only `ok` rows are plotted.
 
 ![$(res.problem) Optimizer Scaling](../assets/plots/$(slug)_optimizers.png)
-
+$(SmoothOptimizerBenchmark.has_solution_errors(res) ? solution_error_section(res, slug, "../assets/plots", "") : "")
 ---
 
 $(single_threaded_section)

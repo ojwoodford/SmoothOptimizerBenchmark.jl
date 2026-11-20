@@ -205,6 +205,29 @@ holds_number(cell, n) = occursin(Regex("(?<![0-9])$(n)(?![0-9])"), cell)
         end
     end
 
+    # CN3: a result whose rows carry an error in the solution has the two extra plots, in both tables, and its page links
+    # them where they are written; a result without has neither link
+    let base_res = load_problem_markdown(joinpath(PAGES_ROOT, "docs", "src", "data", "rosenbrock_sparse.md"))
+        with_err(res) = ProblemScalingBenchmarkResult(res.problem, res.category, res.size_metric_name, res.sizes,
+            [SingleSizeBenchmarkResult(sr.problem, sr.category, sr.size, sr.size_metric_name, sr.model_results, sr.target_model,
+                 Dict(k => SmoothOptimizerBenchmark.with_solution_error(r, 1e-3) for (k, r) in sr.optimizer_results))
+             for sr in res.size_results])
+        res_err = with_err(base_res)
+        root = mktempdir()
+        generate_all_plots([res_err]; outdir=joinpath(root, "assets", "plots"))
+        generate_all_plots([res_err]; outdir=joinpath(root, "assets", "plots", "single_threaded"), title_suffix=" (1 thread)")
+        pg = generate_problem_markdown(res_err, "rosenbrock_sparse"; single_threaded=res_err)
+        links = [m.captures[1] for m in eachmatch(r"\]\((\.\./assets/plots/[^)]*_(?:solution_error|iterations)\.png)\)", pg)]
+        @test length(links) == 4
+        @test all(l -> isfile(normpath(joinpath(root, "problems", l))), links)
+        @test count("### Error in the solution and iterations", pg) == 2
+        @test occursin("A row that is not `ok` at a value is missing there.", pg)
+        @test isempty(page_checks(pg))
+        pg_none = generate_problem_markdown(base_res, "rosenbrock_sparse"; single_threaded=base_res)
+        @test !occursin("_solution_error.png", pg_none) && !occursin("_iterations.png", pg_none)
+        rm(root; recursive=true, force=true)
+    end
+
     # The committed pages pass checks 2 to 6: this fails if the generator is changed and the pages are not regenerated
     for slug in CANONICAL_PROBLEM_SLUGS
         committed = read(joinpath(PAGES_ROOT, "docs", "src", "problems", "$(slug).md"), String)
