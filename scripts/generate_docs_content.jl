@@ -532,10 +532,10 @@ A robot moves along a path and records, at each step, how far it has moved since
 Each measurement between two positions ``\mathbf{x}_a`` and ``\mathbf{x}_b`` contributes three residuals,
 
 ```math
-\boldsymbol{\epsilon}(\mathbf{x}_a, \mathbf{x}_b) = \mathbf{x}_b - \mathbf{x}_a - \mathbf{o}_{ab} + 0.1 \sin(\mathbf{x}_a),
+\boldsymbol{\epsilon}(\mathbf{x}_a, \mathbf{x}_b) = \mathbf{x}_b - \mathbf{x}_a - \mathbf{o}_{ab} + 0.1\,\bigl(\mathbf{x}_a + \sin(\mathbf{x}_a)\bigr),
 ```
 
-where ``\mathbf{o}_{ab}`` is the measured offset and the sine term (applied to each coordinate) makes the problem nonlinear. There is one such measurement between every consecutive pair, one loop closure from position ``i - 10`` to position ``i`` for every tenth ``i``, and one extra term that pins the first position, since otherwise the whole path could slide freely. The optimizers start from the path obtained by adding up slightly wrong steps.
+where ``\mathbf{o}_{ab}`` is the measured offset and the last term (the sine applied to each coordinate) makes the problem nonlinear. Its derivative, ``0.1\,(1 + \cos x)``, is never negative, so its effect does not cancel along the chain, and the problem's conditioning is the same at every length: the Jacobian's condition number is about 20 at every size. There is one such measurement between every consecutive pair, one loop closure from position ``i - 10`` to position ``i`` for every tenth ``i``, and one extra term that pins the first position, since otherwise the whole path could slide freely. The optimizers start from the path obtained by adding up slightly wrong steps.
 
 ### Where it is used
 

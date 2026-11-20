@@ -24,6 +24,8 @@ const CONDITIONING_TABLE = [
      cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = ITERATION_SPREAD_MAX, nullity = 0, note = ""),
     (problem = "1D ODE Boundary Value Problem", sizes = Any[32, 256, 2048],
      cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = ITERATION_SPREAD_MAX, nullity = 0, note = ""),
+    (problem = "Nonlinear 3D Pose Chain", sizes = Any[50, 200, 400],
+     cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = ITERATION_SPREAD_MAX, nullity = 0, note = ""),
 ]
 
 @testset "One trait per problem: conditioning and iterations across sizes (CN13)" begin

@@ -10,7 +10,10 @@ NLLSModel.ndeps(::BenchChainLink) = static(2)
 NLLSModel.nres(::BenchChainLink) = static(3)
 NLLSModel.varindices(r::BenchChainLink) = r.varind
 NLLSModel.getvars(r::BenchChainLink, vars::AbstractVector) = (vars[r.varind[1]]::SVector{3, Float64}, vars[r.varind[2]]::SVector{3, Float64})
-NLLSModel.computeresidual(r::BenchChainLink, a, b) = b - a - r.offset + 0.1 * sin.(a)
+# The self-term 0.1·(a + sin a) has the one-signed derivative 0.1·(1 + cos a) ≥ 0, so its effect does not average out
+# along the chain and the chain's conditioning is the same at every length (CN5; with 0.1·sin a alone the damping length
+# was about 1600 poses, and cond(J) grew until then)
+NLLSModel.computeresidual(r::BenchChainLink, a, b) = b - a - r.offset + 0.1 * (a + sin.(a))
 Base.eltype(::BenchChainLink) = Float64
 
 struct BenchChainAnchor <: AbstractResidual end
@@ -27,13 +30,13 @@ end
 
 function get_chain_measurements(n_poses::Int, K::Int=10)
     x_true = generate_chain_ground_truth(n_poses)
-    link_offsets = [x_true[i+1] - x_true[i] + 0.1 * sin.(x_true[i]) for i in 1:n_poses-1]
+    link_offsets = [x_true[i+1] - x_true[i] + 0.1 * (x_true[i] + sin.(x_true[i])) for i in 1:n_poses-1]
     lcs = Tuple{Int, Int, SVector{3, Float64}}[]
     for i in (K + 1):n_poses
         if (i - 1) % K == 0
             u = i - K
             v = i
-            off = x_true[v] - x_true[u] + 0.1 * sin.(x_true[u])
+            off = x_true[v] - x_true[u] + 0.1 * (x_true[u] + sin.(x_true[u]))
             push!(lcs, (u, v, off))
         end
     end
@@ -79,7 +82,7 @@ end
 
 # Model 3: JuMP (IND3g). One 3-vector per pose, flattened in pose order (pose i is x[3i − 2 : 3i], the Standalone model's
 # layout); the residuals of `build_chain_nlls`, coordinate by coordinate: the anchor (pose 1), the links between
-# consecutive poses, then the loop closures, each x_b − x_a − offset + 0.1·sin(x_a)
+# consecutive poses, then the loop closures, each x_b − x_a − offset + 0.1·(x_a + sin(x_a))
 function build_jump_pose_chain(n_poses::Int, link_offsets::Vector{SVector{3, Float64}}, lcs::Vector{Tuple{Int, Int, SVector{3, Float64}}},
                                start_vars::Vector{SVector{3, Float64}})
     x0 = reduce(vcat, [collect(v) for v in start_vars])
@@ -89,14 +92,15 @@ function build_jump_pose_chain(n_poses::Int, link_offsets::Vector{SVector{3, Flo
     links = [[(i, i + 1, link_offsets[i]) for i in 1:n_poses-1]; lcs]
     for (a, b, off) in links, k in 1:3
         xa, xb = x[3 * (a - 1) + k], x[3 * (b - 1) + k]
-        push!(F, @NLexpression(model, xb - xa - off[k] + 0.1 * sin(xa)))
+        push!(F, @NLexpression(model, xb - xa - off[k] + 0.1 * (xa + sin(xa))))
     end
     return MathOptNLSModel(model, F)
 end
 build_jump_pose_chain(n_poses::Int) = build_jump_pose_chain(n_poses, get_chain_measurements(n_poses)..., generate_chain_start_vars(n_poses))
 
 # The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, N = 10000,
-# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_wellconditioned, RS_hessian, L_sparse, I_dogleg
+# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3) and again for CN5's self-term on
+# 2026-11-20 at NLLSModel d2e4374, the same; rules F_wellconditioned, RS_hessian, L_sparse, I_dogleg
 const POSE_CHAIN_SOO = (; iterator = :dogleg, linsolver = :ldl, formulation = :hessian, reduction = :none, storage = :sparse)
 
 function create_pose_chain_problem()
