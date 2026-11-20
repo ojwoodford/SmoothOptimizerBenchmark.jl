@@ -28,6 +28,10 @@ const CONDITIONING_TABLE = [
      cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = ITERATION_SPREAD_MAX, nullity = 0, note = ""),
     (problem = "Dense Multi-dimensional Rosenbrock", sizes = Any[2, 8, 32],
      cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = ITERATION_SPREAD_MAX, nullity = 0, note = ""),
+    # Measured without its 7 gauge directions (rigid motion and scale); 4 cameras give each point 4 views, the others 8 or more
+    (problem = "Sparse Bundle Adjustment", sizes = Any[4, 16, 32],
+     cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = 3, nullity = 7,
+     note = "the iteration spread may be 3 (CN9): 4 cameras have 4 views of each point"),
 ]
 
 @testset "One trait per problem: conditioning and iterations across sizes (CN13)" begin

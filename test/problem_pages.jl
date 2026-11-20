@@ -99,7 +99,7 @@ const PAGE_COUNTS = Dict(
     "affine_alignment"     => (1, 2, 4, 32, 1056, 4096),
     "pose_chain"           => (50, 150, 162, 10000, 30000, 32997),
     "ode_bvp"              => (32, 32, 32, 32768, 32768, 32768),
-    "bundle_adjustment"    => (4, 96, 120, 256, 6144, 196608),
+    "bundle_adjustment"    => (4, 96, 160, 256, 6144, 327680),
     "robust_procrustes"    => (3, 3, 18, 32, 496, 16896),
 )
 
@@ -200,7 +200,7 @@ holds_number(cell, n) = occursin(Regex("(?<![0-9])$(n)(?![0-9])"), cell)
                 @test counted_sizes(slug, prob, large) == (u_large, r_large)
             elseif slug == "bundle_adjustment"
                 # The largest size's observations, from the data alone (no models built)
-                @test SmoothOptimizerBenchmark.make_synthetic_bam(large).nobs == r_large ÷ 2 == 98304
+                @test SmoothOptimizerBenchmark.make_synthetic_bam(large).nobs == r_large ÷ 2 == 163840
             end
         end
     end

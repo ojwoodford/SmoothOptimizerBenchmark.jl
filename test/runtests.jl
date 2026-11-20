@@ -28,6 +28,7 @@ const TEST_FILES = [
     ("The JuMP models agree with the Standalone models (IND3)", "jump_models.jl", :serial),
     ("Stopping criteria: each one given can stop the run (IND5)", "stopping_criteria.jl", :integration),
     ("Cold-Start NLLSModel + SecondOrderOptimization & BAL Equivalence", "cold_start.jl", :serial),
+    ("Bundle adjustment: the ring of cameras (CN9)", "bundle_adjustment.jl", :serial),
     ("Thread counts and NLLSModel threading thresholds (M17, F4)", "thread_counts.jl", :threaded),
     ("Single-variable NLLSModel rows use the linear system's own buffer types (M18)", "static_buffers.jl", :serial),
     ("Robust exponential curve fitting (P2)", "curve_fitting_robust.jl", :serial),

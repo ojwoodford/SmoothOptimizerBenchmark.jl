@@ -279,7 +279,7 @@ const PROBLEM_NOTES = Dict(
     "bundle_adjustment" => raw"""
 ## Bundle adjustment's rows
 
-- **`SecondOrderOptimization`** eliminates the points by QR of their blocks on the residual-and-Jacobian form (`formulation = :jacobian`, `reduction = :eliminate`: square-root bundle adjustment), and factorizes the reduced camera system by sparse QR, without forming ``\mathbf{J}^T \mathbf{J}``; its iterator, `:levenbergmarquardt_dtd`, scales the damping by the running maximum of the squared column norms of ``\mathbf{J}`` (the diagonal of ``\mathbf{J}^T \mathbf{J}``).
+- **`SecondOrderOptimization`** forms the Gauss–Newton system ``\mathbf{J}^T \mathbf{J}`` (`formulation = :hessian`), eliminates the points from it (`reduction = :eliminate`: the Schur complement), and factorizes the reduced camera system by sparse Cholesky; its iterator is Levenberg–Marquardt. The recommender chooses the Hessian path because ``\mathbf{J}`` is rank-deficient by the gauge (the scene's position, orientation and scale are free), which damping handles.
 - **`CaNNOLeS`** (`method = :Newton_noFHess`, on `BundleAdjustmentModels`) is Gauss–Newton globalized by a regularized ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization of the augmented system and an Armijo backtracking line search.
 
 ---
@@ -603,7 +603,7 @@ Take many photographs of a scene from different places. Bundle adjustment works 
 f(\mathbf{c}_1, \dots, \mathbf{p}_1, \dots) = \tfrac12 \sum_{(j,\,i)\ \text{observed}} \bigl\lVert \pi(\mathbf{c}_j, \mathbf{p}_i) - \mathbf{z}_{ji} \bigr\rVert^2 ,
 ```
 
-where ``\mathbf{c}_j`` holds camera ``j``'s parameters, ``\mathbf{p}_i`` is point ``i``'s position, ``\mathbf{z}_{ji}`` is where point ``i`` was seen in photograph ``j``, and ``\pi`` is the camera projection. A camera has 9 unknowns (3 for its orientation, 3 for its position, its focal length and 2 lens-distortion coefficients, the model of the "Bundle Adjustment in the Large" data sets); a point has 3. The scenes here are synthetic: ``N_{cam}`` cameras in a row, ``5 N_{cam}`` points, each point seen by a run of neighbouring cameras, 30 % of them (and at least 3). The observations are exact, so the minimum is zero; the optimizers start from the true scene with the points and the cameras' orientations and positions slightly perturbed.
+where ``\mathbf{c}_j`` holds camera ``j``'s parameters, ``\mathbf{p}_i`` is point ``i``'s position, ``\mathbf{z}_{ji}`` is where point ``i`` was seen in photograph ``j``, and ``\pi`` is the camera projection. A camera has 9 unknowns (3 for its orientation, 3 for its position, its focal length and 2 lens-distortion coefficients, the model of the "Bundle Adjustment in the Large" data sets); a point has 3. The scenes here are synthetic and the same at every size but for the counts: ``N_{cam}`` cameras evenly spaced on a ring of radius 3, each looking at the centre, around ``5 N_{cam}`` points drawn uniformly in a ball of radius 1.5 at the centre, every camera with a focal length of 1 and no lens distortion. Each point is seen by the half of the cameras nearest its direction on the ring (at least 8, or all of them when there are fewer). So every camera sees the scene from the same distance and at the same angle, whatever ``N_{cam}``, and the conditioning does not change with the size: without its 7 gauge directions the Jacobian's condition number is about 300 from 8 cameras up (860 at 4). The observations are exact, so the minimum is zero; the optimizers start from the true scene with the points and the cameras' orientations and positions slightly perturbed.
 
 ### Where it is used
 
@@ -611,20 +611,20 @@ Photogrammetry and 3D reconstruction from photographs (structure from motion), m
 
 ### Similar problems
 
-Problems with two kinds of unknown, a few large ones and many small ones, where each measurement involves one of each: SLAM with landmarks, calibrating a sensor network against targets, and matrix factorization. That structure allows the standard trick of this field: the points can be eliminated exactly (the Schur complement), leaving a much smaller system in the cameras alone, of side ``9 N_{cam}``. Here two cameras share points when they are within about ``0.3\,N_{cam}`` of each other in the row, so that reduced system is banded and about half full.
+Problems with two kinds of unknown, a few large ones and many small ones, where each measurement involves one of each: SLAM with landmarks, calibrating a sensor network against targets, and matrix factorization. That structure allows the standard trick of this field: the points can be eliminated exactly (the Schur complement), leaving a much smaller system in the cameras alone, of side ``9 N_{cam}``. Here two cameras share points unless they are on opposite sides of the ring, so that reduced system is nearly full.
 
 ### How it scales
 
-The size is the number of cameras, ``N_{cam}``. The unknowns grow in proportion to it. The observations grow faster, as ``N_{cam}^2``, because each point is seen by a fixed fraction of the cameras; in real data sets a point is typically seen by a bounded number of cameras, and observations grow in proportion to the scene.
+The size is the number of cameras, ``N_{cam}``. The unknowns grow in proportion to it. The observations grow faster, as ``N_{cam}^2``, because each point is seen by a fixed fraction of the cameras (a bounded number of cameras would let the conditioning grow with the size: a chain of cameras with points seen by 8 of them was measured and rejected for that); in real data sets a point is typically seen by a bounded number of cameras, and observations grow in proportion to the scene.
 
 | | In terms of the size | Smallest | Largest |
 |:---|:---|---:|---:|
 | Size | ``N_{cam}`` | 4 | 256 |
 | Variables | ``N_{cam}`` cameras of size 9 and ``5 N_{cam}`` points of size 3 | 4 and 20 | 256 and 1280 |
 | Unknowns in total | ``24\,N_{cam}`` | 96 | 6144 |
-| Costs | one per observation, each of 2 residuals depending on one camera and one point (12 unknowns): about ``1.5\,N_{cam}^2`` (``15\,N_{cam}`` at the two smallest sizes) | 60 | 98304 |
-| Residuals in total | about ``3\,N_{cam}^2`` | 120 | 196608 |
-| Jacobian | residuals × unknowns, sparse: 24 non-zeros per observation | 120 × 96 | 196608 × 6144 |
+| Costs | one per observation, each of 2 residuals depending on one camera and one point (12 unknowns): ``5 N_{cam} \min\bigl(N_{cam}, \max(8, N_{cam}/2)\bigr)``, so ``2.5\,N_{cam}^2`` from 16 cameras | 80 | 163840 |
+| Residuals in total | twice the costs: ``5\,N_{cam}^2`` from 16 cameras | 160 | 327680 |
+| Jacobian | residuals × unknowns, sparse: 24 non-zeros per observation | 160 × 96 | 327680 × 6144 |
 | Hessian ``\mathbf{J}^T \mathbf{J}`` | ``24 N_{cam} \times 24 N_{cam}``, block-sparse: a 9 × 9 block per camera, a 3 × 3 block per point, a 9 × 3 block per observation; ``9 N_{cam} \times 9 N_{cam}`` once the points are eliminated | 96 × 96 | 6144 × 6144 |
 """,
     "robust_procrustes" => raw"""

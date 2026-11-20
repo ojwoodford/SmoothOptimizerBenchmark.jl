@@ -111,39 +111,73 @@ function _make_nlls_ba_model_definition(bam_model::BundleAdjustmentModel)
     )
 end
 
-function make_synthetic_bam(ncams::Int, npnts::Int=ncams * 5, propvisible::Float64=max(0.3, 3.0 / ncams); rng=MersenneTwister(42 + ncams))
-    nobs = 0
+# The synthetic scene (CN9): a ring of cameras around a ball of points. Starting values, measured on the sizes checked
+# (rules.md 26): cond(J) without the 7 gauge directions stays within a factor of 2 from 8 cameras up
+const BA_RING_RADIUS = 3.0         # the cameras' circle, in the x–z plane, centred on the scene
+const BA_SCENE_RADIUS = 1.5        # the ball the points are drawn in
+const BA_FOCAL_LENGTH = 1.0        # every camera's focal length
+const BA_TRACK_FRACTION = 0.5      # the fraction of the cameras that sees each point
+const BA_MIN_TRACK = 8             # but at least this many (or every camera, when there are fewer)
+
+# The Rodrigues rotation `bal_project` applies, as a matrix
+function bal_rotation(w::AbstractVector)
+    θ = norm(w)
+    θ < 1e-12 && return Matrix{Float64}(I, 3, 3)
+    k = w / θ
+    K = [0 -k[3] k[2]; k[3] 0 -k[1]; -k[2] k[1] 0]
+    return I + sin(θ) * K + (1 - cos(θ)) * K * K
+end
+
+# The angle of camera c of `ncams` on the ring
+ba_camera_angle(c::Int, ncams::Int) = -pi + 2pi * (c - 1) / ncams
+
+# The cameras that see point p: the k nearest on the circle to its azimuth, ties by the lower camera index
+function ba_visible_cameras(p::Int, ncams::Int)
+    φ = -pi + 2pi * mod((p - 1) * 0.6180339887498949, 1.0)
+    k = min(ncams, max(BA_MIN_TRACK, round(Int, BA_TRACK_FRACTION * ncams)))
+    dist(c) = (d = abs(mod(ba_camera_angle(c, ncams) - φ + pi, 2pi) - pi); d)
+    return sort(sort(1:ncams; by=c -> (dist(c), c))[1:k])
+end
+
+"""
+    make_synthetic_bam(ncams, npnts = 5ncams; rng = MersenneTwister(42 + ncams)) -> BundleAdjustmentModel
+
+A synthetic scene (CN9): `ncams` cameras evenly spaced on a ring of radius $(BA_RING_RADIUS) in the x–z plane, each
+looking at the centre, around `npnts` points drawn uniformly in a ball of radius $(BA_SCENE_RADIUS) at the centre; focal
+length $(BA_FOCAL_LENGTH), no distortion. Each point is seen by the `min(ncams, max($(BA_MIN_TRACK), round(ncams/2)))`
+cameras nearest its azimuth on the ring. The observations are the true scene's projections, without noise, so the minimum
+cost is 0; the start is the true scene with 0.01·randn added to every point coordinate and to each camera's six
+extrinsics. The draws, in order: the points, the cameras, the start's noise.
+"""
+function make_synthetic_bam(ncams::Int, npnts::Int=ncams * 5; rng=MersenneTwister(42 + ncams))
+    x_true = zeros(Float64, 3 * npnts + 9 * ncams)
+    # The points, uniform in the ball
+    for p in 1:npnts
+        dir = randn(rng, 3)
+        x_true[3*(p-1)+1:3*p] .= (BA_SCENE_RADIUS * rand(rng)^(1 / 3) / norm(dir)) .* dir
+    end
+    # The cameras: centre C = −R·(sin θ, 0, cos θ) on the ring, looking at the origin (w = (0, −θ, 0) and a small
+    # perturbation), translation t = −R(w)·C
+    for c in 1:ncams
+        θ = ba_camera_angle(c, ncams)
+        C = -BA_RING_RADIUS * [sin(θ), 0.0, cos(θ)]
+        w = [0.0, -θ, 0.0] .+ 0.02 .* randn(rng, 3)
+        t = -bal_rotation(w) * C
+        offset = 3 * npnts + 9 * (c - 1)
+        x_true[offset+1:offset+3] .= w
+        x_true[offset+4:offset+6] .= t
+        x_true[offset+7] = 0.0 # k1
+        x_true[offset+8] = 0.0 # k2
+        x_true[offset+9] = BA_FOCAL_LENGTH
+    end
+
     cams_indices = Int[]
     pnts_indices = Int[]
-
-    visibility = abs.(repeat(vec(1:ncams), outer=(1, npnts)) .- transpose(LinRange(2, ncams - 1, npnts)))
-    visibility = visibility .<= sort(vec(visibility))[Int(ceil(length(visibility) * propvisible))]
-    for c in 1:ncams, p in 1:npnts
-        if visibility[c, p]
-            push!(cams_indices, c)
-            push!(pnts_indices, p)
-            nobs += 1
-        end
+    for p in 1:npnts, c in ba_visible_cameras(p, ncams)
+        push!(cams_indices, c)
+        push!(pnts_indices, p)
     end
-
-    x_true = zeros(Float64, 3 * npnts + 9 * ncams)
-    for p in 1:npnts
-        x_true[3*(p-1)+1] = rand(rng) * 2.0 - 1.0
-        x_true[3*(p-1)+2] = rand(rng) * 2.0 - 1.0
-        x_true[3*(p-1)+3] = 5.0 + rand(rng) * 5.0
-    end
-    for c in 1:ncams
-        offset = 3 * npnts + 9 * (c - 1)
-        x_true[offset + 1] = randn(rng) * 0.05
-        x_true[offset + 2] = randn(rng) * 0.05
-        x_true[offset + 3] = randn(rng) * 0.05
-        x_true[offset + 4] = (c - ncams / 2) * 0.5
-        x_true[offset + 5] = randn(rng) * 0.1
-        x_true[offset + 6] = 0.0
-        x_true[offset + 7] = 0.0 # k1
-        x_true[offset + 8] = 0.0 # k2
-        x_true[offset + 9] = 500.0 # f
-    end
+    nobs = length(cams_indices)
 
     pt2d = zeros(Float64, 2 * nobs)
     BundleAdjustmentModels.residuals!(x_true, pt2d, cams_indices, pnts_indices, nobs, npnts, zeros(Float64, 2 * nobs))
@@ -217,9 +251,11 @@ function _make_bam_model_definition(bam_model::BundleAdjustmentModel)
     )
 end
 
-# The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, 256 cameras,
-# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_illconditioned, RS_jacobian, L_jacobian, I_dtd. No model keywords were passed: the recommender decided
-const BUNDLE_ADJUSTMENT_SOO = (; iterator = :levenbergmarquardt_dtd, linsolver = :qr, formulation = :jacobian, reduction = :eliminate, storage = :sparse)
+# The SecondOrderOptimization row's configuration (IND4, re-derived by CN9 for the ring of cameras): NLLSModel's
+# recommendoptimizer at the largest size, 256 cameras, with numthreads = 1, evaluated 2026-11-20 at NLLSModel d2e4374
+# (Julia 1.13.3); rules F_rankdeficient (the gauge), RS_hessian, L_schur, I_lm. No model keywords were passed: the
+# recommender decided
+const BUNDLE_ADJUSTMENT_SOO = (; iterator = :levenbergmarquardt, linsolver = :cholesky, formulation = :hessian, reduction = :eliminate, storage = :sparse)
 
 function create_bundle_adjustment_problem()
     ProblemDefinition(
