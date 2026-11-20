@@ -47,6 +47,19 @@ The size is the dimension, ``d``. The rotation's degrees of freedom grow as ``d^
 
 ---
 
+## Which model each row runs on, and how it stops
+
+Each row runs on its package's native model, or on the `Standalone` model if its package has none here (see the overview). The criteria are the benchmark's gradient, step and relative cost-change tolerances, as far as the package offers them; the overview's table says what each is called in each package.
+
+| Row | Model | Stopping criteria given |
+|:---|:---|:---|
+| `Manopt (LevenbergMarquardt)` | `Manifolds` | gradient, step |
+| `SecondOrderOptimization` | `NLLSModel (Specialized)` | gradient, step, relative cost change |
+
+The `SecondOrderOptimization` row runs `iterator = :levenbergmarquardt`, `linsolver = :cholesky`, `formulation = :jacobian`, `reduction = :none`, `storage = :dense`: the configuration NLLSModel's `recommendoptimizer` chose for this problem at its largest size, Matrix Dimension d = 32, with one thread (then fixed in the problem's code, the same at every size).
+
+---
+
 
 ## 1. Model Evaluation Scaling
 
@@ -58,7 +71,7 @@ The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dot
 
 ## 2. Optimizer Evaluation Scaling
 
-The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, where each solver is evaluated on its optimal problem representation (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` for JSO/interior-point solvers, and `Manifolds` for `Manopt`). Non-converged runs are omitted.
+The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, each on the model given in the table above (its package's native model, or the `Standalone` model). Only `ok` rows are plotted.
 
 ![Robust Procrustes on SO(d) Optimizer Scaling](../assets/plots/robust_procrustes_optimizers.png)
 
@@ -67,7 +80,7 @@ The plot below shows the log-log scaling of **Optimizer Runtime to Convergence**
 ## 3. Single-Threaded Results
 
 The same benchmark with NLLSModel and BLAS on one thread (`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`),
-stored separately from the threaded table. Comparing the two shows what threading gains or costs at each size.
+stored separately from the multi-threaded table. Comparing the two shows what threading gains or costs at each size.
 
 ![Robust Procrustes on SO(d) Model Evaluation Scaling, 1 thread](../assets/plots/single_threaded/robust_procrustes_models.png)
 
@@ -87,6 +100,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Matrix Dimension d = `32`, **`Manifolds`** achieves the fastest Cost + Linear System evaluation at **193.59 ms** (32 B allocated).
-- **Top Converged Optimizer**: At Matrix Dimension d = `32` (4/4 solvers converged), **`SecondOrderOptimization (Dogleg)`** is fastest at **1.26 s** (11 iterations, final cost `3.92e-06`).
+- **Model Efficiency**: At Matrix Dimension d = `32`, **`Manifolds`** achieves the fastest Cost + Linear System evaluation at **183.42 ms** (32 B allocated).
+- **Top Converged Optimizer**: At Matrix Dimension d = `32` (2/2 solvers converged), **`SecondOrderOptimization`** is fastest at **745.49 ms** (11 iterations, final cost `3.92e-06`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

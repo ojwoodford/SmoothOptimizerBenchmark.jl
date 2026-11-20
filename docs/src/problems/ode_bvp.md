@@ -6,22 +6,22 @@
 - **Standard Baseline Model for Optimizers**: `Standalone (Sparse)`
 - **Derivatives**: autodiff
 
-**Derivatives: automatic.** Every cost of this problem depends on at most 8 scalar inputs, so each cost's Jacobian is computed by forward-mode automatic differentiation, with NLLSModel's `computeresjac`. The `Standalone` model fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, so every model evaluates a cost with the same code; what differs between rows is how the linear system is assembled and how the optimizer uses it. The `NLPModels (MathOptNLSModel)` model is differentiated by JuMP's own automatic differentiation.
+**Derivatives: automatic.** Every cost of this problem depends on at most 8 scalar inputs, so each cost's Jacobian is computed by forward-mode automatic differentiation, with NLLSModel's `computeresjac`. The `Standalone` model fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, so the NLLSModel and Standalone models evaluate a cost with the same code; what differs between their rows is how the linear system is assembled and how the optimizer uses it. The mode applies to the NLLSModel and Standalone models. The `JuMP` model, the native model of JSOSolvers, Ipopt, MadNLP and CaNNOLeS, is differentiated by JuMP's own automatic differentiation, exactly and with exact second derivatives, whatever the problem's mode: a native model's derivatives are part of the package under test.
 
 ---
 
 ## The Problem
 
-A differential equation describes how a quantity varies along a line; a *boundary value problem* fixes its value at both ends and asks for everything in between. This one is the Bratu equation, a simple model of a material that generates heat by a reaction that speeds up as it warms, while losing heat by conduction to its two cooled ends:
+A differential equation describes how a quantity varies along a line; a *boundary value problem* fixes its value at both ends and asks for everything in between. This one is the Bratu equation with a linear loss term, a simple model of a material that generates heat by a reaction that speeds up as it warms, while losing heat in proportion to its temperature and by conduction to its two cooled ends:
 
 ```math
--u''(x) = \lambda\, e^{u(x)}, \qquad 0 < x < 1, \qquad u(0) = u(1) = 0, \qquad \lambda = 1 .
+-u''(x) + c\, u(x) = \lambda\, e^{u(x)}, \qquad 0 < x < (N+1)h, \qquad u(0) = u\bigl((N+1)h\bigr) = 0, \qquad c = 4, \quad \lambda = 1 .
 ```
 
-To solve it on a computer, the line is divided by ``N`` evenly spaced grid points, a distance ``h = 1/(N+1)`` apart, and the unknowns are the values ``u_1, \dots, u_N`` at those points. The equation becomes one algebraic equation per grid point, each involving a point and its two neighbours:
+To solve it on a computer, the line is divided by ``N`` evenly spaced grid points a fixed distance ``h = 0.1`` apart, and the unknowns are the values ``u_1, \dots, u_N`` at those points. The line is ``(N+1)h`` long, so it grows with ``N`` while the spacing stays the same: refining a fixed line instead would divide the residuals by a shrinking ``h^2`` and make the conditioning grow as ``N^2``, a second thing changing with the size. The equation becomes one algebraic equation per grid point, each involving a point and its two neighbours:
 
 ```math
-\epsilon_i(\mathbf{u}) = \frac{-u_{i-1} + 2u_i - u_{i+1}}{h^2} - \lambda\, e^{u_i}, \qquad u_0 = u_{N+1} = 0 .
+\epsilon_i(\mathbf{u}) = \frac{-u_{i-1} + 2u_i - u_{i+1}}{h^2} + c\, u_i - \lambda\, e^{u_i}, \qquad u_0 = u_{N+1} = 0 .
 ```
 
 The optimizer minimizes ``\tfrac12 \sum_i \epsilon_i(\mathbf{u})^2``, starting from ``\mathbf{u} = \mathbf{0}``. There are as many equations as unknowns, so at the solution every residual is zero: this is a system of nonlinear equations, solved as a least-squares problem.
@@ -32,11 +32,11 @@ Discretized differential equations are the daily work of scientific computing: h
 
 ### Similar problems
 
-Its structure is that of the [sparse Rosenbrock problem](rosenbrock_sparse.md), a chain in which each unknown is tied to its neighbours, with a tridiagonal Jacobian. Two things set it apart. It is square (as many residuals as unknowns). And it becomes badly conditioned as the grid is refined: the division by ``h^2`` makes the Jacobian's condition number grow as about ``0.4\,N^2``, and that of ``\mathbf{J}^T \mathbf{J}`` as its square. At the largest size that is about ``4 \times 10^8`` for ``\mathbf{J}`` and ``10^{17}`` for ``\mathbf{J}^T \mathbf{J}``, beyond what double precision can represent, so, as in the [ill-conditioned polynomial fit](polynomial_fitting.md), optimizers that form ``\mathbf{J}^T \mathbf{J}`` are at a disadvantage against those that work with ``\mathbf{J}``.
+Its structure is that of the [sparse Rosenbrock problem](rosenbrock_sparse.md), a chain in which each unknown is tied to its neighbours, with a tridiagonal Jacobian; unlike it, it is square (as many residuals as unknowns). Its conditioning is the same at every size: the Jacobian's condition number is about 110 at 32 points and about 160 from a few hundred points up, where the line is longer than the distance over which the loss term damps a disturbance. The [sparse conditioning sweep](conditioning_sparse.md) has the same tridiagonal structure at one size, with the condition number as what is swept.
 
 ### How it scales
 
-The size is the number of grid points, ``N``. Variables, residuals and non-zeros grow in proportion to it, and so does the work per iteration for a sparse direct solver; the conditioning worsens as ``N^2``.
+The size is the number of grid points, ``N``. Variables, residuals and non-zeros grow in proportion to it, and so does the work per iteration for a sparse direct solver; the conditioning does not change.
 
 | | In terms of the size | Smallest | Largest |
 |:---|:---|---:|---:|
@@ -50,12 +50,29 @@ The size is the number of grid points, ``N``. Variables, residuals and non-zeros
 
 ---
 
-## The SecondOrderOptimization rows
+## Which model each row runs on, and how it stops
 
-- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton` on the normal equations: Gauss–Newton, since the Hessian it is given is ``\mathbf{J}^T \mathbf{J}``. It takes the full step, with no line search or trust region (a diagonal shift only when the system cannot be solved), so a step that raises the cost is caught only by the stall test, and the row then ends `not_converged`. **`CaNNOLeS`** (`method = :Newton_noFHess`) is Gauss–Newton too, globalized: an ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization of the augmented system ``[\mu \mathbf{I}\ \ \mathbf{J}^T;\ \mathbf{J}\ \ {-\mathbf{I}}]``, with ``\mu`` raised from 0 only when the factorization fails or has the wrong inertia, then an Armijo backtracking line search on ``\tfrac12\lVert\boldsymbol{\epsilon}\rVert^2``.
-- **`SecondOrderOptimization (LM, tall)`** is Levenberg–Marquardt on the residual-and-Jacobian form (`formulation = :jacobian`): each step solves the damped least-squares problem in ``\mathbf{J}`` by QR, without forming ``\mathbf{J}^T \mathbf{J}``, on the `NLLSModel` model. `storage = :auto` stores ``\mathbf{J}`` dense or sparse from its fill (sparse at the large sizes), and `linsolver = :auto` factorizes it by dense QR or SPQR. The rows without "tall" solve the normal equations in ``\mathbf{J}^T \mathbf{J}``.
+Each row runs on its package's native model, or on the `Standalone` model if its package has none here (see the overview). The criteria are the benchmark's gradient, step and relative cost-change tolerances, as far as the package offers them; the overview's table says what each is called in each package.
+
+| Row | Model | Stopping criteria given |
+|:---|:---|:---|
+| `CaNNOLeS` | `JuMP` | gradient |
+| `Ipopt` | `JuMP` | gradient, step, relative cost change |
+| `JSOSolvers (tron)` | `JuMP` | gradient |
+| `JSOSolvers (trunk)` | `JuMP` | gradient |
+| `LeastSquaresOptim (Dogleg)` | `Standalone (Sparse)` | gradient, step, relative cost change |
+| `LeastSquaresOptim (LM)` | `Standalone (Sparse)` | gradient, step, relative cost change |
+| `MadNLP` | `JuMP` | gradient |
+| `NonlinearSolve (LM)` | `Standalone (Sparse)` | its own defaults |
+| `NonlinearSolve (TrustRegion)` | `Standalone (Sparse)` | its own defaults |
+| `Optim (Newton)` | `Standalone (Sparse)` | gradient, step, relative cost change |
+| `Optim (NewtonTrustRegion)` | `Standalone (Sparse)` | gradient, step, relative cost change |
+| `SecondOrderOptimization` | `NLLSModel (Sparse)` | gradient, step, relative cost change |
+
+The `SecondOrderOptimization` row runs `iterator = :levenbergmarquardt`, `linsolver = :ldl`, `formulation = :hessian`, `reduction = :none`, `storage = :sparse`: the configuration NLLSModel's `recommendoptimizer` chose for this problem at its largest size, Grid Points N = 32768, with one thread (then fixed in the problem's code, the same at every size).
 
 ---
+
 
 ## 1. Model Evaluation Scaling
 
@@ -67,7 +84,7 @@ The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dot
 
 ## 2. Optimizer Evaluation Scaling
 
-The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, where each solver is evaluated on its optimal problem representation (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` for JSO/interior-point solvers, and `Manifolds` for `Manopt`). Non-converged runs are omitted.
+The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, each on the model given in the table above (its package's native model, or the `Standalone` model). Only `ok` rows are plotted.
 
 ![1D ODE Boundary Value Problem Optimizer Scaling](../assets/plots/ode_bvp_optimizers.png)
 
@@ -76,7 +93,7 @@ The plot below shows the log-log scaling of **Optimizer Runtime to Convergence**
 ## 3. Single-Threaded Results
 
 The same benchmark with NLLSModel and BLAS on one thread (`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`),
-stored separately from the threaded table. Comparing the two shows what threading gains or costs at each size.
+stored separately from the multi-threaded table. Comparing the two shows what threading gains or costs at each size.
 
 ![1D ODE Boundary Value Problem Model Evaluation Scaling, 1 thread](../assets/plots/single_threaded/ode_bvp_models.png)
 
@@ -96,6 +113,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Grid Points N = `32768`, **`NLLSModel (Sparse)`** achieves the fastest Cost + Linear System evaluation at **547.46 μs** (64 B allocated).
-- **Top Converged Optimizer**: At Grid Points N = `32768` (4/15 solvers converged), **`Ipopt`** is fastest at **207.93 ms** (2 iterations, final cost `2.29e-09`).
+- **Model Efficiency**: At Grid Points N = `32768`, **`NLLSModel (Sparse)`** achieves the fastest Cost + Linear System evaluation at **1.00 ms** (64 B allocated).
+- **Top Converged Optimizer**: At Grid Points N = `32768` (7/12 solvers converged), **`SecondOrderOptimization`** is fastest at **17.22 ms** (4 iterations, final cost `9.35e-21`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

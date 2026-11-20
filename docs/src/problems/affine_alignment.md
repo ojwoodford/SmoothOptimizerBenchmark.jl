@@ -6,7 +6,7 @@
 - **Standard Baseline Model for Optimizers**: `Standalone`
 - **Derivatives**: analytic
 
-**Derivatives: analytic.** A cost of this problem depends on more than 8 scalar inputs, so each cost has a hand-written Jacobian. NLLSModel calls it through `computeresjac`, and the `Standalone` model fills its residual vector and Jacobian by calling the same function for each cost in a plain single-threaded loop, so every model evaluates a cost with the same code.
+**Derivatives: analytic.** A cost of this problem depends on more than 8 scalar inputs, so each cost has a hand-written Jacobian. NLLSModel calls it through `computeresjac`, and the `Standalone` model fills its residual vector and Jacobian by calling the same function for each cost in a plain single-threaded loop, so the NLLSModel and Standalone models evaluate a cost with the same code. The mode applies to the NLLSModel and Standalone models. The `JuMP` model, the native model of JSOSolvers, Ipopt, MadNLP and CaNNOLeS, is differentiated by JuMP's own automatic differentiation, exactly and with exact second derivatives, whatever the problem's mode: a native model's derivatives are part of the package under test.
 
 ---
 
@@ -44,21 +44,43 @@ The size is the dimension, ``n``. The unknowns (the ``n^2`` entries of ``\mathbf
 
 ---
 
-## The SecondOrderOptimization rows
+## Which model each row runs on, and how it stops
 
-- **`SecondOrderOptimization (Gauss-Newton)`** is `iterator = :newton` on the normal equations: Gauss–Newton, since the Hessian it is given is ``\mathbf{J}^T \mathbf{J}``. It takes the full step, with no line search or trust region (a diagonal shift only when the system cannot be solved), so a step that raises the cost is caught only by the stall test, and the row then ends `not_converged`. **`CaNNOLeS`** (`method = :Newton_noFHess`) is Gauss–Newton too, globalized: an ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization of the augmented system ``[\mu \mathbf{I}\ \ \mathbf{J}^T;\ \mathbf{J}\ \ {-\mathbf{I}}]``, with ``\mu`` raised from 0 only when the factorization fails or has the wrong inertia, then an Armijo backtracking line search on ``\tfrac12\lVert\boldsymbol{\epsilon}\rVert^2``.
+Each row runs on its package's native model, or on the `Standalone` model if its package has none here (see the overview). The criteria are the benchmark's gradient, step and relative cost-change tolerances, as far as the package offers them; the overview's table says what each is called in each package.
+
+| Row | Model | Stopping criteria given |
+|:---|:---|:---|
+| `CaNNOLeS` | `JuMP` | gradient |
+| `Ipopt` | `JuMP` | gradient, step, relative cost change |
+| `JSOSolvers (tron)` | `JuMP` | gradient |
+| `JSOSolvers (trunk)` | `JuMP` | gradient |
+| `LeastSquaresOptim (Dogleg)` | `Standalone` | gradient, step, relative cost change |
+| `LeastSquaresOptim (LM)` | `Standalone` | gradient, step, relative cost change |
+| `MadNLP` | `JuMP` | gradient |
+| `NonlinearSolve (LM)` | `Standalone` | its own defaults |
+| `NonlinearSolve (TrustRegion)` | `Standalone` | its own defaults |
+| `Optim (Newton)` | `Standalone` | gradient, step, relative cost change |
+| `Optim (NewtonTrustRegion)` | `Standalone` | gradient, step, relative cost change |
+| `SecondOrderOptimization` | `NLLSModel` | gradient, step, relative cost change |
+
+The `SecondOrderOptimization` row runs `iterator = :levenbergmarquardt`, `linsolver = :cholesky`, `formulation = :jacobian`, `reduction = :none`, `storage = :dense`: the configuration NLLSModel's `recommendoptimizer` chose for this problem at its largest size, Dimension n = 32, with one thread (then fixed in the problem's code, the same at every size).
+
+The `JuMP` model is built up to ``n = 16`` and not above: its build took 16 s at ``n = 12``, 189 s at ``n = 16`` and over 300 s at ``n = 20`` (measured 2026-11-19), so at ``n = 20`` and above the rows that run on it (CaNNOLeS, Ipopt, JSOSolvers, MadNLP) are `skipped`, with that reason in the data.
 
 ---
 
+
 ## 1. Model Evaluation Scaling
 
-This problem uses `Standalone` universally across all solvers via its built-in adapters; Phase 1 comparative model evaluation is omitted.
+The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dotted lines) and **Cost + Linear System Assembly** (solid/dash-dot lines) across problem sizes.
+
+![Dense Affine Alignment Model Evaluation Scaling](../assets/plots/affine_alignment_models.png)
 
 ---
 
 ## 2. Optimizer Evaluation Scaling
 
-The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, where each solver is evaluated on its optimal problem representation (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` for JSO/interior-point solvers, and `Manifolds` for `Manopt`). Non-converged runs are omitted.
+The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, each on the model given in the table above (its package's native model, or the `Standalone` model). Only `ok` rows are plotted.
 
 ![Dense Affine Alignment Optimizer Scaling](../assets/plots/affine_alignment_optimizers.png)
 
@@ -67,7 +89,9 @@ The plot below shows the log-log scaling of **Optimizer Runtime to Convergence**
 ## 3. Single-Threaded Results
 
 The same benchmark with NLLSModel and BLAS on one thread (`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`),
-stored separately from the threaded table. Comparing the two shows what threading gains or costs at each size.
+stored separately from the multi-threaded table. Comparing the two shows what threading gains or costs at each size.
+
+![Dense Affine Alignment Model Evaluation Scaling, 1 thread](../assets/plots/single_threaded/affine_alignment_models.png)
 
 ![Dense Affine Alignment Optimizer Scaling, 1 thread](../assets/plots/single_threaded/affine_alignment_optimizers.png)
 
@@ -85,6 +109,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Architecture**: Handled universally via `Standalone` with built-in zero-allocation adapters.
-- **Top Converged Optimizer**: At Dimension n = `32` (13/14 solvers converged), **`SecondOrderOptimization (Gauss-Newton)`** is fastest at **1.03 s** (6 iterations, final cost `4.43e-27`).
+- **Model Efficiency**: At Dimension n = `32`, **`Standalone`** achieves the fastest Cost + Linear System evaluation at **41.53 ms** (32 B allocated).
+- **Top Converged Optimizer**: At Dimension n = `32` (7/12 solvers converged), **`Optim (Newton)`** is fastest at **320.27 ms** (6 iterations, final cost `4.12e-27`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

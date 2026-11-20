@@ -5,13 +5,13 @@
 - **Optimizer Target Model**: Standalone
 - **Derivatives**: analytic
 - **Convergence Criteria**: gtol=1.0e-8, xtol=1.0e-8, ftol=1.0e-8, maxiters=500, maxtime=30.0s; a row is ok when the solver reports convergence and its final cost, evaluated by the harness, is at most max(reference × (1 + 0.0001), 1.0e-6), the reference being the known minimum or else the lowest cost of any row at that size; a row that claims convergence and fails is local_minimum if the Gauss–Newton predicted reduction is below 1.0e-8 × its cost, else above_reference
-- **Benchmark Date**: 2026-11-19T02:21:36
+- **Benchmark Date**: 2026-11-20T17:59:51
 - **Host CPU**: apple-m1 (10 cores)
 - **OS**: Darwin (arm64-apple-darwin27.0.0)
 - **Julia Version**: 1.13.3
 - **Threads**: NLLSModel numthreads=1, Julia threads=8, BLAS threads=1
-- **Git Commit**: 2c10368
-- **Dependency Commits**: OptimizationVariableInterface f130043, SecondOrderOptimization 377b96e, NLLSModel 78a4ef5
+- **Git Commit**: fbb6630
+- **Dependency Commits**: NLLSModel d2e4374, OptimizationVariableInterface f130043, SecondOrderOptimization 29026b7
 
 ---
 
@@ -19,199 +19,177 @@
 
 | Size | Model | Cost Time (ns) | Cost Allocs | Cost Memory (bytes) | Linsys Time (ns) | Linsys Allocs | Linsys Memory (bytes) |
 |:---|:---|---:|---:|---:|---:|---:|---:|
-| 2 | NLLSModel (Static) | 62.693498452012385 | 1 | 16 | 169.05 | 1 | 32 |
-| 2 | Standalone | 73.89208633093526 | 1 | 16 | 297.79411764705884 | 1 | 32 |
-| 3 | NLLSModel (Static) | 76.46441947565543 | 1 | 16 | 260.1744186046512 | 1 | 32 |
-| 3 | Standalone | 88.1574074074074 | 1 | 16 | 395.03846153846155 | 1 | 32 |
-| 4 | NLLSModel (Static) | 91.00877192982456 | 1 | 16 | 406.68 | 1 | 32 |
-| 4 | Standalone | 124.42068965517241 | 1 | 16 | 496.875 | 1 | 32 |
-| 5 | NLLSModel (Static) | 115.29545454545455 | 1 | 16 | 649.1935483870968 | 1 | 32 |
-| 5 | Standalone | 154.71311475409837 | 1 | 16 | 631.5 | 1 | 32 |
-| 6 | NLLSModel (Static) | 133.70253164556962 | 1 | 16 | 920.304347826087 | 1 | 32 |
-| 6 | Standalone | 187.88679245283018 | 1 | 16 | 766.0384615384615 | 1 | 32 |
-| 7 | NLLSModel (Static) | 161.1782945736434 | 1 | 16 | 1263.0 | 1 | 32 |
-| 7 | Standalone | 211.5 | 1 | 16 | 978.1904761904761 | 1 | 32 |
-| 8 | NLLSModel (Static) | 191.58878504672896 | 1 | 16 | 1704.8333333333333 | 1 | 32 |
-| 8 | Standalone | 247.2987012987013 | 1 | 16 | 1071.7777777777778 | 1 | 32 |
-| 10 | NLLSModel (Static) | 262.4415584415584 | 1 | 16 | 3416.6666666666665 | 1 | 32 |
-| 10 | Standalone | 352.4590163934426 | 1 | 16 | 1589.6923076923076 | 1 | 32 |
-| 12 | NLLSModel (Static) | 381.94444444444446 | 1 | 16 | 5385.25 | 1 | 32 |
-| 12 | Standalone | 427.9375 | 1 | 16 | 2062.5 | 1 | 32 |
-| 14 | NLLSModel (Static) | 453.7111111111111 | 1 | 16 | 8417.0 | 1 | 32 |
-| 14 | Standalone | 525.6410256410256 | 1 | 16 | 2791.75 | 1 | 32 |
-| 16 | NLLSModel (Static) | 592.8571428571429 | 1 | 16 | 15208.0 | 1 | 32 |
-| 16 | Standalone | 654.5806451612904 | 1 | 16 | 3444.5 | 1 | 32 |
+| 2 | JuMP | 1870.3333333333333 | 2 | 32 | 3708.3333333333335 | 5 | 128 |
+| 2 | NLLSModel (Static) | 64.28318584070796 | 1 | 16 | 163.2189349112426 | 1 | 32 |
+| 2 | Standalone | 79.11985018726591 | 1 | 16 | 317.3076923076923 | 1 | 32 |
+| 3 | JuMP | 2786.5 | 2 | 32 | 5718.75 | 5 | 128 |
+| 3 | NLLSModel (Static) | 77.98054474708171 | 1 | 16 | 217.3913043478261 | 1 | 32 |
+| 3 | Standalone | 96.05911330049261 | 1 | 16 | 387.0192307692308 | 1 | 32 |
+| 4 | JuMP | 3944.3333333333335 | 2 | 32 | 8694.333333333334 | 5 | 128 |
+| 4 | NLLSModel (Static) | 90.27631578947368 | 1 | 16 | 376.40677966101697 | 1 | 32 |
+| 4 | Standalone | 139.6551724137931 | 1 | 16 | 524.390243902439 | 1 | 32 |
+| 5 | JuMP | 5583.25 | 2 | 32 | 13416.0 | 5 | 128 |
+| 5 | NLLSModel (Static) | 115.87573964497041 | 1 | 16 | 511.45 | 1 | 32 |
+| 5 | Standalone | 143.9655172413793 | 1 | 16 | 584.4722222222222 | 1 | 32 |
+| 6 | JuMP | 7458.333333333333 | 2 | 32 | 17250.0 | 5 | 128 |
+| 6 | NLLSModel (Static) | 138.70469798657717 | 1 | 16 | 687.5 | 1 | 32 |
+| 6 | Standalone | 167.328 | 1 | 16 | 763.8888888888889 | 1 | 32 |
+| 7 | JuMP | 9916.0 | 2 | 32 | 24333.0 | 5 | 128 |
+| 7 | NLLSModel (Static) | 165.98360655737704 | 1 | 16 | 941.2727272727273 | 1 | 32 |
+| 7 | Standalone | 195.09345794392524 | 1 | 16 | 930.5714285714286 | 1 | 32 |
+| 8 | JuMP | 12166.0 | 2 | 32 | 30292.0 | 5 | 128 |
+| 8 | NLLSModel (Static) | 195.75471698113208 | 1 | 16 | 1138.888888888889 | 1 | 32 |
+| 8 | Standalone | 226.1868131868132 | 1 | 16 | 1083.3333333333333 | 1 | 32 |
+| 10 | JuMP | 19125.0 | 2 | 32 | 47375.0 | 5 | 128 |
+| 10 | NLLSModel (Static) | 267.31168831168833 | 1 | 16 | 2145.8 | 1 | 32 |
+| 10 | Standalone | 305.97014925373134 | 1 | 16 | 1608.923076923077 | 1 | 32 |
+| 12 | JuMP | 25958.0 | 2 | 32 | 101667.0 | 5 | 128 |
+| 12 | NLLSModel (Static) | 379.7169811320755 | 1 | 16 | 3125.0 | 1 | 32 |
+| 12 | Standalone | 397.05882352941177 | 1 | 16 | 2062.5 | 1 | 32 |
+| 14 | JuMP | 34584.0 | 2 | 32 | 136625.0 | 5 | 128 |
+| 14 | NLLSModel (Static) | 464.16279069767444 | 1 | 16 | 4350.0 | 1 | 32 |
+| 14 | Standalone | 528.8461538461538 | 1 | 16 | 2857.1428571428573 | 1 | 32 |
+| 16 | JuMP | 43708.0 | 2 | 32 | 172666.0 | 5 | 128 |
+| 16 | NLLSModel (Static) | 587.0 | 1 | 16 | 5343.75 | 1 | 32 |
+| 16 | Standalone | 672.0322580645161 | 1 | 16 | 3597.1666666666665 | 1 | 32 |
 
 ---
 
 ## Optimizer Evaluation Scaling
 
-Solvers evaluated on their respective optimal model representations (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` for JSO/interior-point solvers, `Manifolds` for `Manopt`).
+Each row runs on its package's native model, or on the problem's Standalone model if its package has none (`resolve_optimizer_model`).
 
-| Size | Optimizer | Runtime (ns) | Allocs | Memory (bytes) | Iterations | Final Cost | Converged | Status | Excess Cost | Message |
-|:---|:---|---:|---:|---:|---:|---:|:---|:---|---:|:---|
-| 2 | SecondOrderOptimization (Dogleg) | 2667.0 | 34 | 1984 | 4 | 9.7541e-04 | true | ok | NaN | rel\_dcost |
-| 2 | SecondOrderOptimization (LM) | 2729.0 | 32 | 1904 | 4 | 9.7541e-04 | true | ok | NaN | rel\_dcost |
-| 2 | SecondOrderOptimization (Gauss-Newton) | 2500.0 | 29 | 1744 | 4 | 9.7541e-04 | true | ok | NaN | rel\_dcost |
-| 2 | SecondOrderOptimization (LM, tall) | 8084.0 | 116 | 8080 | 4 | 9.7541e-04 | true | ok | NaN | rel\_dcost |
-| 2 | LeastSquaresOptim (Dogleg) | 7458.0 | 115 | 254720 | 5 | 9.7541e-04 | true | ok | NaN | converged |
-| 2 | LeastSquaresOptim (LM) | 6958.0 | 111 | 254592 | 5 | 9.7541e-04 | true | ok | NaN | converged |
-| 2 | Optim (NewtonTrustRegion) | 13500.0 | 177 | 10576 | 4 | 9.7541e-04 | true | ok | NaN | converged |
-| 2 | Optim (Newton) | 10500.0 | 90 | 3920 | 4 | 9.7541e-04 | true | ok | NaN | converged |
-| 2 | JSOSolvers (trunk) | 7000.0 | 59 | 3136 | 4 | 9.7541e-04 | true | ok | NaN | first\_order |
-| 2 | JSOSolvers (tron) | 18000.0 | 123 | 6720 | 6 | 9.7541e-04 | true | ok | NaN | first\_order |
-| 2 | Ipopt | 520562.5 | 222 | 9904 | 4 | 9.7541e-04 | true | ok | NaN | first\_order |
-| 2 | MadNLP | 245187.5 | 543 | 44656 | 4 | 9.7541e-04 | true | ok | NaN | SOLVE\_SUCCEEDED |
-| 2 | NonlinearSolve (LM) | 181583.0 | 1120 | 74432 | 106 | 9.7541e-04 | true | ok | NaN | StalledSuccess |
-| 2 | NonlinearSolve (TrustRegion) | 87041.0 | 1303 | 3260912 | 9 | 9.7541e-04 | false | not_converged | NaN | ShrinkThresholdExceeded; cost test passes |
-| 2 | CaNNOLeS | 13625.0 | 166 | 12656 | 4 | 9.7541e-04 | true | ok | NaN | first\_order |
-| 3 | SecondOrderOptimization (Dogleg) | 3562.5 | 34 | 2144 | 5 | 5.8709e-04 | true | ok | NaN | rel\_dcost, abs\_dcost, step\_size |
-| 3 | SecondOrderOptimization (LM) | 3645.5 | 32 | 2064 | 5 | 5.8709e-04 | true | ok | NaN | rel\_dcost, abs\_dcost, step\_size |
-| 3 | SecondOrderOptimization (Gauss-Newton) | 3333.0 | 29 | 1856 | 5 | 5.8709e-04 | true | ok | NaN | rel\_dcost, abs\_dcost, step\_size |
-| 3 | SecondOrderOptimization (LM, tall) | 10021.0 | 116 | 9312 | 5 | 5.8709e-04 | true | ok | NaN | rel\_dcost, abs\_dcost, step\_size |
-| 3 | LeastSquaresOptim (Dogleg) | 9021.0 | 115 | 256432 | 5 | 5.8709e-04 | true | ok | NaN | converged |
-| 3 | LeastSquaresOptim (LM) | 10417.0 | 129 | 307264 | 6 | 5.8709e-04 | true | ok | NaN | converged |
-| 3 | Optim (NewtonTrustRegion) | 20333.0 | 174 | 13120 | 5 | 5.8709e-04 | true | ok | NaN | converged |
-| 3 | Optim (Newton) | 13375.0 | 103 | 4400 | 5 | 5.8709e-04 | true | ok | NaN | converged |
-| 3 | JSOSolvers (trunk) | 10541.5 | 59 | 3328 | 5 | 5.8709e-04 | true | ok | NaN | first\_order |
-| 3 | JSOSolvers (tron) | 25229.5 | 123 | 6944 | 7 | 5.8709e-04 | true | ok | NaN | first\_order |
-| 3 | Ipopt | 574479.5 | 252 | 11152 | 5 | 5.8709e-04 | true | ok | NaN | first\_order |
-| 3 | MadNLP | 264459.0 | 543 | 45056 | 5 | 5.8709e-04 | true | ok | NaN | SOLVE\_SUCCEEDED |
-| 3 | NonlinearSolve (LM) | 252187.5 | 1120 | 89072 | 106 | 5.8709e-04 | true | ok | NaN | StalledSuccess |
-| 3 | NonlinearSolve (TrustRegion) | 207958.0 | 2783 | 7098272 | 57 | 5.8709e-04 | false | not_converged | NaN | ShrinkThresholdExceeded; cost test passes |
-| 3 | CaNNOLeS | 19292.0 | 166 | 17488 | 5 | 5.8709e-04 | true | ok | NaN | first\_order |
-| 4 | SecondOrderOptimization (Dogleg) | 4437.5 | 34 | 2544 | 5 | 7.3068e-04 | true | ok | NaN | rel\_dcost |
-| 4 | SecondOrderOptimization (LM) | 4375.0 | 32 | 2432 | 5 | 7.3068e-04 | true | ok | NaN | rel\_dcost |
-| 4 | SecondOrderOptimization (Gauss-Newton) | 4291.5 | 29 | 2144 | 5 | 7.3068e-04 | true | ok | NaN | rel\_dcost |
-| 4 | SecondOrderOptimization (LM, tall) | 12417.0 | 101 | 11872 | 5 | 7.3068e-04 | true | ok | NaN | rel\_dcost |
-| 4 | LeastSquaresOptim (Dogleg) | 11917.0 | 115 | 258640 | 5 | 7.3068e-04 | true | ok | NaN | converged |
-| 4 | LeastSquaresOptim (LM) | 11708.5 | 111 | 258592 | 5 | 7.3068e-04 | true | ok | NaN | converged |
-| 4 | Optim (NewtonTrustRegion) | 27354.0 | 215 | 19184 | 5 | 7.3068e-04 | true | ok | NaN | converged |
-| 4 | Optim (Newton) | 14042.0 | 103 | 4656 | 5 | 7.3068e-04 | true | ok | NaN | converged |
-| 4 | JSOSolvers (trunk) | 13125.0 | 59 | 3696 | 5 | 7.3068e-04 | true | ok | NaN | first\_order |
-| 4 | JSOSolvers (tron) | 25750.0 | 123 | 7456 | 6 | 7.3068e-04 | true | ok | NaN | first\_order |
-| 4 | Ipopt | 579541.5 | 252 | 11280 | 5 | 7.3068e-04 | true | ok | NaN | first\_order |
-| 4 | MadNLP | 272479.0 | 543 | 45904 | 5 | 7.3068e-04 | true | ok | NaN | SOLVE\_SUCCEEDED |
-| 4 | NonlinearSolve (LM) | 315041.5 | 1111 | 116832 | 105 | 7.3068e-04 | true | ok | NaN | StalledSuccess |
-| 4 | NonlinearSolve (TrustRegion) | 162333.0 | 1623 | 4166016 | 18 | 7.3068e-04 | false | not_converged | NaN | ShrinkThresholdExceeded; cost test passes |
-| 4 | CaNNOLeS | 25729.0 | 166 | 24080 | 5 | 7.3068e-04 | true | ok | NaN | first\_order |
-| 5 | SecondOrderOptimization (Dogleg) | 5833.5 | 34 | 2800 | 5 | 5.3926e-04 | true | ok | NaN | rel\_dcost, abs\_dcost, step\_size |
-| 5 | SecondOrderOptimization (LM) | 5917.0 | 32 | 2688 | 5 | 5.3926e-04 | true | ok | NaN | rel\_dcost, abs\_dcost, step\_size |
-| 5 | SecondOrderOptimization (Gauss-Newton) | 6083.0 | 29 | 2320 | 5 | 5.3926e-04 | true | ok | NaN | rel\_dcost, abs\_dcost, step\_size |
-| 5 | SecondOrderOptimization (LM, tall) | 14875.0 | 101 | 14464 | 5 | 5.3926e-04 | true | ok | NaN | rel\_dcost, abs\_dcost, step\_size |
-| 5 | LeastSquaresOptim (Dogleg) | 14333.5 | 115 | 260768 | 5 | 5.3926e-04 | true | ok | NaN | converged |
-| 5 | LeastSquaresOptim (LM) | 14375.0 | 111 | 260784 | 5 | 5.3926e-04 | true | ok | NaN | converged |
-| 5 | Optim (NewtonTrustRegion) | 33666.5 | 215 | 22560 | 5 | 5.3926e-04 | true | ok | NaN | converged |
-| 5 | Optim (Newton) | 16271.0 | 103 | 4784 | 5 | 5.3926e-04 | true | ok | NaN | converged |
-| 5 | JSOSolvers (trunk) | 18042.0 | 59 | 3888 | 6 | 5.3926e-04 | true | ok | NaN | first\_order |
-| 5 | JSOSolvers (tron) | 28270.5 | 123 | 7680 | 6 | 5.3926e-04 | true | ok | NaN | first\_order |
-| 5 | Ipopt | 605146.0 | 252 | 11280 | 5 | 5.3926e-04 | true | ok | NaN | first\_order |
-| 5 | MadNLP | 280395.5 | 543 | 46704 | 5 | 5.3926e-04 | true | ok | NaN | SOLVE\_SUCCEEDED |
-| 5 | NonlinearSolve (LM) | 395708.5 | 1120 | 139984 | 106 | 5.3926e-04 | true | ok | NaN | StalledSuccess |
-| 5 | NonlinearSolve (TrustRegion) | 202708.0 | 1663 | 4329600 | 19 | 5.3926e-04 | false | not_converged | NaN | ShrinkThresholdExceeded; cost test passes |
-| 5 | CaNNOLeS | 33083.5 | 166 | 31856 | 5 | 5.3926e-04 | true | ok | NaN | first\_order |
-| 6 | SecondOrderOptimization (Dogleg) | 7583.0 | 34 | 3312 | 5 | 5.4518e-04 | true | ok | NaN | rel\_dcost, abs\_dcost, step\_size |
-| 6 | SecondOrderOptimization (LM) | 7500.0 | 32 | 3168 | 5 | 5.4518e-04 | true | ok | NaN | rel\_dcost, abs\_dcost, step\_size |
-| 6 | SecondOrderOptimization (Gauss-Newton) | 7792.0 | 29 | 2688 | 5 | 5.4518e-04 | true | ok | NaN | rel\_dcost, abs\_dcost, step\_size |
-| 6 | SecondOrderOptimization (LM, tall) | 17208.5 | 101 | 17440 | 5 | 5.4518e-04 | true | ok | NaN | rel\_dcost, abs\_dcost, step\_size |
-| 6 | LeastSquaresOptim (Dogleg) | 17375.0 | 115 | 262640 | 5 | 5.4518e-04 | true | ok | NaN | converged |
-| 6 | LeastSquaresOptim (LM) | 17583.5 | 111 | 262688 | 5 | 5.4518e-04 | true | ok | NaN | converged |
-| 6 | Optim (NewtonTrustRegion) | 34958.5 | 174 | 23184 | 5 | 5.4518e-04 | true | ok | NaN | converged |
-| 6 | Optim (Newton) | 16813.0 | 103 | 5136 | 5 | 5.4518e-04 | true | ok | NaN | converged |
-| 6 | JSOSolvers (trunk) | 19145.5 | 59 | 4256 | 6 | 5.4518e-04 | true | ok | NaN | first\_order |
-| 6 | JSOSolvers (tron) | 36333.0 | 123 | 8192 | 7 | 5.4518e-04 | true | ok | NaN | first\_order |
-| 6 | Ipopt | 601812.5 | 252 | 11408 | 5 | 5.4518e-04 | true | ok | NaN | first\_order |
-| 6 | MadNLP | 272541.5 | 543 | 47808 | 5 | 5.4518e-04 | true | ok | NaN | SOLVE\_SUCCEEDED |
-| 6 | NonlinearSolve (LM) | 485812.0 | 1120 | 179392 | 106 | 5.4518e-04 | true | ok | NaN | StalledSuccess |
-| 6 | NonlinearSolve (TrustRegion) | 295750.0 | 2023 | 5347232 | 31 | 5.4518e-04 | false | not_converged | NaN | ShrinkThresholdExceeded; cost test passes |
-| 6 | CaNNOLeS | 42708.0 | 166 | 41168 | 5 | 5.4518e-04 | true | ok | NaN | first\_order |
-| 7 | SecondOrderOptimization (Dogleg) | 8125.0 | 34 | 3648 | 4 | 9.4639e-04 | true | ok | NaN | rel\_dcost |
-| 7 | SecondOrderOptimization (LM) | 8041.5 | 32 | 3504 | 4 | 9.4639e-04 | true | ok | NaN | rel\_dcost |
-| 7 | SecondOrderOptimization (Gauss-Newton) | 8792.0 | 29 | 2912 | 4 | 9.4639e-04 | true | ok | NaN | rel\_dcost |
-| 7 | SecondOrderOptimization (LM, tall) | 17750.0 | 102 | 20224 | 4 | 9.4639e-04 | true | ok | NaN | rel\_dcost |
-| 7 | LeastSquaresOptim (Dogleg) | 21708.0 | 120 | 266000 | 5 | 9.4639e-04 | true | ok | NaN | converged |
-| 7 | LeastSquaresOptim (LM) | 21604.5 | 116 | 266208 | 5 | 9.4639e-04 | true | ok | NaN | converged |
-| 7 | Optim (NewtonTrustRegion) | 36750.0 | 187 | 27840 | 4 | 9.4639e-04 | true | ok | NaN | converged |
-| 7 | Optim (Newton) | 15625.0 | 90 | 4944 | 4 | 9.4639e-04 | true | ok | NaN | converged |
-| 7 | JSOSolvers (trunk) | 20625.0 | 59 | 4448 | 6 | 9.4639e-04 | true | ok | NaN | first\_order |
-| 7 | JSOSolvers (tron) | 39375.0 | 123 | 8416 | 7 | 9.4639e-04 | true | ok | NaN | first\_order |
-| 7 | Ipopt | 526708.0 | 222 | 10160 | 4 | 9.4639e-04 | true | ok | NaN | first\_order |
-| 7 | MadNLP | 254645.5 | 543 | 48896 | 4 | 9.4639e-04 | true | ok | NaN | SOLVE\_SUCCEEDED |
-| 7 | NonlinearSolve (LM) | 573187.5 | 1111 | 210432 | 105 | 9.4639e-04 | true | ok | NaN | StalledSuccess |
-| 7 | NonlinearSolve (TrustRegion) | 610584.0 | 3278 | 8440720 | 69 | 9.4639e-04 | false | not_converged | NaN | ShrinkThresholdExceeded; cost test passes |
-| 7 | CaNNOLeS | 46937.5 | 166 | 51632 | 4 | 9.4639e-04 | true | ok | NaN | first\_order |
-| 8 | SecondOrderOptimization (Dogleg) | 12062.5 | 34 | 4288 | 5 | 1.1478e-03 | true | ok | NaN | rel\_dcost, abs\_dcost |
-| 8 | SecondOrderOptimization (LM) | 11937.5 | 32 | 4112 | 5 | 1.1478e-03 | true | ok | NaN | rel\_dcost, abs\_dcost |
-| 8 | SecondOrderOptimization (Gauss-Newton) | 13020.5 | 29 | 3360 | 5 | 1.1478e-03 | true | ok | NaN | rel\_dcost, abs\_dcost |
-| 8 | SecondOrderOptimization (LM, tall) | 24104.5 | 107 | 23856 | 5 | 1.1478e-03 | true | ok | NaN | rel\_dcost, abs\_dcost |
-| 8 | LeastSquaresOptim (Dogleg) | 23875.0 | 121 | 266848 | 5 | 1.1478e-03 | true | ok | NaN | converged |
-| 8 | LeastSquaresOptim (LM) | 23500.0 | 117 | 267168 | 5 | 1.1478e-03 | true | ok | NaN | converged |
-| 8 | Optim (NewtonTrustRegion) | 49229.5 | 179 | 32384 | 5 | 1.1478e-03 | true | ok | NaN | converged |
-| 8 | Optim (Newton) | 19458.0 | 103 | 5680 | 5 | 1.1478e-03 | true | ok | NaN | converged |
-| 8 | JSOSolvers (trunk) | 21459.0 | 59 | 4816 | 6 | 1.1478e-03 | true | ok | NaN | first\_order |
-| 8 | JSOSolvers (tron) | 39187.5 | 123 | 8928 | 7 | 1.1478e-03 | true | ok | NaN | first\_order |
-| 8 | Ipopt | 593125.0 | 252 | 11536 | 5 | 1.1478e-03 | true | ok | NaN | first\_order |
-| 8 | MadNLP | 271479.5 | 543 | 50384 | 5 | 1.1478e-03 | true | ok | NaN | SOLVE\_SUCCEEDED |
-| 8 | NonlinearSolve (LM) | 643478.5 | 1124 | 252240 | 106 | 1.1478e-03 | true | ok | NaN | StalledSuccess |
-| 8 | NonlinearSolve (TrustRegion) | 227666.0 | 1212 | 2973152 | 11 | 1.1478e-03 | false | not_converged | NaN | ShrinkThresholdExceeded; cost test passes |
-| 8 | CaNNOLeS | 68145.5 | 182 | 62624 | 5 | 1.1478e-03 | true | ok | NaN | first\_order |
-| 10 | SecondOrderOptimization (Dogleg) | 21229.0 | 34 | 5408 | 5 | 1.5727e-03 | true | ok | NaN | rel\_dcost |
-| 10 | SecondOrderOptimization (LM) | 21208.0 | 32 | 5200 | 5 | 1.5727e-03 | true | ok | NaN | rel\_dcost |
-| 10 | SecondOrderOptimization (Gauss-Newton) | 23875.0 | 29 | 4144 | 5 | 1.5727e-03 | true | ok | NaN | rel\_dcost |
-| 10 | SecondOrderOptimization (LM, tall) | 33083.5 | 107 | 33168 | 5 | 1.5727e-03 | true | ok | NaN | rel\_dcost |
-| 10 | LeastSquaresOptim (Dogleg) | 32333.5 | 121 | 271568 | 5 | 1.5727e-03 | true | ok | NaN | converged |
-| 10 | LeastSquaresOptim (LM) | 38041.5 | 117 | 271856 | 5 | 1.5727e-03 | true | ok | NaN | converged |
-| 10 | Optim (NewtonTrustRegion) | 65625.0 | 179 | 42128 | 5 | 1.5727e-03 | true | ok | NaN | converged |
-| 10 | Optim (Newton) | 24541.0 | 103 | 6592 | 5 | 1.5727e-03 | true | ok | NaN | converged |
-| 10 | JSOSolvers (trunk) | 30354.0 | 59 | 5472 | 7 | 1.5727e-03 | true | ok | NaN | first\_order |
-| 10 | JSOSolvers (tron) | 44458.5 | 123 | 9792 | 7 | 1.5727e-03 | true | ok | NaN | first\_order |
-| 10 | Ipopt | 609104.0 | 252 | 11664 | 5 | 1.5727e-03 | true | ok | NaN | first\_order |
-| 10 | MadNLP | 281687.5 | 543 | 53296 | 5 | 1.5727e-03 | true | ok | NaN | SOLVE\_SUCCEEDED |
-| 10 | NonlinearSolve (LM) | 955000.0 | 1133 | 357264 | 107 | 1.5727e-03 | true | ok | NaN | StalledSuccess |
-| 10 | NonlinearSolve (TrustRegion) | 1.077333e6 | 3258 | 8412576 | 62 | 1.5727e-03 | false | not_converged | NaN | ShrinkThresholdExceeded; cost test passes |
-| 10 | CaNNOLeS | 104375.0 | 183 | 95424 | 5 | 1.5727e-03 | true | ok | NaN | first\_order |
-| 12 | SecondOrderOptimization (Dogleg) | 31583.0 | 34 | 6736 | 5 | 2.2976e-03 | true | ok | NaN | rel\_dcost |
-| 12 | SecondOrderOptimization (LM) | 32083.5 | 32 | 6496 | 5 | 2.2976e-03 | true | ok | NaN | rel\_dcost |
-| 12 | SecondOrderOptimization (Gauss-Newton) | 35937.5 | 29 | 5056 | 5 | 2.2976e-03 | true | ok | NaN | rel\_dcost |
-| 12 | SecondOrderOptimization (LM, tall) | 44083.0 | 108 | 43184 | 5 | 2.2976e-03 | true | ok | NaN | rel\_dcost |
-| 12 | LeastSquaresOptim (Dogleg) | 45854.5 | 121 | 276288 | 5 | 2.2976e-03 | true | ok | NaN | converged |
-| 12 | LeastSquaresOptim (LM) | 45312.5 | 117 | 277072 | 5 | 2.2976e-03 | true | ok | NaN | converged |
-| 12 | Optim (NewtonTrustRegion) | 93375.0 | 220 | 63632 | 5 | 2.2976e-03 | true | ok | NaN | converged |
-| 12 | Optim (Newton) | 28229.5 | 103 | 7424 | 5 | 2.2976e-03 | true | ok | NaN | converged |
-| 12 | JSOSolvers (trunk) | 34562.5 | 59 | 6128 | 6 | 2.2976e-03 | true | ok | NaN | first\_order |
-| 12 | JSOSolvers (tron) | 54416.5 | 123 | 10640 | 7 | 2.2976e-03 | true | ok | NaN | first\_order |
-| 12 | Ipopt | 630916.5 | 252 | 11792 | 5 | 2.2976e-03 | true | ok | NaN | first\_order |
-| 12 | MadNLP | 293395.5 | 543 | 56704 | 5 | 2.2976e-03 | true | ok | NaN | SOLVE\_SUCCEEDED |
-| 12 | NonlinearSolve (LM) | 1.2181245e6 | 1133 | 465184 | 107 | 2.2976e-03 | true | ok | NaN | StalledSuccess |
-| 12 | NonlinearSolve (TrustRegion) | 2.776666e6 | 7262 | 19548576 | 185 | 2.2976e-03 | false | not_converged | NaN | ShrinkThresholdExceeded; cost test passes |
-| 12 | CaNNOLeS | 143479.5 | 191 | 123440 | 5 | 2.2976e-03 | true | ok | NaN | first\_order |
-| 14 | SecondOrderOptimization (Dogleg) | 47583.5 | 34 | 8400 | 5 | 2.5373e-03 | true | ok | NaN | rel\_dcost |
-| 14 | SecondOrderOptimization (LM) | 47312.5 | 32 | 8128 | 5 | 2.5373e-03 | true | ok | NaN | rel\_dcost |
-| 14 | SecondOrderOptimization (Gauss-Newton) | 54687.5 | 29 | 6192 | 5 | 2.5373e-03 | true | ok | NaN | rel\_dcost |
-| 14 | SecondOrderOptimization (LM, tall) | 57333.0 | 108 | 55712 | 5 | 2.5373e-03 | true | ok | NaN | rel\_dcost |
-| 14 | LeastSquaresOptim (Dogleg) | 65937.5 | 140 | 335680 | 6 | 2.5373e-03 | true | ok | NaN | converged |
-| 14 | LeastSquaresOptim (LM) | 59042.0 | 117 | 282208 | 5 | 2.5373e-03 | true | ok | NaN | converged |
-| 14 | Optim (NewtonTrustRegion) | 120542.0 | 220 | 76832 | 5 | 2.5373e-03 | true | ok | NaN | converged |
-| 14 | Optim (Newton) | 35771.0 | 103 | 8320 | 5 | 2.5373e-03 | true | ok | NaN | converged |
-| 14 | JSOSolvers (trunk) | 40625.0 | 59 | 6592 | 6 | 2.5373e-03 | true | ok | NaN | first\_order |
-| 14 | JSOSolvers (tron) | 64833.5 | 123 | 11264 | 7 | 2.5373e-03 | true | ok | NaN | first\_order |
-| 14 | Ipopt | 643937.5 | 252 | 11920 | 5 | 2.5373e-03 | true | ok | NaN | first\_order |
-| 14 | MadNLP | 302479.0 | 543 | 60768 | 5 | 2.5373e-03 | true | ok | NaN | SOLVE\_SUCCEEDED |
-| 14 | NonlinearSolve (LM) | 1.540563e6 | 1133 | 576816 | 107 | 2.5373e-03 | true | ok | NaN | StalledSuccess |
-| 14 | NonlinearSolve (TrustRegion) | 666916.0 | 1498 | 4170560 | 9 | 2.5373e-03 | false | not_converged | NaN | ShrinkThresholdExceeded; cost test passes |
-| 14 | CaNNOLeS | 195792.0 | 191 | 163824 | 5 | 2.5373e-03 | true | ok | NaN | first\_order |
-| 16 | SecondOrderOptimization (Dogleg) | 82083.0 | 34 | 10288 | 5 | 2.7881e-03 | true | ok | NaN | rel\_dcost |
-| 16 | SecondOrderOptimization (LM) | 81958.5 | 32 | 9984 | 5 | 2.7881e-03 | true | ok | NaN | rel\_dcost |
-| 16 | SecondOrderOptimization (Gauss-Newton) | 96479.5 | 29 | 7472 | 5 | 2.7881e-03 | true | ok | NaN | rel\_dcost |
-| 16 | SecondOrderOptimization (LM, tall) | 70624.5 | 108 | 66144 | 5 | 2.7881e-03 | true | ok | NaN | rel\_dcost |
-| 16 | LeastSquaresOptim (Dogleg) | 81583.5 | 140 | 343440 | 6 | 2.7881e-03 | true | ok | NaN | converged |
-| 16 | LeastSquaresOptim (LM) | 72145.5 | 117 | 289872 | 5 | 2.7881e-03 | true | ok | NaN | converged |
-| 16 | Optim (NewtonTrustRegion) | 142395.5 | 244 | 94288 | 5 | 2.7881e-03 | true | ok | NaN | converged |
-| 16 | Optim (Newton) | 42000.0 | 105 | 9344 | 5 | 2.7881e-03 | true | ok | NaN | converged |
-| 16 | JSOSolvers (trunk) | 54187.5 | 59 | 7056 | 7 | 2.7881e-03 | true | ok | NaN | first\_order |
-| 16 | JSOSolvers (tron) | 76959.0 | 123 | 11888 | 7 | 2.7881e-03 | true | ok | NaN | first\_order |
-| 16 | Ipopt | 654063.0 | 252 | 12048 | 5 | 2.7881e-03 | true | ok | NaN | first\_order |
-| 16 | MadNLP | 314270.5 | 543 | 65296 | 5 | 2.7881e-03 | true | ok | NaN | SOLVE\_SUCCEEDED |
-| 16 | NonlinearSolve (LM) | 1.8037915e6 | 1347 | 694192 | 107 | 2.7881e-03 | true | ok | NaN | StalledSuccess |
-| 16 | NonlinearSolve (TrustRegion) | 1.551583e6 | 2577 | 7466528 | 41 | 2.7881e-03 | false | not_converged | NaN | ShrinkThresholdExceeded; cost test passes |
-| 16 | CaNNOLeS | 250187.5 | 191 | 210064 | 5 | 2.7881e-03 | true | ok | NaN | first\_order |
+| Size | Optimizer | Runtime (ns) | Allocs | Memory (bytes) | Iterations | Final Cost | Converged | Status | Excess Cost | Solution Error | Message |
+|:---|:---|---:|---:|---:|---:|---:|:---|:---|---:|---:|:---|
+| 2 | CaNNOLeS | 20166.5 | 180 | 14000 | 4 | 9.7541e-04 | true | ok | NaN | NaN | first\_order |
+| 2 | Ipopt | 635854.0 | 460 | 23424 | 4 | 9.7541e-04 | true | ok | NaN | NaN | first\_order |
+| 2 | JSOSolvers (tron) | 44250.0 | 204 | 10608 | 6 | 9.7541e-04 | true | ok | NaN | NaN | first\_order |
+| 2 | JSOSolvers (trunk) | 18937.5 | 91 | 4672 | 4 | 9.7541e-04 | true | ok | NaN | NaN | first\_order |
+| 2 | LeastSquaresOptim (Dogleg) | 9292.0 | 115 | 254720 | 5 | 9.7541e-04 | true | ok | NaN | NaN | converged |
+| 2 | LeastSquaresOptim (LM) | 11458.5 | 111 | 254592 | 5 | 9.7541e-04 | true | ok | NaN | NaN | converged |
+| 2 | MadNLP | 388667.0 | 589 | 49600 | 4 | 9.7541e-04 | true | ok | NaN | NaN | SOLVE\_SUCCEEDED |
+| 2 | NonlinearSolve (LM) | 189646.0 | 1165 | 77216 | 111 | 9.7541e-04 | true | ok | NaN | NaN | StalledSuccess |
+| 2 | NonlinearSolve (TrustRegion) | 108708.0 | 1303 | 3260896 | 9 | 9.7541e-04 | false | not_converged | NaN | NaN | ShrinkThresholdExceeded; cost test passes |
+| 2 | Optim (Newton) | 10771.0 | 90 | 3920 | 4 | 9.7541e-04 | true | ok | NaN | NaN | converged |
+| 2 | Optim (NewtonTrustRegion) | 14062.5 | 177 | 10576 | 4 | 9.7541e-04 | true | ok | NaN | NaN | converged |
+| 2 | SecondOrderOptimization | 2750.0 | 32 | 1904 | 4 | 9.7541e-04 | true | ok | NaN | NaN | rel\_dcost |
+| 3 | CaNNOLeS | 35042.0 | 184 | 21520 | 5 | 5.8709e-04 | true | ok | NaN | NaN | first\_order |
+| 3 | Ipopt | 713250.0 | 463 | 27632 | 4 | 5.8709e-04 | true | ok | NaN | NaN | first\_order |
+| 3 | JSOSolvers (tron) | 80250.0 | 231 | 12128 | 7 | 5.8709e-04 | true | ok | NaN | NaN | first\_order |
+| 3 | JSOSolvers (trunk) | 37167.0 | 105 | 5536 | 5 | 5.8709e-04 | true | ok | NaN | NaN | first\_order |
+| 3 | LeastSquaresOptim (Dogleg) | 10229.0 | 115 | 256432 | 5 | 5.8709e-04 | true | ok | NaN | NaN | converged |
+| 3 | LeastSquaresOptim (LM) | 11374.5 | 129 | 307264 | 6 | 5.8709e-04 | true | ok | NaN | NaN | converged |
+| 3 | MadNLP | 398438.0 | 589 | 50000 | 4 | 5.8709e-04 | true | ok | NaN | NaN | SOLVE\_SUCCEEDED |
+| 3 | NonlinearSolve (LM) | 263999.5 | 1165 | 92496 | 111 | 5.8709e-04 | true | ok | NaN | NaN | StalledSuccess |
+| 3 | NonlinearSolve (TrustRegion) | 254166.0 | 2783 | 7098256 | 57 | 5.8709e-04 | false | not_converged | NaN | NaN | ShrinkThresholdExceeded; cost test passes |
+| 3 | Optim (Newton) | 13167.0 | 103 | 4400 | 5 | 5.8709e-04 | true | ok | NaN | NaN | converged |
+| 3 | Optim (NewtonTrustRegion) | 20041.5 | 174 | 13120 | 5 | 5.8709e-04 | true | ok | NaN | NaN | converged |
+| 3 | SecondOrderOptimization | 3833.0 | 32 | 2064 | 5 | 5.8709e-04 | true | ok | NaN | NaN | rel\_dcost, abs\_dcost, step\_size |
+| 4 | CaNNOLeS | 49854.0 | 184 | 28112 | 5 | 7.3068e-04 | true | ok | NaN | NaN | first\_order |
+| 4 | Ipopt | 969542.0 | 518 | 31520 | 5 | 7.3068e-04 | true | ok | NaN | NaN | first\_order |
+| 4 | JSOSolvers (tron) | 102729.0 | 221 | 12160 | 6 | 7.3068e-04 | true | ok | NaN | NaN | first\_order |
+| 4 | JSOSolvers (trunk) | 59958.0 | 113 | 6288 | 5 | 7.3068e-04 | true | ok | NaN | NaN | first\_order |
+| 4 | LeastSquaresOptim (Dogleg) | 15625.0 | 115 | 258640 | 5 | 7.3068e-04 | true | ok | NaN | NaN | converged |
+| 4 | LeastSquaresOptim (LM) | 17521.0 | 111 | 258592 | 5 | 7.3068e-04 | true | ok | NaN | NaN | converged |
+| 4 | MadNLP | 451208.0 | 589 | 50848 | 4 | 7.3068e-04 | true | ok | NaN | NaN | SOLVE\_SUCCEEDED |
+| 4 | NonlinearSolve (LM) | 331270.5 | 1156 | 121536 | 110 | 7.3068e-04 | true | ok | NaN | NaN | StalledSuccess |
+| 4 | NonlinearSolve (TrustRegion) | 254042.0 | 1623 | 4166000 | 18 | 7.3068e-04 | false | not_converged | NaN | NaN | ShrinkThresholdExceeded; cost test passes |
+| 4 | Optim (Newton) | 14666.0 | 103 | 4656 | 5 | 7.3068e-04 | true | ok | NaN | NaN | converged |
+| 4 | Optim (NewtonTrustRegion) | 29021.0 | 215 | 19184 | 5 | 7.3068e-04 | true | ok | NaN | NaN | converged |
+| 4 | SecondOrderOptimization | 4458.0 | 32 | 2432 | 5 | 7.3068e-04 | true | ok | NaN | NaN | rel\_dcost |
+| 5 | CaNNOLeS | 66208.5 | 184 | 35888 | 5 | 5.3926e-04 | true | ok | NaN | NaN | first\_order |
+| 5 | Ipopt | 853521.0 | 463 | 29904 | 4 | 5.3926e-04 | true | ok | NaN | NaN | first\_order |
+| 5 | JSOSolvers (tron) | 127000.0 | 217 | 12192 | 6 | 5.3926e-04 | true | ok | NaN | NaN | first\_order |
+| 5 | JSOSolvers (trunk) | 94229.5 | 125 | 7056 | 6 | 5.3926e-04 | true | ok | NaN | NaN | first\_order |
+| 5 | LeastSquaresOptim (Dogleg) | 20208.5 | 115 | 260768 | 5 | 5.3926e-04 | true | ok | NaN | NaN | converged |
+| 5 | LeastSquaresOptim (LM) | 19875.0 | 111 | 260784 | 5 | 5.3926e-04 | true | ok | NaN | NaN | converged |
+| 5 | MadNLP | 491625.0 | 627 | 52288 | 5 | 5.3926e-04 | true | ok | NaN | NaN | SOLVE\_SUCCEEDED |
+| 5 | NonlinearSolve (LM) | 426042.0 | 1165 | 145648 | 111 | 5.3926e-04 | true | ok | NaN | NaN | StalledSuccess |
+| 5 | NonlinearSolve (TrustRegion) | 363250.0 | 1663 | 4329584 | 19 | 5.3926e-04 | false | not_converged | NaN | NaN | ShrinkThresholdExceeded; cost test passes |
+| 5 | Optim (Newton) | 15458.0 | 103 | 4784 | 5 | 5.3926e-04 | true | ok | NaN | NaN | converged |
+| 5 | Optim (NewtonTrustRegion) | 32875.0 | 215 | 22560 | 5 | 5.3926e-04 | true | ok | NaN | NaN | converged |
+| 5 | SecondOrderOptimization | 5125.0 | 32 | 2688 | 5 | 5.3926e-04 | true | ok | NaN | NaN | rel\_dcost, abs\_dcost, step\_size |
+| 6 | CaNNOLeS | 87062.5 | 186 | 55472 | 5 | 5.4518e-04 | true | ok | NaN | NaN | first\_order |
+| 6 | Ipopt | 1.040625e6 | 520 | 44768 | 5 | 5.4518e-04 | true | ok | NaN | NaN | first\_order |
+| 6 | JSOSolvers (tron) | 203083.0 | 244 | 14000 | 7 | 5.4518e-04 | true | ok | NaN | NaN | first\_order |
+| 6 | JSOSolvers (trunk) | 124417.0 | 125 | 7424 | 6 | 5.4518e-04 | true | ok | NaN | NaN | first\_order |
+| 6 | LeastSquaresOptim (Dogleg) | 18271.0 | 115 | 262640 | 5 | 5.4518e-04 | true | ok | NaN | NaN | converged |
+| 6 | LeastSquaresOptim (LM) | 23166.5 | 111 | 262688 | 5 | 5.4518e-04 | true | ok | NaN | NaN | converged |
+| 6 | MadNLP | 455291.5 | 589 | 52752 | 4 | 5.4518e-04 | true | ok | NaN | NaN | SOLVE\_SUCCEEDED |
+| 6 | NonlinearSolve (LM) | 533687.5 | 1165 | 186816 | 111 | 5.4518e-04 | true | ok | NaN | NaN | StalledSuccess |
+| 6 | NonlinearSolve (TrustRegion) | 330459.0 | 2023 | 5347216 | 31 | 5.4518e-04 | false | not_converged | NaN | NaN | ShrinkThresholdExceeded; cost test passes |
+| 6 | Optim (Newton) | 17145.5 | 103 | 5136 | 5 | 5.4518e-04 | true | ok | NaN | NaN | converged |
+| 6 | Optim (NewtonTrustRegion) | 35625.0 | 174 | 23184 | 5 | 5.4518e-04 | true | ok | NaN | NaN | converged |
+| 6 | SecondOrderOptimization | 6125.0 | 32 | 3168 | 5 | 5.4518e-04 | true | ok | NaN | NaN | rel\_dcost, abs\_dcost, step\_size |
+| 7 | CaNNOLeS | 93625.0 | 184 | 65840 | 4 | 9.4639e-04 | true | ok | NaN | NaN | first\_order |
+| 7 | Ipopt | 1.175229e6 | 520 | 45856 | 5 | 9.4639e-04 | true | ok | NaN | NaN | first\_order |
+| 7 | JSOSolvers (tron) | 240625.0 | 234 | 13744 | 7 | 9.4639e-04 | true | ok | NaN | NaN | first\_order |
+| 7 | JSOSolvers (trunk) | 148271.5 | 119 | 7328 | 6 | 9.4639e-04 | true | ok | NaN | NaN | first\_order |
+| 7 | LeastSquaresOptim (Dogleg) | 26228.5 | 120 | 266000 | 5 | 9.4639e-04 | true | ok | NaN | NaN | converged |
+| 7 | LeastSquaresOptim (LM) | 25875.0 | 116 | 266208 | 5 | 9.4639e-04 | true | ok | NaN | NaN | converged |
+| 7 | MadNLP | 564625.0 | 627 | 54480 | 5 | 9.4639e-04 | true | ok | NaN | NaN | SOLVE\_SUCCEEDED |
+| 7 | NonlinearSolve (LM) | 617041.5 | 1138 | 215744 | 108 | 9.4639e-04 | true | ok | NaN | NaN | StalledSuccess |
+| 7 | NonlinearSolve (TrustRegion) | 766834.0 | 3278 | 8440704 | 69 | 9.4639e-04 | false | not_converged | NaN | NaN | ShrinkThresholdExceeded; cost test passes |
+| 7 | Optim (Newton) | 15667.0 | 90 | 4944 | 4 | 9.4639e-04 | true | ok | NaN | NaN | converged |
+| 7 | Optim (NewtonTrustRegion) | 36917.0 | 187 | 27840 | 4 | 9.4639e-04 | true | ok | NaN | NaN | converged |
+| 7 | SecondOrderOptimization | 6645.5 | 32 | 3504 | 4 | 9.4639e-04 | true | ok | NaN | NaN | rel\_dcost |
+| 8 | CaNNOLeS | 142333.5 | 202 | 76928 | 5 | 1.1478e-03 | true | ok | NaN | NaN | first\_order |
+| 8 | Ipopt | 1.321604e6 | 520 | 47360 | 5 | 1.1478e-03 | true | ok | NaN | NaN | first\_order |
+| 8 | JSOSolvers (tron) | 312916.5 | 241 | 14592 | 7 | 1.1478e-03 | true | ok | NaN | NaN | first\_order |
+| 8 | JSOSolvers (trunk) | 197687.5 | 123 | 7888 | 6 | 1.1478e-03 | true | ok | NaN | NaN | first\_order |
+| 8 | LeastSquaresOptim (Dogleg) | 28208.0 | 121 | 266848 | 5 | 1.1478e-03 | true | ok | NaN | NaN | converged |
+| 8 | LeastSquaresOptim (LM) | 29375.5 | 117 | 267168 | 5 | 1.1478e-03 | true | ok | NaN | NaN | converged |
+| 8 | MadNLP | 558250.0 | 597 | 55488 | 5 | 1.1478e-03 | true | ok | NaN | NaN | SOLVE\_SUCCEEDED |
+| 8 | NonlinearSolve (LM) | 725812.5 | 1169 | 262864 | 111 | 1.1478e-03 | true | ok | NaN | NaN | StalledSuccess |
+| 8 | NonlinearSolve (TrustRegion) | 294917.0 | 1212 | 2973136 | 11 | 1.1478e-03 | false | not_converged | NaN | NaN | ShrinkThresholdExceeded; cost test passes |
+| 8 | Optim (Newton) | 20291.5 | 103 | 5680 | 5 | 1.1478e-03 | true | ok | NaN | NaN | converged |
+| 8 | Optim (NewtonTrustRegion) | 50521.0 | 179 | 32384 | 5 | 1.1478e-03 | true | ok | NaN | NaN | converged |
+| 8 | SecondOrderOptimization | 9083.0 | 32 | 4112 | 5 | 1.1478e-03 | true | ok | NaN | NaN | rel\_dcost, abs\_dcost |
+| 10 | CaNNOLeS | 219499.5 | 203 | 109728 | 5 | 1.5727e-03 | true | ok | NaN | NaN | first\_order |
+| 10 | Ipopt | 1.7324165e6 | 521 | 51280 | 5 | 1.5727e-03 | true | ok | NaN | NaN | first\_order |
+| 10 | JSOSolvers (tron) | 474229.0 | 238 | 15312 | 7 | 1.5727e-03 | true | ok | NaN | NaN | first\_order |
+| 10 | JSOSolvers (trunk) | 348083.5 | 136 | 9168 | 7 | 1.5727e-03 | true | ok | NaN | NaN | first\_order |
+| 10 | LeastSquaresOptim (Dogleg) | 35291.5 | 121 | 271568 | 5 | 1.5727e-03 | true | ok | NaN | NaN | converged |
+| 10 | LeastSquaresOptim (LM) | 33645.5 | 117 | 271856 | 5 | 1.5727e-03 | true | ok | NaN | NaN | converged |
+| 10 | MadNLP | 648958.5 | 597 | 58400 | 5 | 1.5727e-03 | true | ok | NaN | NaN | SOLVE\_SUCCEEDED |
+| 10 | NonlinearSolve (LM) | 1.021708e6 | 1196 | 378416 | 114 | 1.5727e-03 | true | ok | NaN | NaN | StalledSuccess |
+| 10 | NonlinearSolve (TrustRegion) | 1.017875e6 | 3258 | 8412560 | 62 | 1.5727e-03 | false | not_converged | NaN | NaN | ShrinkThresholdExceeded; cost test passes |
+| 10 | Optim (Newton) | 23938.0 | 103 | 6592 | 5 | 1.5727e-03 | true | ok | NaN | NaN | converged |
+| 10 | Optim (NewtonTrustRegion) | 72271.0 | 179 | 42128 | 5 | 1.5727e-03 | true | ok | NaN | NaN | converged |
+| 10 | SecondOrderOptimization | 14771.0 | 32 | 5200 | 5 | 1.5727e-03 | true | ok | NaN | NaN | rel\_dcost |
+| 12 | CaNNOLeS | 306917.0 | 213 | 162352 | 5 | 2.2976e-03 | true | ok | NaN | NaN | first\_order |
+| 12 | Ipopt | 2.683042e6 | 578 | 83264 | 6 | 2.2976e-03 | true | ok | NaN | NaN | first\_order |
+| 12 | JSOSolvers (tron) | 721042.0 | 245 | 16496 | 7 | 2.2976e-03 | true | ok | NaN | NaN | first\_order |
+| 12 | JSOSolvers (trunk) | 468583.0 | 135 | 9776 | 6 | 2.2976e-03 | true | ok | NaN | NaN | first\_order |
+| 12 | LeastSquaresOptim (Dogleg) | 48937.5 | 121 | 276288 | 5 | 2.2976e-03 | true | ok | NaN | NaN | converged |
+| 12 | LeastSquaresOptim (LM) | 54479.0 | 117 | 277072 | 5 | 2.2976e-03 | true | ok | NaN | NaN | converged |
+| 12 | MadNLP | 1.205229e6 | 613 | 62128 | 7 | 2.2976e-03 | true | ok | NaN | NaN | SOLVE\_SUCCEEDED |
+| 12 | NonlinearSolve (LM) | 1.3635e6 | 1178 | 484928 | 112 | 2.2976e-03 | true | ok | NaN | NaN | StalledSuccess |
+| 12 | NonlinearSolve (TrustRegion) | 3.954667e6 | 7262 | 19548560 | 185 | 2.2976e-03 | false | not_converged | NaN | NaN | ShrinkThresholdExceeded; cost test passes |
+| 12 | Optim (Newton) | 29625.0 | 103 | 7424 | 5 | 2.2976e-03 | true | ok | NaN | NaN | converged |
+| 12 | Optim (NewtonTrustRegion) | 96000.0 | 220 | 63632 | 5 | 2.2976e-03 | true | ok | NaN | NaN | converged |
+| 12 | SecondOrderOptimization | 20500.0 | 32 | 6496 | 5 | 2.2976e-03 | true | ok | NaN | NaN | rel\_dcost |
+| 14 | CaNNOLeS | 405708.5 | 213 | 202736 | 5 | 2.5373e-03 | true | ok | NaN | NaN | first\_order |
+| 14 | Ipopt | 3.562958e6 | 578 | 85504 | 6 | 2.5373e-03 | true | ok | NaN | NaN | first\_order |
+| 14 | JSOSolvers (tron) | 942958.5 | 242 | 16976 | 7 | 2.5373e-03 | true | ok | NaN | NaN | first\_order |
+| 14 | JSOSolvers (trunk) | 630521.0 | 133 | 10144 | 6 | 2.5373e-03 | true | ok | NaN | NaN | first\_order |
+| 14 | LeastSquaresOptim (Dogleg) | 75271.0 | 140 | 335680 | 6 | 2.5373e-03 | true | ok | NaN | NaN | converged |
+| 14 | LeastSquaresOptim (LM) | 66291.5 | 117 | 282208 | 5 | 2.5373e-03 | true | ok | NaN | NaN | converged |
+| 14 | MadNLP | 1.351708e6 | 635 | 66512 | 6 | 2.5373e-03 | true | ok | NaN | NaN | SOLVE\_SUCCEEDED |
+| 14 | NonlinearSolve (LM) | 1.624125e6 | 1169 | 596448 | 111 | 2.5373e-03 | true | ok | NaN | NaN | StalledSuccess |
+| 14 | NonlinearSolve (TrustRegion) | 778125.0 | 1498 | 4170544 | 9 | 2.5373e-03 | false | not_converged | NaN | NaN | ShrinkThresholdExceeded; cost test passes |
+| 14 | Optim (Newton) | 35688.0 | 103 | 8320 | 5 | 2.5373e-03 | true | ok | NaN | NaN | converged |
+| 14 | Optim (NewtonTrustRegion) | 120458.5 | 220 | 76832 | 5 | 2.5373e-03 | true | ok | NaN | NaN | converged |
+| 14 | SecondOrderOptimization | 27416.5 | 32 | 8128 | 5 | 2.5373e-03 | true | ok | NaN | NaN | rel\_dcost |
+| 16 | CaNNOLeS | 543875.5 | 213 | 248976 | 5 | 2.7881e-03 | true | ok | NaN | NaN | first\_order |
+| 16 | Ipopt | 6.391896e6 | 740 | 98752 | 8 | 2.7881e-03 | true | ok | NaN | NaN | first\_order |
+| 16 | JSOSolvers (tron) | 1.2731665e6 | 249 | 17936 | 7 | 2.7881e-03 | true | ok | NaN | NaN | first\_order |
+| 16 | JSOSolvers (trunk) | 935229.5 | 143 | 11088 | 7 | 2.7881e-03 | true | ok | NaN | NaN | first\_order |
+| 16 | LeastSquaresOptim (Dogleg) | 94917.0 | 140 | 343440 | 6 | 2.7881e-03 | true | ok | NaN | NaN | converged |
+| 16 | LeastSquaresOptim (LM) | 85041.5 | 117 | 289872 | 5 | 2.7881e-03 | true | ok | NaN | NaN | converged |
+| 16 | MadNLP | 1.5721045e6 | 605 | 70560 | 6 | 2.7881e-03 | true | ok | NaN | NaN | SOLVE\_SUCCEEDED |
+| 16 | NonlinearSolve (LM) | 1.9662915e6 | 1402 | 723856 | 112 | 2.7881e-03 | true | ok | NaN | NaN | StalledSuccess |
+| 16 | NonlinearSolve (TrustRegion) | 1.693458e6 | 2577 | 7466512 | 41 | 2.7881e-03 | false | not_converged | NaN | NaN | ShrinkThresholdExceeded; cost test passes |
+| 16 | Optim (Newton) | 43166.5 | 105 | 9344 | 5 | 2.7881e-03 | true | ok | NaN | NaN | converged |
+| 16 | Optim (NewtonTrustRegion) | 149104.0 | 244 | 94288 | 5 | 2.7881e-03 | true | ok | NaN | NaN | converged |
+| 16 | SecondOrderOptimization | 33208.0 | 32 | 9984 | 5 | 2.7881e-03 | true | ok | NaN | NaN | rel\_dcost |

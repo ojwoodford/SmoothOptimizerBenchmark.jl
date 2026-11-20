@@ -6,7 +6,7 @@
 - **Standard Baseline Model for Optimizers**: `Standalone (fudged)`
 - **Derivatives**: autodiff
 
-**Derivatives: automatic.** Every cost of this problem depends on at most 8 scalar inputs, so each cost's Jacobian is computed by forward-mode automatic differentiation, with NLLSModel's `computeresjac`. The `Standalone (fudged)` model, which every row but the native SecondOrderOptimization ones runs on, fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, then rewrites each residual and scales its row as described below, so every model evaluates a cost with the same code.
+**Derivatives: automatic.** Every cost of this problem depends on at most 8 scalar inputs, so each cost's Jacobian is computed by forward-mode automatic differentiation, with NLLSModel's `computeresjac`. The `Standalone (fudged)` model, which LeastSquaresOptim, NonlinearSolve and Optim run on, fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, then rewrites each residual and scales its row as described below, so the NLLSModel and Standalone models evaluate a cost with the same code. The mode applies to those two models. The `JuMP (fudged)` model, the same rewritten residuals as JuMP expressions and the native model of JSOSolvers, Ipopt, MadNLP and CaNNOLeS, is differentiated by JuMP's own automatic differentiation, exactly and with exact second derivatives: a native model's derivatives are part of the package under test.
 
 ---
 
@@ -45,13 +45,35 @@ The size is the number of data points, ``m``, of which ``\operatorname{round}(0.
 
 ---
 
+## Which model each row runs on, and how it stops
+
+Each row runs on its package's native model, or on the `Standalone` model if its package has none here (see the overview). The criteria are the benchmark's gradient, step and relative cost-change tolerances, as far as the package offers them; the overview's table says what each is called in each package.
+
+| Row | Model | Stopping criteria given |
+|:---|:---|:---|
+| `CaNNOLeS (fudged)` | `JuMP (fudged)` | gradient |
+| `Ipopt` | `JuMP (fudged)` | gradient, step, relative cost change |
+| `JSOSolvers (tron)` | `JuMP (fudged)` | gradient |
+| `JSOSolvers (trunk)` | `JuMP (fudged)` | gradient |
+| `LeastSquaresOptim (Dogleg, fudged)` | `Standalone (fudged)` | gradient, step, relative cost change |
+| `LeastSquaresOptim (LM, fudged)` | `Standalone (fudged)` | gradient, step, relative cost change |
+| `MadNLP` | `JuMP (fudged)` | gradient |
+| `NonlinearSolve (LM, fudged)` | `Standalone (fudged)` | its own defaults |
+| `NonlinearSolve (TrustRegion, fudged)` | `Standalone (fudged)` | its own defaults |
+| `Optim (Newton)` | `Standalone (fudged)` | gradient, step, relative cost change |
+| `Optim (NewtonTrustRegion)` | `Standalone (fudged)` | gradient, step, relative cost change |
+| `SecondOrderOptimization` | `NLLSModel (Static)` | gradient, step, relative cost change |
+
+The `SecondOrderOptimization` row runs `iterator = :levenbergmarquardt`, `linsolver = :cholesky`, `formulation = :hessian`, `reduction = :none`, `storage = :dense`: the configuration NLLSModel's `recommendoptimizer` chose for this problem at its largest size, Data Points m = 65536, with one thread (then fixed in the problem's code, the same at every size).
+
+---
+
 ## How each row gets the robust cost
 
-- **Native rows.** `SecondOrderOptimization` (Dogleg, LM, Gauss-Newton, LM tall) run the `NLLSModel (Static)` model, which declares the kernel. The Gauss-Newton row is `iterator = :newton`, the full step with no line search or trust region; `CaNNOLeS (fudged)` is Gauss–Newton globalized by a regularized ``\mathbf{L}\mathbf{D}\mathbf{L}^T`` factorization and an Armijo line search.
-- **Every other row runs `Standalone (fudged)`.** That includes the general solvers, whether or not the row's name says "fudged". Each residual ``\epsilon`` is rewritten as ``\tilde\epsilon = \operatorname{sign}(\epsilon)\sqrt{\rho(\epsilon^2)}``, and its row of the Jacobian is scaled by ``\rho'(\epsilon^2)\,|\epsilon| / \sqrt{\rho(\epsilon^2)}``. Then ``\tfrac12\lVert\tilde{\boldsymbol{\epsilon}}\rVert^2`` is the robust cost exactly and ``\tilde{\mathbf{J}}^T \tilde{\boldsymbol{\epsilon}}`` its gradient.
-  - LeastSquaresOptim, NonlinearSolve and CaNNOLeS have no kernel interface, and their rows are named "fudged".
-  - So is the control row, `SecondOrderOptimization (LM, fudged)`: the native LM optimizer on the fudged model.
-  - Optim, JSOSolvers, Ipopt and MadNLP keep their standard names. They get the exact robust cost and gradient, but their Hessian is ``\tilde{\mathbf{J}}^T \tilde{\mathbf{J}}``.
+- **`SecondOrderOptimization`** runs the `NLLSModel (Static)` model, which declares the kernel.
+- **Every other row runs a rewritten ("fudged") model.** Each residual ``\epsilon`` is rewritten as ``\tilde\epsilon = \operatorname{sign}(\epsilon)\sqrt{\rho(\epsilon^2)}``, and its row of the Jacobian is scaled by ``\rho'(\epsilon^2)\,|\epsilon| / \sqrt{\rho(\epsilon^2)}``. Then ``\tfrac12\lVert\tilde{\boldsymbol{\epsilon}}\rVert^2`` is the robust cost exactly and ``\tilde{\mathbf{J}}^T \tilde{\boldsymbol{\epsilon}}`` its gradient.
+  - JSOSolvers, Ipopt, MadNLP and CaNNOLeS run `JuMP (fudged)`, the rewritten residuals as JuMP expressions (for the Huber kernel, ``\tilde\epsilon = \epsilon`` within the width and ``\operatorname{sign}(\epsilon)\sqrt{2w|\epsilon| - w^2}`` beyond it). JuMP differentiates them itself, so these rows get the exact Hessian of the rewritten cost. CaNNOLeS has no kernel interface, and its row is named "fudged"; the others keep their standard names.
+  - LeastSquaresOptim, NonlinearSolve and Optim run `Standalone (fudged)`. LeastSquaresOptim and NonlinearSolve have no kernel interface, and their rows are named "fudged". Optim keeps its standard names: it gets the exact robust cost and gradient, but its Hessian is ``\tilde{\mathbf{J}}^T \tilde{\mathbf{J}}``.
 
 The weight each form gives an outlier's ``\mathbf{j}_i \mathbf{j}_i^T``, with ``\mathbf{j}_i^T`` its row of the Jacobian (``|\epsilon| > w``; inliers have weight 1 in all three), **derived from the code, not measured**:
 
@@ -73,7 +95,7 @@ The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dot
 
 ## 2. Optimizer Evaluation Scaling
 
-The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, where each solver is evaluated on its optimal problem representation (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` for JSO/interior-point solvers, and `Manifolds` for `Manopt`). Non-converged runs are omitted.
+The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, each on the model given in the table above (its package's native model, or the `Standalone` model). Only `ok` rows are plotted.
 
 ![Robust Exponential Curve Fitting Optimizer Scaling](../assets/plots/curve_fitting_robust_optimizers.png)
 
@@ -82,7 +104,7 @@ The plot below shows the log-log scaling of **Optimizer Runtime to Convergence**
 ## 3. Single-Threaded Results
 
 The same benchmark with NLLSModel and BLAS on one thread (`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`),
-stored separately from the threaded table. Comparing the two shows what threading gains or costs at each size.
+stored separately from the multi-threaded table. Comparing the two shows what threading gains or costs at each size.
 
 ![Robust Exponential Curve Fitting Model Evaluation Scaling, 1 thread](../assets/plots/single_threaded/curve_fitting_robust_models.png)
 
@@ -102,6 +124,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Data Points m = `65536`, **`NLLSModel (Static)`** achieves the fastest Cost + Linear System evaluation at **1.10 ms** (32 B allocated).
-- **Top Converged Optimizer**: At Data Points m = `65536` (13/16 solvers converged), **`SecondOrderOptimization (Gauss-Newton)`** is fastest at **9.90 ms** (8 iterations, final cost `9.57e+02`).
+- **Model Efficiency**: At Data Points m = `65536`, **`NLLSModel (Static)`** achieves the fastest Cost + Linear System evaluation at **979.50 μs** (32 B allocated).
+- **Top Converged Optimizer**: At Data Points m = `65536` (9/12 solvers converged), **`SecondOrderOptimization`** is fastest at **9.65 ms** (8 iterations, final cost `9.57e+02`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

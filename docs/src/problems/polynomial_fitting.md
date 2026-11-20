@@ -1,24 +1,24 @@
 # Ill-Conditioned Polynomial Fitting
 
 - **Category**: `medium_dense`
-- **Scaling Metric**: Data Points m
-- **Problem Sizes Evaluated**: 60, 100, 160, 250, 400, 640, 1000, 1600, 2500, 4000, 6400 (11 sizes)
+- **Scaling Metric**: Coefficients n
+- **Problem Sizes Evaluated**: 4, 5, 7, 10, 14, 19, 25, 35, 47, 64 (10 sizes)
 - **Standard Baseline Model for Optimizers**: `Standalone`
 - **Derivatives**: analytic
 
-**Derivatives: analytic.** A cost of this problem depends on more than 8 scalar inputs, so each cost has a hand-written Jacobian. NLLSModel calls it through `computeresjac`, and the `Standalone` model fills its residual vector and Jacobian by calling the same function for each cost in a plain single-threaded loop, so every model evaluates a cost with the same code.
+**Derivatives: analytic.** A cost of this problem depends on more than 8 scalar inputs, so each cost has a hand-written Jacobian. NLLSModel calls it through `computeresjac`, and the `Standalone` model fills its residual vector and Jacobian by calling the same function for each cost in a plain single-threaded loop, so the NLLSModel and Standalone models evaluate a cost with the same code. The mode applies to the NLLSModel and Standalone models. The `JuMP` model, the native model of JSOSolvers, Ipopt, MadNLP and CaNNOLeS, is differentiated by JuMP's own automatic differentiation, exactly and with exact second derivatives, whatever the problem's mode: a native model's derivatives are part of the package under test.
 
 ---
 
 ## The Problem
 
-Fit a polynomial of degree 13 to ``m`` samples of a smooth curve, ``y_i = \sin(3t_i) + 0.01\cos(17t_i)``, at evenly spaced points ``t_i`` in ``[0, 1]``. The unknowns are the polynomial's 14 coefficients, ``\mathbf{c} = (c_0, \dots, c_{13})``:
+Fit a polynomial with ``n`` coefficients to ``m = 8n`` samples of a smooth curve, ``y_i = \sin(3t_i) + 0.01\cos(17t_i)``, at evenly spaced points ``t_i`` in ``[-1, 1]``. The polynomial is written in a Chebyshev basis stretched by a factor ``s \ge 1``, ``T_0(t/s), \dots, T_{n-1}(t/s)``, so that the data cover only the middle of the interval on which the basis is well behaved:
 
 ```math
-f(\mathbf{c}) = \tfrac12 \sum_{i=1}^{m} \Bigl(\sigma \bigl(\textstyle\sum_{k=0}^{13} c_k\, t_i^k - y_i\bigr)\Bigr)^2, \qquad \sigma = 10^4 .
+f(\mathbf{c}) = \tfrac12 \sum_{i=1}^{m} \Bigl(\sigma \bigl(\textstyle\sum_{k=0}^{n-1} c_k\, T_k(t_i / s) - y_i\bigr)\Bigr)^2, \qquad \sigma = 10^4 .
 ```
 
-The residuals are linear in the unknowns, so this is ordinary linear least squares, and in exact arithmetic one step from the starting point (all coefficients zero) would land on the answer. The difficulty is numerical. On ``[0, 1]`` the powers ``t^8, t^9, t^{10}, \dots`` look almost alike, so very different sets of coefficients give almost the same curve. The Jacobian's condition number is about ``4 \times 10^9``. Forming ``\mathbf{J}^T \mathbf{J}`` squares it, to about ``10^{19}``, which is more than double precision can represent (about ``10^{16}``). An optimizer that forms ``\mathbf{J}^T \mathbf{J}`` therefore loses the answer's accuracy before it starts; one that factorizes ``\mathbf{J}`` itself does not. Because the cost of a computed answer is itself rounded, each row is scored by its excess cost over the true minimum, both computed in extended precision.
+The residuals are linear in the unknowns, so this is ordinary linear least squares, and in exact arithmetic one step from the starting point (all coefficients zero) would land on the answer. The difficulty is numerical. The stretch is chosen at each ``n`` so that the Jacobian's condition number is ``4 \times 10^9`` at every size (``s`` is about 840 at 4 coefficients, 2.9 at 14 and 1.07 at 64): this is the benchmark's one size sweep that is ill-conditioned at every size, and the construction that keeps the condition number fixed is contrived. Below about 14 coefficients much of that ill-conditioning is in the columns' norms, so a scaling of the coefficients would remove part of it there (at 4 coefficients the condition number after scaling the columns to unit norm is about ``4 \times 10^6``). Forming ``\mathbf{J}^T \mathbf{J}`` squares the condition number, to about ``1.6 \times 10^{19}``, which is more than double precision can represent (about ``10^{16}``). An optimizer that forms ``\mathbf{J}^T \mathbf{J}`` therefore loses the answer's accuracy before it starts; one that factorizes ``\mathbf{J}`` itself does not. Because the cost of a computed answer is itself rounded, each row is scored by its excess cost over the true minimum, both computed in extended precision.
 
 ### Where it is used
 
@@ -26,21 +26,44 @@ Polynomial regression and trend fitting, calibration curves, and any linear fit 
 
 ### Similar problems
 
-Problems that are poorly conditioned because some combination of unknowns barely changes the residuals: a camera's focal length and its distance to the scene when the scene is nearly flat, parameters that the data only weakly determine, inverse problems in general. In size it is like the curve fit, a few unknowns and many residuals, with a small dense system.
+Problems that are poorly conditioned because some combination of unknowns barely changes the residuals: a camera's focal length and its distance to the scene when the scene is nearly flat, parameters that the data only weakly determine, inverse problems in general. In shape it is like the curve fit, fewer unknowns than residuals and a dense system. The [dense conditioning sweep](conditioning_dense.md) holds the size fixed instead, and sweeps the condition number.
 
 ### How it scales
 
-The size is the number of data points, ``m``. The number of unknowns is fixed at 14, and the conditioning is set by the degree, which is fixed too; ``m`` changes only the amount of data, and the work per iteration is proportional to it.
+The size is the number of coefficients, ``n``, with 8 data points per coefficient. The conditioning is the same at every size. The work per iteration is that of a dense ``8n \times n`` least-squares problem, proportional to ``n^3``, whether the optimizer forms ``\mathbf{J}^T \mathbf{J}`` (``8n^3``) or factorizes ``\mathbf{J}`` (about ``16n^3``).
 
 | | In terms of the size | Smallest | Largest |
 |:---|:---|---:|---:|
-| Size | ``m`` | 60 | 6400 |
-| Variables | 1, of size 14 | 1 | 1 |
-| Unknowns in total | 14 | 14 | 14 |
-| Costs | ``m``, each one residual depending on the whole variable | 60 | 6400 |
-| Residuals in total | ``m`` | 60 | 6400 |
-| Jacobian | ``m \times 14``, dense | 60 × 14 | 6400 × 14 |
-| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``14 \times 14``, dense | 14 × 14 | 14 × 14 |
+| Size | ``n`` | 4 | 64 |
+| Variables | 1, of size ``n`` | 1 | 1 |
+| Unknowns in total | ``n`` | 4 | 64 |
+| Costs | ``8n``, each one residual depending on the whole variable | 32 | 512 |
+| Residuals in total | ``8n`` | 32 | 512 |
+| Jacobian | ``8n \times n``, dense | 32 × 4 | 512 × 64 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``n \times n``, dense | 4 × 4 | 64 × 64 |
+
+---
+
+## Which model each row runs on, and how it stops
+
+Each row runs on its package's native model, or on the `Standalone` model if its package has none here (see the overview). The criteria are the benchmark's gradient, step and relative cost-change tolerances, as far as the package offers them; the overview's table says what each is called in each package.
+
+| Row | Model | Stopping criteria given |
+|:---|:---|:---|
+| `CaNNOLeS` | `JuMP` | gradient |
+| `Ipopt` | `JuMP` | gradient, step, relative cost change |
+| `JSOSolvers (tron)` | `JuMP` | gradient |
+| `JSOSolvers (trunk)` | `JuMP` | gradient |
+| `LeastSquaresOptim (Dogleg)` | `Standalone` | gradient, step, relative cost change |
+| `LeastSquaresOptim (LM)` | `Standalone` | gradient, step, relative cost change |
+| `MadNLP` | `JuMP` | gradient |
+| `NonlinearSolve (LM)` | `Standalone` | its own defaults |
+| `NonlinearSolve (TrustRegion)` | `Standalone` | its own defaults |
+| `Optim (Newton)` | `Standalone` | gradient, step, relative cost change |
+| `Optim (NewtonTrustRegion)` | `Standalone` | gradient, step, relative cost change |
+| `SecondOrderOptimization` | `NLLSModel` | gradient, step, relative cost change |
+
+The `SecondOrderOptimization` row runs `iterator = :levenbergmarquardt`, `linsolver = :qr`, `formulation = :jacobian`, `reduction = :none`, `storage = :dense`: the configuration NLLSModel's `recommendoptimizer` chose for this problem at its largest size, Coefficients n = 64, with one thread (then fixed in the problem's code, the same at every size).
 
 ---
 
@@ -55,7 +78,7 @@ The plot below shows the log-log scaling of **Pure Cost Evaluation** (dashed/dot
 
 ## 2. Optimizer Evaluation Scaling
 
-The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, where each solver is evaluated on its optimal problem representation (e.g. `NLLSModel` for `SecondOrderOptimization`, `LeastSquaresProblem` for `LeastSquaresOptim`, `NLPModels` for JSO/interior-point solvers, and `Manifolds` for `Manopt`). Non-converged runs are omitted.
+The plot below shows the log-log scaling of **Optimizer Runtime to Convergence** across all tested solvers, each on the model given in the table above (its package's native model, or the `Standalone` model). Only `ok` rows are plotted.
 
 ![Ill-Conditioned Polynomial Fitting Optimizer Scaling](../assets/plots/polynomial_fitting_optimizers.png)
 
@@ -64,7 +87,7 @@ The plot below shows the log-log scaling of **Optimizer Runtime to Convergence**
 ## 3. Single-Threaded Results
 
 The same benchmark with NLLSModel and BLAS on one thread (`set_benchmark_threads!(numthreads = 1, blas_threads = 1)`),
-stored separately from the threaded table. Comparing the two shows what threading gains or costs at each size.
+stored separately from the multi-threaded table. Comparing the two shows what threading gains or costs at each size.
 
 ![Ill-Conditioned Polynomial Fitting Model Evaluation Scaling, 1 thread](../assets/plots/single_threaded/polynomial_fitting_models.png)
 
@@ -84,6 +107,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Data Points m = `6400`, **`Standalone`** achieves the fastest Cost + Linear System evaluation at **170.92 μs** (32 B allocated).
-- **Top Converged Optimizer**: At Data Points m = `6400` (3/4 solvers converged), **`SecondOrderOptimization (LM, tall)`** is fastest at **11.47 ms** (18 iterations, final cost `9.70e+01`).
+- **Model Efficiency**: At Coefficients n = `64`, **`JuMP`** achieves the fastest Cost + Linear System evaluation at **13.25 μs** (128 B allocated).
+- **Top Converged Optimizer**: At Coefficients n = `64` (6/12 solvers converged), **`LeastSquaresOptim (Dogleg)`** is fastest at **12.59 ms** (13 iterations, final cost `4.36e-22`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.
