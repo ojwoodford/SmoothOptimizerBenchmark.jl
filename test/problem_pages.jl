@@ -16,6 +16,10 @@ const OLD_LABEL = "for " * "Solvers"
 
 page_row_cells(line) = strip.(split(strip(line), '|')[2:end-1])
 
+# The problems added by the conditioning work (CN11, CN12), which have no committed page until the full run that follows
+# them (CN16); CN16 empties this
+const PAGES_AWAITING_A_RUN = ["conditioning_dense"]
+
 # The lines of "The Problem" section, after its heading and up to the next `## ` heading; empty if there is none
 function problem_section(lines)
     i = findfirst(==(THE_PROBLEM), lines)
@@ -94,6 +98,7 @@ const PAGE_COUNTS = Dict(
     "curve_fitting"        => (64, 3, 64, 65536, 3, 65536),
     "curve_fitting_robust" => (64, 3, 64, 65536, 3, 65536),
     "polynomial_fitting"   => (4, 4, 32, 64, 64, 512),
+    "conditioning_dense"   => (1.0, 100, 400, 1.0e12, 100, 400),
     "rosenbrock_dense"     => (2, 2, 3, 32, 32, 528),
     "multilateration"      => (2, 2, 8, 16, 16, 64),
     "affine_alignment"     => (1, 2, 4, 32, 1056, 4096),
@@ -126,6 +131,7 @@ end
 
 # Whether a table cell holds the number n, as plain digits
 holds_number(cell, n) = occursin(Regex("(?<![0-9])$(n)(?![0-9])"), cell)
+holds_number(cell, n::Float64) = occursin(Regex("(?<![0-9.])\\Q$(n)\\E(?![0-9])"), cell)
 
 @testset "Problem pages: header, The Problem section and its numbers (PP3)" begin
     # Moved from scaling_markdown_plotting.jl (DM12): a generated page states the mode in its header and says, under it,
@@ -228,8 +234,10 @@ holds_number(cell, n) = occursin(Regex("(?<![0-9])$(n)(?![0-9])"), cell)
         rm(root; recursive=true, force=true)
     end
 
-    # The committed pages pass checks 2 to 6: this fails if the generator is changed and the pages are not regenerated
+    # The committed pages pass checks 2 to 6: this fails if the generator is changed and the pages are not regenerated.
+    # A new problem has no committed page until the benchmark has run it
     for slug in CANONICAL_PROBLEM_SLUGS
+        slug in PAGES_AWAITING_A_RUN && continue
         committed = read(joinpath(PAGES_ROOT, "docs", "src", "problems", "$(slug).md"), String)
         errs = page_checks(committed)
         isempty(errs) || @info "docs/src/problems/$(slug).md" errs

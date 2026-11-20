@@ -33,6 +33,10 @@ function problem_slug(name::String)
         return "robust_procrustes"
     elseif occursin("polynomial fitting", lower)
         return "polynomial_fitting"
+    elseif occursin("dense conditioning sweep", lower)
+        return "conditioning_dense"
+    elseif occursin("sparse conditioning sweep", lower)
+        return "conditioning_sparse"
     else
         return replace(replace(lower, " " => "_"), "(" => "", ")" => "")
     end

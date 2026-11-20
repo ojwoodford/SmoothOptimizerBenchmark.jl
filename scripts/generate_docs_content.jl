@@ -21,6 +21,7 @@ const CANONICAL_PROBLEM_SLUGS = [
     "curve_fitting",
     "curve_fitting_robust",
     "polynomial_fitting",
+    "conditioning_dense",
     "rosenbrock_dense",
     "multilateration",
     "affine_alignment",
@@ -74,6 +75,7 @@ const DERIVATIVES_NOTES = Dict(
     "pose_chain" => DERIV_AUTODIFF * DERIV_AUTODIFF_STANDALONE * DERIV_JUMP,
     "curve_fitting_robust" => DERIV_AUTODIFF * " The `Standalone (fudged)` model, which LeastSquaresOptim, NonlinearSolve and Optim run on, fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, then rewrites each residual and scales its row as described below, so the NLLSModel and Standalone models evaluate a cost with the same code. The mode applies to those two models. The `JuMP (fudged)` model, the same rewritten residuals as JuMP expressions and the native model of JSOSolvers, Ipopt, MadNLP and CaNNOLeS, is differentiated by JuMP's own automatic differentiation, exactly and with exact second derivatives: a native model's derivatives are part of the package under test.",
     "polynomial_fitting" => DERIV_ANALYTIC * DERIV_JUMP,
+    "conditioning_dense" => DERIV_ANALYTIC * DERIV_JUMP,
     "multilateration" => DERIV_ANALYTIC * DERIV_JUMP,
     "affine_alignment" => DERIV_ANALYTIC * DERIV_JUMP,
     "robust_procrustes" => "**Derivatives: analytic.** Each correspondence's residual depends on the rotation, ``d(d-1)/2`` scalar inputs (more than $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) from ``d = 5``), and every model has a hand-written Jacobian. `NLLSModel (ManifoldVar)` computes each correspondence's Jacobian in the orthonormal tangent basis of `Manifolds.jl`, through `computeresjac`; `NLLSModel (Specialized)` does the same for its own rotation type, with a specialized kernel; and the `Manifolds` model's per-correspondence Jacobian blocks, ``-\\mathbf{R}\\,\\mathbf{E}_l \\mathbf{b}_i`` with the products ``\\mathbf{E}_l \\mathbf{b}_i`` precomputed, are hand-written as well (the Manopt row builds the same blocks).",
@@ -230,7 +232,8 @@ const SOO_CONFIGS = Dict(
     "affine_alignment" => SmoothOptimizerBenchmark.AFFINE_ALIGNMENT_SOO, "bundle_adjustment" => SmoothOptimizerBenchmark.BUNDLE_ADJUSTMENT_SOO,
     "curve_fitting" => SmoothOptimizerBenchmark.CURVE_FITTING_SOO, "curve_fitting_robust" => SmoothOptimizerBenchmark.ROBUST_CURVE_FITTING_SOO,
     "multilateration" => SmoothOptimizerBenchmark.MULTILATERATION_SOO, "ode_bvp" => SmoothOptimizerBenchmark.ODE_BVP_SOO,
-    "polynomial_fitting" => SmoothOptimizerBenchmark.POLYNOMIAL_FITTING_SOO, "pose_chain" => SmoothOptimizerBenchmark.POSE_CHAIN_SOO,
+    "polynomial_fitting" => SmoothOptimizerBenchmark.POLYNOMIAL_FITTING_SOO,
+    "conditioning_dense" => SmoothOptimizerBenchmark.DENSE_CONDITIONING_SOO, "pose_chain" => SmoothOptimizerBenchmark.POSE_CHAIN_SOO,
     "robust_procrustes" => SmoothOptimizerBenchmark.ROBUST_PROCRUSTES_SOO, "rosenbrock_dense" => SmoothOptimizerBenchmark.ROSENBROCK_DENSE_SOO,
     "rosenbrock_sparse" => SmoothOptimizerBenchmark.ROSENBROCK_SPARSE_SOO)
 
@@ -245,6 +248,9 @@ The section of a problem page that says which model each row runs on (the pairin
 its package is given (IND5), from the problem's own definition at its smallest size, and SecondOrderOptimization's
 hard-coded configuration (IND4).
 """
+# A problem whose sweep is the condition number at one fixed size (CN11, CN12)
+is_conditioning_sweep(prob) = startswith(prob.size_metric_name, "Condition Number")
+
 function rows_section(problem_name::AbstractString, slug::AbstractString)
     prob = registered_problem(problem_name)
     models = prob.generate_models(first(prob.default_sizes))
@@ -253,11 +259,14 @@ function rows_section(problem_name::AbstractString, slug::AbstractString)
         "| `$(o.name)` | `$(m.name)` | $(stopping_given(SmoothOptimizerBenchmark.row_package(o.name))) |"
     end
     c = SOO_CONFIGS[slug]
+    # A conditioning sweep's "size" is the condition number, at one fixed size (CN11, CN12)
+    where = is_conditioning_sweep(prob) ? "at the last value of its sweep" : "at its largest size"
+    every = is_conditioning_sweep(prob) ? "at every value of the sweep" : "at every size"
     soo_line = "The `SecondOrderOptimization` row runs `iterator = $(repr(c.iterator))`, `linsolver = $(repr(c.linsolver))`, " *
         "`formulation = $(repr(c.formulation))`, `reduction = $(repr(c.reduction))`, `storage = $(repr(c.storage))`: the " *
-        "configuration NLLSModel's `recommendoptimizer` chose for this problem at its largest size, " *
-        "$(prob.size_metric_name) = $(last(prob.default_sizes)), with one thread (evaluated 2026-11-19, then fixed in the " *
-        "problem's code, the same at every size)."
+        "configuration NLLSModel's `recommendoptimizer` chose for this problem $(where), " *
+        "$(prob.size_metric_name) = $(last(prob.default_sizes)), with one thread (then fixed in the " *
+        "problem's code, the same $(every))."
     unbuilt = haskey(UNBUILT_NOTES, slug) ? "\n\n" * UNBUILT_NOTES[slug] : ""
     return """
 ## Which model each row runs on, and how it stops
@@ -432,6 +441,39 @@ The size is the number of coefficients, ``n``, with 8 data points per coefficien
 | Residuals in total | ``8n`` | 32 | 512 |
 | Jacobian | ``8n \times n``, dense | 32 × 4 | 512 × 64 |
 | Hessian ``\mathbf{J}^T \mathbf{J}`` | ``n \times n``, dense | 4 × 4 | 64 × 64 |
+""",
+    "conditioning_dense" => raw"""
+This problem has one size, and what it sweeps is the condition number ``\kappa`` of the Jacobian, from 1 to ``10^{12}``, so that the effect of ill-conditioning is seen alone. ``\kappa`` is imposed through the spectrum of a matrix ``\mathbf{A}``, so that no rescaling of the unknowns removes it. The measure to read is each row's error in the solution, plotted below beside its iterations: the residuals are zero at the solution, so an error ``e`` along the weakest direction adds only about ``(e/\kappa)^2/2`` to the cost, and every row's final cost is close to zero at every ``\kappa`` whatever its error. The final cost is still in the data file.
+
+With ``N = 100`` unknowns and ``M = 400`` residuals,
+
+```math
+f(\mathbf{x}) = \tfrac12 \sum_{i=1}^{M} \Bigl(\sum_{k=1}^{N} A_{ik}\, \varphi(x_k) - b_i\Bigr)^2, \qquad \varphi(x) = x + 0.1 \sin x, \qquad \mathbf{A} = \mathbf{U}\, \operatorname{diag}(\boldsymbol{\sigma})\, \mathbf{V}^T, \qquad \sigma_k = \kappa^{-(k-1)/(N-1)} .
+```
+
+``\mathbf{U}`` (``M \times N``) and ``\mathbf{V}`` (``N \times N``) are cosine bases with orthonormal columns, ``U_{ik} \propto \cos\bigl(\pi(i - \tfrac12)(k-1)/M\bigr)`` and likewise for ``\mathbf{V}``, so the singular values of ``\mathbf{A}`` are ``\boldsymbol{\sigma}``, from 1 down to ``1/\kappa``, and ``\operatorname{cond}(\mathbf{A}) = \kappa`` exactly; no random numbers are used. The Jacobian is ``\mathbf{A}\, \operatorname{diag}(1 + 0.1\cos x_k)``, whose condition number is within a factor ``1.1/0.9`` of ``\kappa``: the nonlinearity is mild and the same at every ``\kappa``. The data are ``\mathbf{b} = \mathbf{A}\,\varphi(\mathbf{x}^\star)`` with ``x^\star_j = \sin j``, the stated solution, and the optimizers start from ``\mathbf{x} = \mathbf{0}``. The error in the solution is ``\lVert \mathbf{x} - \mathbf{x}^\star \rVert / \lVert \mathbf{x}^\star \rVert``.
+
+### Where it is used
+
+Ill-conditioned dense least squares is the core of inverse problems and parameter estimation: deblurring and tomography, fitting models whose parameters the data determine only in some combinations, and calibration. Each residual depends on every unknown, as in a dense regression.
+
+### Similar problems
+
+The [ill-conditioned polynomial fit](polynomial_fitting.md) holds the condition number fixed at ``4 \times 10^9`` while its size grows; this problem holds the size fixed and sweeps the condition number. The [sparse conditioning sweep](conditioning_sparse.md) does the same at a large size with a sparse, tridiagonal Jacobian.
+
+### How it scales
+
+The size is fixed: the counts are the same at every ``\kappa``. The work per iteration does not change with ``\kappa``; the number of iterations, and how accurately a solver can resolve the weak directions, may.
+
+| | In terms of the size | Smallest | Largest |
+|:---|:---|---:|---:|
+| Size | ``\kappa`` | 1.0 | 1.0e12 |
+| Variables | 1, of size ``N = 100`` | 1 | 1 |
+| Unknowns in total | ``N`` | 100 | 100 |
+| Costs | ``M = 400``, each one residual depending on the whole variable | 400 | 400 |
+| Residuals in total | ``M`` | 400 | 400 |
+| Jacobian | ``M \times N``, dense | 400 × 100 | 400 × 100 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``N \times N``, dense | 100 × 100 | 100 × 100 |
 """,
     "rosenbrock_dense" => raw"""
 A Rosenbrock-style test function (a minimum at the bottom of a curved valley) in which **every pair** of unknowns is coupled, not only neighbours. Each of the ``n`` unknowns is pulled towards 1, and for every pair ``j < k`` the later one is pulled onto the parabola ``x_k = x_j^2``:

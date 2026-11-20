@@ -49,6 +49,7 @@ include("problems/robust_procrustes.jl")
 include("problems/bundle_adjustment.jl")
 include("problems/ode_bvp.jl")
 include("problems/polynomial_fitting.jl")
+include("problems/conditioning_dense.jl")
 include("problems/multilateration.jl")
 
 export get_all_problems
@@ -62,6 +63,7 @@ export create_robust_procrustes_problem
 export create_bundle_adjustment_problem
 export create_ode_bvp_problem
 export create_polynomial_fitting_problem
+export create_dense_conditioning_problem
 export create_multilateration_problem
 
 export run_problem_benchmark, run_scaling_benchmark, run_all_scaling_benchmarks
@@ -83,6 +85,7 @@ function get_all_problems()
         create_curve_fitting_problem(),
         create_robust_curve_fitting_problem(),
         create_polynomial_fitting_problem(),
+        create_dense_conditioning_problem(),
         create_affine_alignment_problem(),
         create_rosenbrock_dense_problem(),
         create_multilateration_problem(),

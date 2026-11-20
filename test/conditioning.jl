@@ -37,6 +37,12 @@ const CONDITIONING_TABLE = [
 # Polynomial fitting, the one ill-conditioned size sweep (decision 3): cond(J) at the solution is within this fraction of
 # POLYFIT_TARGET_COND at every size. A starting value (rules.md 26)
 const POLYFIT_COND_RTOL = 0.01
+# The conditioning sweeps (CN11, CN12): cond(J) at the stated solution is within this factor of the nominal κ, at every
+# value of the sweep. A starting value (rules.md 26)
+const SWEEP_COND_FACTOR = 1.3
+const SWEEP_TABLE = [
+    (problem = "Dense Conditioning Sweep", values = :all),
+]
 
 @testset "One trait per problem: conditioning and iterations across sizes (CN13)" begin
     byname = Dict(p.name => p for p in problems)
@@ -67,6 +73,17 @@ const POLYFIT_COND_RTOL = 0.01
             x, _, _ = solution_point(prob, n)
             κ = jacobian_condition(solution_jacobian(prob, n; point=x))
             @test abs(κ / SmoothOptimizerBenchmark.POLYFIT_TARGET_COND - 1) <= POLYFIT_COND_RTOL
+        end
+    end
+    for e in SWEEP_TABLE
+        @testset "$(e.problem)" begin
+            prob = byname[e.problem]
+            for κ in (e.values === :all ? prob.default_sizes : e.values)
+                x = prob.reference_solution(κ)
+                @test x !== nothing
+                c = jacobian_condition(solution_jacobian(prob, κ; point=x))
+                @test κ / SWEEP_COND_FACTOR <= c <= κ * SWEEP_COND_FACTOR
+            end
         end
     end
 end

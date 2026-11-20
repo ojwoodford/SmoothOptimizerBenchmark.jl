@@ -37,6 +37,7 @@ const TEST_FILES = [
     ("Robust Procrustes: the first-order Huber kernel (IT3)", "robust_procrustes.jl", :serial),
     ("Tall formulation (N1, N2, N5)", "tall_formulation.jl", :serial),
     ("Ill-conditioned polynomial fit: excess cost over the reference minimum (N3, N4)", "polynomial_fitting.jl", :integration),
+    ("Dense Conditioning Sweep (CN11)", "conditioning_dense.jl", :serial),
     ("The harness evaluates every row's cost (IT1)", "point_evaluation.jl", :integration),
     ("One trait per problem: conditioning and iterations across sizes (CN13)", "conditioning.jl", :integration),
     ("A row that times out is not run at larger sizes (IND6)", "timeouts.jl", :serial),
@@ -56,8 +57,8 @@ end
 
 @testset verbose = true "SmoothOptimizerBenchmark Suite" begin
     if :serial in SELECTED_GROUPS
-        # 11 distinct problems (10 Euclidean non-manifold + 1 manifold)
-        @test length(problems) == 11
+        # 12 distinct problems (11 Euclidean non-manifold + 1 manifold)
+        @test length(problems) == 12
     end
     for (name, file, group) in TEST_FILES
         group in SELECTED_GROUPS && log_testset_time(name, @timed include(file))
