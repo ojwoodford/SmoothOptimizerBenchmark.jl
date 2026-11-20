@@ -28,11 +28,11 @@ const CONDITIONING_TABLE = [
      cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = ITERATION_SPREAD_MAX, nullity = 0, note = ""),
     (problem = "Dense Multi-dimensional Rosenbrock", sizes = Any[2, 8, 32],
      cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = ITERATION_SPREAD_MAX, nullity = 0, note = ""),
-    # Exceptions: CN7 was reverted (its design's cond(J) grew 2.3-fold from n = 8 to 32), so the problem is as before:
-    # cond(J) 32, 28, 125 at n = 2, 8, 32 (measured 2026-11-20)
+    # Exceptions: CN7's design, accepted by the maintainer (2026-11-20) with its growth: cond(J) 2.08, 3.20, 7.42 at
+    # n = 2, 8, 32, about as √n, so 2.3-fold from n = 8 to 32
     (problem = "Dense Affine Alignment", sizes = Any[2, 8, 32],
-     cond_max = WELL_CONDITIONED_MAX, growth_max = 6, spread_max = ITERATION_SPREAD_MAX, nullity = 0,
-     note = "exception: cond(J) grows 4.5-fold from n = 8 to 32 (CN7 reverted)"),
+     cond_max = WELL_CONDITIONED_MAX, growth_max = 2.5, spread_max = ITERATION_SPREAD_MAX, nullity = 0,
+     note = "exception: cond(J) grows 2.3-fold from n = 8 to 32, about as √n (CN7, accepted)"),
     # CN8 was reverted (its design's iterations were 9, 6, 5 at d = 3, 8, 20), so the problem is as before: cond(J) of the
     # weighted Jacobian 2.5, 273, 710 and 26, 12, 12 iterations at d = 3, 8, 20 (measured 2026-11-20)
     (problem = "Robust Procrustes on SO(d)", sizes = Any[3, 8, 20],
@@ -77,6 +77,17 @@ const SWEEP_TABLE = [
             @test all(<=(e.cond_max), conds)
             @test conds[end] <= e.growth_max * conds[2]
             @test maximum(iters) - minimum(iters) <= e.spread_max
+        end
+    end
+    # CN7: no distance ‖M·xᵢ + t − yⱼ‖ is near the residual's kink at zero, at the start or at the solution
+    @testset "Dense Affine Alignment: every distance above 0.5 (CN7)" begin
+        SB = SmoothOptimizerBenchmark
+        for n in byname["Dense Affine Alignment"].default_sizes
+            X, Y, _ = SB.generate_affine_data(n)
+            xs = SB.affine_true_solution(n)
+            M, t = reshape(xs[1:n * n], n, n), xs[n * n + 1:end]
+            @test minimum(SB.safe_dist(X, Y)) > 0.5
+            @test minimum(SB.safe_dist(M * X .+ t, Y)) > 0.5
         end
     end
     @testset "Ill-Conditioned Polynomial Fitting" begin

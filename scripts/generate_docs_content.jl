@@ -136,7 +136,7 @@ Each problem shows how performance changes with one thing, its size (or, for the
 | Sparse Conditioning Sweep | condition number ``\kappa``, 10 to ``10^8`` | 32768 unknowns, tridiagonal; the nonlinearity; the solution | ``\kappa/1.18`` to ``\kappa/1.14`` |
 | Dense Multi-dimensional Rosenbrock | dimension ``n`` | every pair coupled; the start, 0.5 | 2.12, 3.82, 4.86 (``n`` = 2, 8, 32) |
 | Multilateration | dimension ``d`` | ``4d`` anchors at distance 4; the noise | 1.17, 1.75, 2.58 (``d`` = 2, 7, 16) |
-| Dense Affine Alignment | dimension ``n`` | **not yet:** the start's distance from the solution grows with ``n`` | 32.5, 27.8, 125 (``n`` = 2, 8, 32) |
+| Dense Affine Alignment | dimension ``n`` | sources at ``\pm\sqrt{n}`` on each axis, targets on a sphere of radius ``3\sqrt{n}``; the start's distance from the solution | 2.08, 3.20, 7.42 (``n`` = 2, 8, 32): grows about as ``\sqrt{n}`` |
 | Nonlinear 3D Pose Chain | poses ``N`` | links, a loop closure every 10 poses, the self-term | 17.0, 21.4, 22.2 (``N`` = 50, 200, 400) |
 | 1D ODE Boundary Value Problem | grid points ``N`` | the spacing, 0.1; the reaction term | 112, 156, 157 (``N`` = 32, 256, 2048) |
 | Sparse Bundle Adjustment | cameras ``N_{cam}`` | a ring of cameras around a ball of points; focal length 1; each point seen by half the cameras | 856, 398, 275 (``N_{cam}`` = 4, 16, 32) |
@@ -605,7 +605,7 @@ Two clouds of points in ``n`` dimensions, ``\mathbf{x}_1, \dots, \mathbf{x}_{2n}
 f(\mathbf{M}, \mathbf{t}) = \tfrac12 \sum_{i=1}^{2n} \sum_{j=1}^{2n} \bigl(D_{ij} - \lVert \mathbf{M} \mathbf{x}_i + \mathbf{t} - \mathbf{y}_j \rVert\bigr)^2 .
 ```
 
-The table is generated from a true map (``\mathbf{M}`` close to the identity, ``\mathbf{t}`` random) with no noise, so the minimum is zero. The optimizers start from ``\mathbf{M} = \mathbf{I}``, ``\mathbf{t} = \mathbf{0}``.
+The first cloud is the ``2n`` points ``\pm\sqrt{n}`` along each axis, and the second is ``2n`` random points on the sphere of radius ``3\sqrt{n}``. The table is generated from a true map with no noise, so the minimum is zero: ``\mathbf{M}`` is the identity plus a random perturbation of size about 0.1, and ``\mathbf{t}`` a random shift of size about 0.5, whatever ``n`` is. The optimizers start from ``\mathbf{M} = \mathbf{I}``, ``\mathbf{t} = \mathbf{0}``, so the start is the same distance from the solution at every size, and every distance in the table is about ``2\sqrt{n}`` or more, far from the point where a distance is zero and its derivative is undefined.
 
 ### Where it is used
 

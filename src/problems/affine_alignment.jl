@@ -13,15 +13,29 @@ using NLLSModel, LeastSquaresOptim, SecondOrderOptimization
 
 safe_dist(X, Y) = [!iszero(z) ? sqrt(z) : z for z in pairwise(SqEuclidean(), X, Y; dims=2)]
 
+# The data (CN7), the same traits at every n: the 2n source points are ±√n along each axis; the targets lie on a sphere of
+# radius 3√n; the true map is I plus a perturbation of size about 0.1 and the true translation is of size about 0.5,
+# both whatever n is, so the start (M = I, t = 0) is at the same distance from the solution at every n. Every source point
+# maps to within about 0.6 of the sphere of radius √n, so every distance ‖M·xᵢ + t − yⱼ‖ is about 2√n or more, far from
+# the kink of the residual at a zero distance
 function generate_affine_data(n::Int)
     rng = MersenneTwister(42 + n)
-    num_points = 2 * n
-    X = randn(rng, n, num_points)
-    Y = randn(rng, n, num_points)
-    M = randn(rng, n, n) * 0.1 + I
-    T = randn(rng, n)
+    X = hcat(sqrt(n) * Matrix{Float64}(I, n, n), -sqrt(n) * Matrix{Float64}(I, n, n))
+    Y = randn(rng, n, 2 * n)
+    Y .*= 3 * sqrt(n) ./ sqrt.(sum(abs2, Y; dims=1))
+    M = I + (0.1 / sqrt(n)) * randn(rng, n, n)
+    T = 0.5 * randn(rng, n) / sqrt(n)
     D = safe_dist(M * X .+ T, Y)
     return X, Y, D
+end
+
+# The true map and translation of `generate_affine_data(n)`, by the same draws, as the flat solution M by columns then t
+function affine_true_solution(n::Int)
+    rng = MersenneTwister(42 + n)
+    randn(rng, n, 2 * n)
+    M = I + (0.1 / sqrt(n)) * randn(rng, n, n)
+    T = 0.5 * randn(rng, n) / sqrt(n)
+    return [vec(Matrix(M)); T]
 end
 
 # One source point's costs: the residuals D[i, j] − ‖w − Y[:, j]‖, j = 1 … 2n, with w = M·X[:, i] + t. With
@@ -114,7 +128,8 @@ affine_costs(X, Y, D) = [AffinePointResidual(X, Y, D, i) for i in axes(X, 2)]
 # not finite at a zero distance, and that is not special-cased (the hand-written Jacobian sets the row to zero there)
 # Decision 18, measured 2026-11-19 (Julia 1.13.3, one thread): the JuMP model's build took 16 s at n = 12 and 189 s at
 # n = 16 (2.2 GB more peak memory), and had not finished after 330 s at n = 20, over the 300 s limit. It is built up to
-# n = 16 and not above; there its rows are skipped
+# n = 16 and not above; there its rows are skipped. With CN7's data the build at n = 16 took about 137 s (measured
+# 2026-11-20, inside a scratch run), still under the limit
 const AFFINE_JUMP_MAX_N = 16
 affine_jump_skip_reason(n) = "the JuMP model is not built at n = $n: its build takes over 300 s from n = 20 (decision 18)"
 
