@@ -119,6 +119,30 @@ end
 
 # `single_threaded`: the same problems run with NLLSModel and BLAS on one thread, stored in `data/single_threaded/` and
 # plotted in `assets/plots/single_threaded/`; each problem page shows them beside the multi-threaded results.
+# One trait per problem (`improvements.md` item 30): what each problem sweeps and what it holds fixed, with the
+# conditioning measured in the run that made it so (CN14). Not computed from the results: it describes the problems
+const HOLDS_FIXED = raw"""
+### What each problem holds fixed
+
+Each problem shows how performance changes with one thing, its size (or, for the two conditioning sweeps, the condition number at one size), with its other traits held fixed, conditioning among them; cond(J) is the Jacobian's condition number at the solution, at three of its sizes, as measured on 2026-11-20 (bundle adjustment without its 7 gauge directions, robust Procrustes with the kernel's weights).
+
+| Problem | What is swept | What stays fixed | cond(J) at the sizes checked |
+|:---|:---|:---|:---|
+| Sparse Multi-dimensional Rosenbrock | variables ``n`` | each unknown coupled to its neighbour; the start, 0.5 | 3.16, 3.16, 3.16 (``n`` = 100, 500, 1000) |
+| Exponential Curve Fitting | data points ``m`` | 3 unknowns; the model and the noise | 10.5, 10.8, 10.8 (``m`` = 64, 1024, 65536) |
+| Robust Exponential Curve Fitting | data points ``m`` | 3 unknowns; 30 % outliers; the Huber kernel | 10.6, 10.9, 10.8 (``m`` = 64, 1024, 65536) |
+| Ill-Conditioned Polynomial Fitting | coefficients ``n`` | ``4 \times 10^9``, by a Chebyshev basis stretched at each ``n``; 8 points per coefficient | ``4.0 \times 10^9`` at all ten sizes |
+| Dense Conditioning Sweep | condition number ``\kappa``, 1 to ``10^{12}`` | 100 unknowns, 400 residuals; the nonlinearity; the solution | ``\kappa`` (1.04 at ``\kappa = 1``) |
+| Sparse Conditioning Sweep | condition number ``\kappa``, 10 to ``10^8`` | 32768 unknowns, tridiagonal; the nonlinearity; the solution | ``\kappa/1.18`` to ``\kappa/1.14`` |
+| Dense Multi-dimensional Rosenbrock | dimension ``n`` | every pair coupled; the start, 0.5 | 2.12, 3.82, 4.86 (``n`` = 2, 8, 32) |
+| Multilateration | dimension ``d`` | ``4d`` anchors at distance 4; the noise | 1.17, 1.75, 2.58 (``d`` = 2, 7, 16) |
+| Dense Affine Alignment | dimension ``n`` | **not yet:** the start's distance from the solution grows with ``n`` | 32.5, 27.8, 125 (``n`` = 2, 8, 32) |
+| Nonlinear 3D Pose Chain | poses ``N`` | links, a loop closure every 10 poses, the self-term | 17.0, 21.4, 22.2 (``N`` = 50, 200, 400) |
+| 1D ODE Boundary Value Problem | grid points ``N`` | the spacing, 0.1; the reaction term | 112, 156, 157 (``N`` = 32, 256, 2048) |
+| Sparse Bundle Adjustment | cameras ``N_{cam}`` | a ring of cameras around a ball of points; focal length 1; each point seen by half the cameras | 856, 398, 275 (``N_{cam}`` = 4, 16, 32) |
+| Robust Procrustes on SO(d) | dimension ``d`` | **not yet:** the points lie along ``d`` directions, and 4 of them are outliers at every ``d`` | 2.50, 273, 710 (``d`` = 3, 8, 20) |
+"""
+
 function generate_docs_markdown(results::Vector{ProblemScalingBenchmarkResult}; single_threaded::Vector{ProblemScalingBenchmarkResult}=ProblemScalingBenchmarkResult[], docs_dir=DEFAULT_DOCS_DIR)
     mkpath(joinpath(docs_dir, "problems"))
     mkpath(joinpath(docs_dir, "assets", "plots"))
@@ -170,14 +194,14 @@ To separate modeling overhead from solver algorithm efficiency, every problem is
 
 $(pairing_table())
 
-   So each row measures a package end to end on its own model, with the stopping criteria below, `maxiters = $(DEFAULT_MAXITERS)` and `maxtime = $(DEFAULT_MAXTIME)s`. Each problem page has a table of its rows with the model each runs on. SecondOrderOptimization has one row per problem: the configuration (iterator, linear solver, formulation, reduction, storage) that NLLSModel's `recommendoptimizer` chooses at the problem's largest size, evaluated once and fixed in the problem's code; the page states it.
+   So each row measures a package end to end on its own model, with the stopping criteria below, `maxiters = $(DEFAULT_MAXITERS)` and `maxtime = $(DEFAULT_MAXTIME)s`. Each problem page has a table of its rows with the model each runs on. SecondOrderOptimization has one row per problem: the configuration (iterator, linear solver, formulation, reduction, storage) that NLLSModel's `recommendoptimizer` chooses at the problem's largest size (for a conditioning sweep, at its largest condition number), evaluated once and fixed in the problem's code; the page states it.
    - **Stopping criteria.** Every optimizer is given the benchmark's gradient, step and relative cost-change tolerances (`gtol = $(DEFAULT_GTOL)`, `xtol = $(DEFAULT_XTOL)`, `ftol = $(DEFAULT_FTOL)`) wherever it offers that criterion; where it does not, it runs with what it has. The definitions differ between packages (norms, absolute or relative):
 
 $(stopping_table())
 
    - A row that ends `timeout` at one size is not run at the larger sizes of that table: it is recorded `timeout` there, "timed out at size N". There are no size limits otherwise.
    - Every concrete `(optimizer, model-type)` specialization is pre-warmed prior to timing so LLVM JIT compilation is excluded.
-   - Every row's final cost is evaluated by the harness at the point the solver returned, not taken from the solver. A row's status is decided by the harness too: `ok` when the solver reports convergence **and** the final cost is at most ``\\max(c_{\\text{ref}}(1 + 10^{-4}), 10^{-6})``, with ``c_{\\text{ref}}`` the problem's known minimum at that size (0 for affine alignment, both Rosenbrocks, the ODE BVP and bundle adjustment; the extended-precision minimum for the polynomial fit), or else the lowest final cost of any row at that size in the same table. A row whose solver claims convergence but fails that test is `local_minimum` if the cost reduction the Gauss–Newton model predicts from its point is below ``10^{-8}`` × its cost (a minimum of the Gauss–Newton model: a saddle of the true cost would pass), and `above_reference` otherwise. Rows that stop on the iteration or time limit or stall are `not_converged` or `timeout` (the message says when the cost test passes anyway).
+   - Every row's final cost is evaluated by the harness at the point the solver returned, not taken from the solver. A row's status is decided by the harness too: `ok` when the solver reports convergence **and** the final cost is at most ``\\max(c_{\\text{ref}}(1 + 10^{-4}), 10^{-6})``, with ``c_{\\text{ref}}`` the problem's known minimum at that size (0 for affine alignment, both Rosenbrocks, the ODE BVP, bundle adjustment and the two conditioning sweeps; the extended-precision minimum for the polynomial fit), or else the lowest final cost of any row at that size in the same table. A row whose solver claims convergence but fails that test is `local_minimum` if the cost reduction the Gauss–Newton model predicts from its point is below ``10^{-8}`` × its cost (a minimum of the Gauss–Newton model: a saddle of the true cost would pass), and `above_reference` otherwise. Rows that stop on the iteration or time limit or stall are `not_converged` or `timeout` (the message says when the cost test passes anyway).
    - Only `ok` rows are plotted (`converged = true` in the raw data tables); every other status is omitted (`NaN`) from the runtime plots, `local_minimum` included, since its time is the time to a different optimum.
    - Results stream line-by-line directly to Markdown tables in `docs/src/data/` as each model and optimizer measurement completes.
 
@@ -198,6 +222,7 @@ Each problem page shows both.
 |:---|:---|:---|:---|:---|:---|:---|:---|
 $(suite_table)
 
+$(HOLDS_FIXED)
 ---
 
 ## Executive Summary of Results
