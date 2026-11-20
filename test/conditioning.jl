@@ -28,6 +28,16 @@ const CONDITIONING_TABLE = [
      cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = ITERATION_SPREAD_MAX, nullity = 0, note = ""),
     (problem = "Dense Multi-dimensional Rosenbrock", sizes = Any[2, 8, 32],
      cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = ITERATION_SPREAD_MAX, nullity = 0, note = ""),
+    # Exceptions: CN7 was reverted (its design's cond(J) grew 2.3-fold from n = 8 to 32), so the problem is as before:
+    # cond(J) 32, 28, 125 at n = 2, 8, 32 (measured 2026-11-20)
+    (problem = "Dense Affine Alignment", sizes = Any[2, 8, 32],
+     cond_max = WELL_CONDITIONED_MAX, growth_max = 6, spread_max = ITERATION_SPREAD_MAX, nullity = 0,
+     note = "exception: cond(J) grows 4.5-fold from n = 8 to 32 (CN7 reverted)"),
+    # CN8 was reverted (its design's iterations were 9, 6, 5 at d = 3, 8, 20), so the problem is as before: cond(J) of the
+    # weighted Jacobian 2.5, 273, 710 and 26, 12, 12 iterations at d = 3, 8, 20 (measured 2026-11-20)
+    (problem = "Robust Procrustes on SO(d)", sizes = Any[3, 8, 20],
+     cond_max = WELL_CONDITIONED_MAX, growth_max = 3, spread_max = 16, nullity = 0,
+     note = "exception: cond(J) grows 2.6-fold from d = 8 to 20, and the iterations fall from 26 at d = 3 to 12 (CN8 reverted)"),
     # Measured without its 7 gauge directions (rigid motion and scale); 4 cameras give each point 4 views, the others 8 or more
     (problem = "Sparse Bundle Adjustment", sizes = Any[4, 16, 32],
      cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = 3, nullity = 7,
