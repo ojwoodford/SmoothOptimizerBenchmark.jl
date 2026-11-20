@@ -560,16 +560,16 @@ The size is the number of positions, ``N``. Variables, residuals and non-zeros a
 | Hessian ``\mathbf{J}^T \mathbf{J}`` | ``3N \times 3N``, block-banded with 3 × 3 blocks and a half-bandwidth of 10 blocks | 150 × 150 | 30000 × 30000 |
 """,
     "ode_bvp" => raw"""
-A differential equation describes how a quantity varies along a line; a *boundary value problem* fixes its value at both ends and asks for everything in between. This one is the Bratu equation, a simple model of a material that generates heat by a reaction that speeds up as it warms, while losing heat by conduction to its two cooled ends:
+A differential equation describes how a quantity varies along a line; a *boundary value problem* fixes its value at both ends and asks for everything in between. This one is the Bratu equation with a linear loss term, a simple model of a material that generates heat by a reaction that speeds up as it warms, while losing heat in proportion to its temperature and by conduction to its two cooled ends:
 
 ```math
--u''(x) = \lambda\, e^{u(x)}, \qquad 0 < x < 1, \qquad u(0) = u(1) = 0, \qquad \lambda = 1 .
+-u''(x) + c\, u(x) = \lambda\, e^{u(x)}, \qquad 0 < x < (N+1)h, \qquad u(0) = u\bigl((N+1)h\bigr) = 0, \qquad c = 4, \quad \lambda = 1 .
 ```
 
-To solve it on a computer, the line is divided by ``N`` evenly spaced grid points, a distance ``h = 1/(N+1)`` apart, and the unknowns are the values ``u_1, \dots, u_N`` at those points. The equation becomes one algebraic equation per grid point, each involving a point and its two neighbours:
+To solve it on a computer, the line is divided by ``N`` evenly spaced grid points a fixed distance ``h = 0.1`` apart, and the unknowns are the values ``u_1, \dots, u_N`` at those points. The line is ``(N+1)h`` long, so it grows with ``N`` while the spacing stays the same: refining a fixed line instead would divide the residuals by a shrinking ``h^2`` and make the conditioning grow as ``N^2``, a second thing changing with the size. The equation becomes one algebraic equation per grid point, each involving a point and its two neighbours:
 
 ```math
-\epsilon_i(\mathbf{u}) = \frac{-u_{i-1} + 2u_i - u_{i+1}}{h^2} - \lambda\, e^{u_i}, \qquad u_0 = u_{N+1} = 0 .
+\epsilon_i(\mathbf{u}) = \frac{-u_{i-1} + 2u_i - u_{i+1}}{h^2} + c\, u_i - \lambda\, e^{u_i}, \qquad u_0 = u_{N+1} = 0 .
 ```
 
 The optimizer minimizes ``\tfrac12 \sum_i \epsilon_i(\mathbf{u})^2``, starting from ``\mathbf{u} = \mathbf{0}``. There are as many equations as unknowns, so at the solution every residual is zero: this is a system of nonlinear equations, solved as a least-squares problem.
@@ -580,11 +580,11 @@ Discretized differential equations are the daily work of scientific computing: h
 
 ### Similar problems
 
-Its structure is that of the [sparse Rosenbrock problem](rosenbrock_sparse.md), a chain in which each unknown is tied to its neighbours, with a tridiagonal Jacobian. Two things set it apart. It is square (as many residuals as unknowns). And it becomes badly conditioned as the grid is refined: the division by ``h^2`` makes the Jacobian's condition number grow as about ``0.4\,N^2``, and that of ``\mathbf{J}^T \mathbf{J}`` as its square. At the largest size that is about ``4 \times 10^8`` for ``\mathbf{J}`` and ``10^{17}`` for ``\mathbf{J}^T \mathbf{J}``, beyond what double precision can represent, so, as in the [ill-conditioned polynomial fit](polynomial_fitting.md), optimizers that form ``\mathbf{J}^T \mathbf{J}`` are at a disadvantage against those that work with ``\mathbf{J}``.
+Its structure is that of the [sparse Rosenbrock problem](rosenbrock_sparse.md), a chain in which each unknown is tied to its neighbours, with a tridiagonal Jacobian; unlike it, it is square (as many residuals as unknowns). Its conditioning is the same at every size: the Jacobian's condition number is about 110 at 32 points and about 160 from a few hundred points up, where the line is longer than the distance over which the loss term damps a disturbance. The [sparse conditioning sweep](conditioning_sparse.md) has the same tridiagonal structure at one size, with the condition number as what is swept.
 
 ### How it scales
 
-The size is the number of grid points, ``N``. Variables, residuals and non-zeros grow in proportion to it, and so does the work per iteration for a sparse direct solver; the conditioning worsens as ``N^2``.
+The size is the number of grid points, ``N``. Variables, residuals and non-zeros grow in proportion to it, and so does the work per iteration for a sparse direct solver; the conditioning does not change.
 
 | | In terms of the size | Smallest | Largest |
 |:---|:---|---:|---:|

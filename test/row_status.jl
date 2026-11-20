@@ -15,18 +15,19 @@ end, "Standalone")
     @test SOB.passes_cost_test(1.0 + 0.5e-4, 1.0) && !SOB.passes_cost_test(1.0 + 2e-4, 1.0)
     @test SOB.passes_cost_test(9e-7, 0.0) && !SOB.passes_cost_test(2e-6, 0.0) && !SOB.passes_cost_test(NaN, 0.0)
 
-    # The defect: LeastSquaresOptim (Dogleg) on the ODE BVP at 4096 points claims convergence after 2 iterations at
-    # 2047.7, from a start of 2048, and was ok. The reference is the known minimum, 0, and the point is not stationary
+    # A solver that claims convergence above the known minimum, at a point that is not stationary: Ipopt on the ODE BVP at
+    # 256 points stops after 2 iterations at a cost of about 1.7e-5, above the floor of 1e-6 (CN4; before CN4's change to
+    # the problem, the case was LeastSquaresOptim (Dogleg) at 4096 points, claiming convergence at 2047.7 from 2048)
     ode = create_ode_bvp_problem()
-    @test ode.reference_cost(4096) == 0.0
-    ode_models = ode.generate_models(4096)
+    @test ode.reference_cost(256) == 0.0
+    ode_models = ode.generate_models(256)
     ode_std = get_standard_optimizer_model(ode_models)
-    lso = only(filter(o -> o.name == "LeastSquaresOptim (Dogleg)", ode.compatible_optimizers))
+    lso = only(filter(o -> o.name == "Ipopt", ode.compatible_optimizers))
     r_lso = run_optimizer_benchmarks([lso], ode_std; all_models=ode_models, samples=1, reference=0.0)[lso.name]
-    @test r_lso.final_cost > 0.99 * r_lso.start_cost
+    @test SOB.STATUS_COST_ATOL < r_lso.final_cost < 1e-2 * r_lso.start_cost
     @test r_lso.status === :above_reference
     @test !r_lso.converged
-    @test occursin("converged; claimed convergence at cost", r_lso.message)
+    @test occursin("; claimed convergence at cost", r_lso.message)
 
     # Dense Rosenbrock, n = 6: the local minimum at 2.5072 (x₁ ≈ -0.66; MadNLP's published point, polished by LM) and
     # the start (28.75), each claimed as converged. The known reference, 0, is used although no row reaches it
