@@ -6,7 +6,9 @@ const MOI = JuMP.MOI
 const rosen_diag_w_dense = 1.2
 const rosen_offdiag_w_dense = 1.0
 
-rosen_startpoint(n::Int) = Float64[i % 2 == 0 ? 1.0 : -1.2 for i in 1:n]
+# The start, 0.5 in every coordinate as sparse Rosenbrock's is (CN6): from the alternating −1.2 and 1 the iteration
+# count grew with n and rows stopped at local minima whose number grows with n
+rosen_startpoint(n::Int) = fill(0.5, n)
 
 struct RosenDiagDense <: NLLSModel.AbstractResidual
     weight::Float64
@@ -51,9 +53,11 @@ function build_jso_dense(n::Int)
     return MathOptNLSModel(model, [FA; FB])
 end
 
-# The SecondOrderOptimization row's configuration (IND4): NLLSModel's recommendoptimizer at the largest size, n = 32,
-# with numthreads = 1, evaluated 2026-11-19 at NLLSModel 78a4ef5 (Julia 1.13.3); rules F_wellconditioned, RS_hessian, L_dense, I_lm
-const ROSENBROCK_DENSE_SOO = (; iterator = :levenbergmarquardt, linsolver = :cholesky, formulation = :hessian, reduction = :none, storage = :dense)
+# The SecondOrderOptimization row's configuration (IND4, re-derived by CN6 for the new start): NLLSModel's
+# recommendoptimizer at the largest size, n = 32, with numthreads = 1, evaluated 2026-11-20 at NLLSModel d2e4374
+# (Julia 1.13.3); rules F_wellconditioned, RS_hessian, L_dense, I_dogleg (an undamped solve, about 12 μs, costs more than
+# a linearization, about 7.5 μs)
+const ROSENBROCK_DENSE_SOO = (; iterator = :dogleg, linsolver = :cholesky, formulation = :hessian, reduction = :none, storage = :dense)
 
 function create_rosenbrock_dense_problem()
     ProblemDefinition(

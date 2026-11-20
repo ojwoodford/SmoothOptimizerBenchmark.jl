@@ -30,7 +30,7 @@ end, "Standalone")
     @test occursin("; claimed convergence at cost", r_lso.message)
 
     # Dense Rosenbrock, n = 6: the local minimum at 2.5072 (x₁ ≈ -0.66; MadNLP's published point, polished by LM) and
-    # the start (28.75), each claimed as converged. The known reference, 0, is used although no row reaches it
+    # the start (CN6: 0.5 in every coordinate), each claimed as converged. The known reference, 0, is used although no row reaches it
     rd = create_rosenbrock_dense_problem()
     @test rd.reference_cost(6) == 0.0
     rd_models = rd.generate_models(6)
@@ -39,7 +39,7 @@ end, "Standalone")
     x_local = [-0.663967779442176, 0.8669554213761816, 0.8440265088560183, 0.8129759294645175, 0.770498797438184, 0.7141993664423817]
     @test ev.cost(x_local) ≈ 2.5072 rtol=1e-4
     @test SOB.predicted_reduction_ratio(ev, x_local) < 1e-12
-    @test SOB.predicted_reduction_ratio(ev, ev.x0) ≈ 0.76 rtol=0.01
+    @test SOB.predicted_reduction_ratio(ev, ev.x0) ≈ 0.887 rtol=0.01   # 0.76 from the start before CN6
     rows = run_optimizer_benchmarks([stub_row("At a local minimum", x_local), stub_row("At the start", ev.x0),
                                      stub_row("Not converged at the minimum", ones(6); converged=false)],
                                     rd_std; all_models=rd_models, samples=1, reference=rd.reference_cost(6))

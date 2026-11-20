@@ -440,7 +440,7 @@ A Rosenbrock-style test function (a minimum at the bottom of a curved valley) in
 f(\mathbf{x}) = \tfrac12 \sum_{k=1}^{n} \bigl(1.2\,(x_k - 1)\bigr)^2 + \tfrac12 \sum_{j < k} \bigl(x_k - x_j^2\bigr)^2 .
 ```
 
-Every term is zero at ``\mathbf{x} = (1, \dots, 1)``, which is the minimum. The optimizers start from the classic Rosenbrock starting values, alternating ``-1.2`` and ``1``.
+Every term is zero at ``\mathbf{x} = (1, \dots, 1)``, which is the minimum. The optimizers start from ``x_k = 0.5`` in every coordinate, as on the [sparse Rosenbrock problem](rosenbrock_sparse.md).
 
 ### Where it is used
 
