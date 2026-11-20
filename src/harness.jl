@@ -87,7 +87,8 @@ When every row has run, the harness decides each row's status (IT4, `assign_stat
 converged is `:ok` only if its cost passes the cost test against `reference` (the problem's known minimum at this size,
 `nothing` for the lowest cost of any row here), and `:local_minimum` or `:above_reference` otherwise. Where
 `reference_solution` is given (the problem's solution at this size, in the evaluator's layout), each row that handed back a
-point records its relative error in the solution (`solution_error`), from the first run; it changes no status. Only then is
+point records its relative error in the solution (`solution_error`), from the first run, and a converged row whose error is
+above `SOLUTION_ERROR_MAX` is `:wrong_solution`. Only then is
 `on_result` called, for each row in the order of `optimizers`: so a results file streamed from it holds whole sizes,
 and an interrupted run leaves no row reading `ok` that was not tested.
 """

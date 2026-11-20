@@ -428,6 +428,9 @@ const SOLUTION_ERROR_FLOOR = 1e-16
 
 # One line per row against the sweep value, both axes logarithmic, from `value(r)` of each `ok` row (NaN to leave a point
 # out), saved to `filepath`
+# The rows the solution-error and iteration plots draw: `ok`, and `wrong_solution`, whose error is what the plot shows
+const SWEEP_PLOTTED_STATUSES = (:ok, :wrong_solution)
+
 function plot_rows_against_sweep(res::ProblemScalingBenchmarkResult, filepath::String, value::Function; title::String, ylabel::String)
     sizes = [Float64(s) for s in res.sizes]
     names = sort!(unique!([k for sr in res.size_results for k in keys(sr.optimizer_results)]))
@@ -437,7 +440,7 @@ function plot_rows_against_sweep(res::ProblemScalingBenchmarkResult, filepath::S
     for name in names
         ys = [begin
                   r = get(sr.optimizer_results, name, nothing)
-                  r !== nothing && r.status === :ok ? Float64(value(r)) : NaN
+                  r !== nothing && r.status in SWEEP_PLOTTED_STATUSES ? Float64(value(r)) : NaN
               end for sr in res.size_results]
         any(isfinite, ys) || continue
         plotted += 1
@@ -453,7 +456,7 @@ end
 """
     plot_solution_error(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR, title_suffix="") -> String
 
-The relative error in the solution of each `ok` row against the sweep value, both axes logarithmic, an error below
+The relative error in the solution of each `ok` and `wrong_solution` row against the sweep value, both axes logarithmic, an error below
 $(SOLUTION_ERROR_FLOOR) drawn at $(SOLUTION_ERROR_FLOOR); saved as `<slug>_solution_error.png` in `outdir`.
 """
 function plot_solution_error(res::ProblemScalingBenchmarkResult; outdir=DEFAULT_PLOTS_DIR, title_suffix::AbstractString="")

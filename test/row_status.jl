@@ -11,9 +11,12 @@ end, "Standalone")
 
 @testset "A row is ok only if its cost passes the test (IT4)" begin
     SOB = SmoothOptimizerBenchmark
-    @test (:local_minimum in OPTIMIZER_STATUSES) && (:above_reference in OPTIMIZER_STATUSES)
-    @test SOB.passes_cost_test(1.0 + 0.5e-4, 1.0) && !SOB.passes_cost_test(1.0 + 2e-4, 1.0)
-    @test SOB.passes_cost_test(9e-7, 0.0) && !SOB.passes_cost_test(2e-6, 0.0) && !SOB.passes_cost_test(NaN, 0.0)
+    @test (:local_minimum in OPTIMIZER_STATUSES) && (:above_reference in OPTIMIZER_STATUSES) && (:wrong_solution in OPTIMIZER_STATUSES)
+    @test SOB.passes_cost_test(1.0 + 0.5e-4, 1.0, 10.0) && !SOB.passes_cost_test(1.0 + 2e-4, 1.0, 10.0)
+    # The floor is 1e-8 of the start cost (2026-11-20; it was a fixed 1e-6)
+    @test SOB.passes_cost_test(0.9e-8, 0.0, 1.0) && !SOB.passes_cost_test(2e-8, 0.0, 1.0) && !SOB.passes_cost_test(NaN, 0.0, 1.0)
+    @test SOB.passes_cost_test(0.9e-4, 0.0, 1e4) && !SOB.passes_cost_test(9e-7, 0.0, 1e-5)
+    @test SOB.passes_solution_test(NaN) && SOB.passes_solution_test(1e-5) && !SOB.passes_solution_test(1e-3)
 
     # A solver that claims convergence above the known minimum, at a point that is not stationary: Ipopt on the ODE BVP at
     # 256 points stops after 2 iterations at a cost of about 1.7e-5, above the floor of 1e-6 (CN4; before CN4's change to
@@ -24,7 +27,7 @@ end, "Standalone")
     ode_std = get_standard_optimizer_model(ode_models)
     lso = only(filter(o -> o.name == "Ipopt", ode.compatible_optimizers))
     r_lso = run_optimizer_benchmarks([lso], ode_std; all_models=ode_models, samples=1, reference=0.0)[lso.name]
-    @test SOB.STATUS_COST_ATOL < r_lso.final_cost < 1e-2 * r_lso.start_cost
+    @test SOB.STATUS_COST_START_FRAC * r_lso.start_cost < r_lso.final_cost < 1e-2 * r_lso.start_cost
     @test r_lso.status === :above_reference
     @test !r_lso.converged
     @test occursin("; claimed convergence at cost", r_lso.message)
@@ -67,6 +70,24 @@ end, "Standalone")
     @test rows_cf["Converged at the minimum"].status === :ok
     @test rows_cf["Converged at the start"].status === :above_reference
     @test occursin(@sprintf("reference %.6e", cf_ev.cost(x_min)), rows_cf["Converged at the start"].message)
+
+    # A converged row at a point the cost cannot tell from the solution: the dense conditioning sweep at κ = 1e12, the
+    # solution moved by 1e-3 of its norm along the Jacobian's least singular direction, is `wrong_solution`
+    dc = create_dense_conditioning_problem()
+    dc_models = dc.generate_models(1e12)
+    dc_std = get_standard_optimizer_model(dc_models)
+    dc_ev = SOB.point_evaluator(dc_std)
+    xstar = dc.reference_solution(1e12)
+    _, Jstar = dc_ev.resjac(xstar)
+    x_wrong = xstar .+ 1e-3 * SOB.norm(xstar) .* SOB.svd(Matrix(Jstar)).V[:, end]
+    @test SOB.passes_cost_test(dc_ev.cost(x_wrong), 0.0, dc_ev.cost(dc_ev.x0))
+    rows_dc = run_optimizer_benchmarks([stub_row("Wrong", x_wrong), stub_row("Right", xstar)], dc_std; all_models=dc_models,
+                                       samples=1, reference=0.0, reference_solution=xstar)
+    @test rows_dc["Wrong"].status === :wrong_solution
+    @test rows_dc["Wrong"].solution_error ≈ 1e-3 rtol=1e-6
+    @test !rows_dc["Wrong"].converged
+    @test occursin("solution error", rows_dc["Wrong"].message)
+    @test rows_dc["Right"].status === :ok
 
     # A converged row that hands back no point fails the cost test and cannot be tested for stationarity
     silent = OptimizerDefinition("No point", (m; kwargs...) -> OptimizerResult(1.0e3, 0, 0, 3, 0.0, 0.0, true), "Standalone")

@@ -70,7 +70,8 @@ end
 convergence_criteria_line() =
     "- **Convergence Criteria**: gtol=$(DEFAULT_GTOL), xtol=$(DEFAULT_XTOL), ftol=$(DEFAULT_FTOL), maxiters=$(DEFAULT_MAXITERS), maxtime=$(DEFAULT_MAXTIME)s; " *
     "a row is ok when the solver reports convergence and its final cost, evaluated by the harness, is at most " *
-    "max(reference × (1 + $(STATUS_COST_RTOL)), $(STATUS_COST_ATOL)), the reference being the known minimum or else the lowest cost of any row at that size; " *
+    "max(reference × (1 + $(STATUS_COST_RTOL)), $(STATUS_COST_START_FRAC) × start cost), the reference being the known minimum or else the lowest cost of any row at that size, " *
+    "and, where the problem states its solution, its relative error in the solution is at most $(SOLUTION_ERROR_MAX) (wrong_solution if not); " *
     "a row that claims convergence and fails is local_minimum if the Gauss–Newton predicted reduction is below $(STATIONARITY_RTOL) × its cost, else above_reference"
 
 # The thread counts in force, for the header of a results file (M17)

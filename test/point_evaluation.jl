@@ -116,10 +116,12 @@ end
     @test isnan(res["No point"].solution_error)
     @test isnan(res["Skipping adapter"].solution_error)
     @test res["Throwing adapter"].status === :error && isnan(res["Throwing adapter"].solution_error)
-    # It changes no status: the rows' costs decide them
+    # Without a stated solution the costs alone decide; with one, the LM point, which passes the cost test but is far from
+    # the stated solution, is `wrong_solution` (2026-11-20; before, the error changed no status)
     res_none = run_optimizer_benchmarks(rows[1:2], std; all_models=models, samples=1)
     @test all(r -> isnan(r.solution_error), values(res_none))
-    @test [res_none[o.name].status for o in rows[1:2]] == [res[o.name].status for o in rows[1:2]]
+    @test [res_none[o.name].status for o in rows[1:2]] == [:ok, :above_reference]
+    @test [res[o.name].status for o in rows[1:2]] == [:wrong_solution, :above_reference]
     # The copies keep it
     r = res["At the LM point"]
     @test SOB.with_timing(r, 1.0, 0, 0).solution_error == r.solution_error

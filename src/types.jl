@@ -115,7 +115,7 @@ struct PointEvaluator
     resjac::Function
 end
 
-const OPTIMIZER_STATUSES = (:ok, :local_minimum, :above_reference, :not_converged, :timeout, :skipped, :error)
+const OPTIMIZER_STATUSES = (:ok, :wrong_solution, :local_minimum, :above_reference, :not_converged, :timeout, :skipped, :error)
 
 """
     OptimizerResult
@@ -130,8 +130,11 @@ Results from running an optimizer on a benchmark model:
 - `converged`: whether the optimizer converged within tolerance (true exactly when `status == :ok`)
 - `status`: one of `OPTIMIZER_STATUSES` (IT4: the harness, not the solver, decides `:ok`):
   - `:ok`: the solver reports convergence and its final cost passes the cost test: at most
-    `max(reference × (1 + 1e-4), 1e-6)`, the reference being the problem's known minimum at that size, or else the lowest
-    final cost of any row at that size in the same table;
+    `max(reference × (1 + 1e-4), 1e-8 × start cost)`, the reference being the problem's known minimum at that size, or
+    else the lowest final cost of any row at that size in the same table; and, where the problem states its solution, the
+    relative error in the solution is at most 1e-4;
+  - `:wrong_solution`: the solver reports convergence and the cost test passes, but the solution error is above 1e-4:
+    the cost cannot tell the point from the solution (the conditioning sweeps at large κ);
   - `:local_minimum`: the solver reports convergence and the cost test fails, but the point is stationary: the cost
     reduction the Gauss–Newton model predicts from it is below `1e-8 ×` its cost. A minimum of the Gauss–Newton model,
     so a saddle of the true cost would pass;
