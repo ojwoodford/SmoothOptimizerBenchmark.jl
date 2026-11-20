@@ -7,9 +7,9 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     SB = SmoothOptimizerBenchmark
     row(prob, name) = only(filter(o -> o.name == name, prob.compatible_optimizers))
 
-    # Ipopt, on curve fitting's JuMP model at 64 points: the gradient (its optimality test), the relative cost change
-    # (its acceptable test) and the step (tiny_step_tol), each with the other two made unreachable. The acceptable and
-    # tiny-step stops count as converged
+    # Ipopt, on curve fitting's JuMP model at 64 points: the gradient (its optimality test) and the step (tiny_step_tol),
+    # each with the other made unreachable. It is given no cost-change criterion: its acceptable test is off, so ftol
+    # stops nothing (2026-11-20). The tiny-step stop counts as converged
     cf = create_curve_fitting_problem()
     cf_models = cf.generate_models(64)
     jm = only(filter(m -> m.name == "JuMP", cf_models))
@@ -17,13 +17,14 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     @test SB.resolve_optimizer_model(ipopt, cf_models) === jm
     r_g = ipopt.optimize(jm; gtol=1e-8, xtol=1e-30, ftol=1e-30)
     @test r_g.message == "first_order" && r_g.status === :ok
-    r_f = ipopt.optimize(jm; gtol=1e-30, xtol=1e-30, ftol=1e-8)
-    @test r_f.message == "acceptable" && r_f.status === :ok
-    # (with the acceptable test switched off: once the iterate stops moving the objective stops changing exactly, and
-    # that test fires first even at ftol = 1e-30)
-    r_x = ipopt.optimize(jm; gtol=1e-30, xtol=1e-2, ftol=1e-30, acceptable_iter=0)
+    # ftol has no effect: a loose and an unreachable one give the same run (with gtol unreachable, Ipopt may still end
+    # "acceptable", its fallback when it fails near an acceptable point, which is not the cost-change test)
+    r_f = ipopt.optimize(jm; gtol=1e-30, xtol=1e-30, ftol=1e-1, maxiters=50)
+    r_f0 = ipopt.optimize(jm; gtol=1e-30, xtol=1e-30, ftol=1e-30, maxiters=50)
+    @test (r_f.iterations, r_f.message) == (r_f0.iterations, r_f0.message)
+    @test r_f.iterations > 3
+    r_x = ipopt.optimize(jm; gtol=1e-30, xtol=1e-2, ftol=1e-30)
     @test r_x.message == "small_step" && r_x.status === :ok
-    @test r_f.final_cost ≈ r_g.final_cost rtol=1e-6
     @test r_x.final_cost ≈ r_g.final_cost rtol=1e-6
 
     # Manopt, on robust Procrustes at d = 3: the gradient and the step (it is given no cost-change criterion: see the

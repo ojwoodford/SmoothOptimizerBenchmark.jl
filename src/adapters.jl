@@ -1049,12 +1049,15 @@ end
     optimize_ipopt(model; solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, print_level=0, time_limit=nothing, kwargs...) -> OptimizerResult
 
 Optimizes a model using `Ipopt` via `NLPModelsIpopt`, with the benchmark's three criteria where Ipopt offers them (IND5):
-the gradient through its optimality and dual-infeasibility tolerances (`tol = dual_inf_tol = gtol`), the step through
-`tiny_step_tol = xtol` (a search direction below `xtol` in every component relative to the iterate), and the relative cost
-change through the acceptable test: `acceptable_obj_change_tol = ftol` (Ipopt scales the change by `max(1, |f|)`),
-`acceptable_iter = 1`, and `acceptable_tol = 1e20`, so that the test is decided by the objective change and not by the
-optimality error. Ipopt's acceptable (`:acceptable`) and tiny-step (`:small_step`) stops count as converged for the adapter,
-as SecondOrderOptimization's cost-change and step stops do; the harness's cost test still decides `ok`.
+the gradient through its optimality and dual-infeasibility tolerances (`tol = dual_inf_tol = gtol`) and the step through
+`tiny_step_tol = xtol` (a search direction below `xtol` in every component relative to the iterate). It is given no
+cost-change criterion, and its acceptable test is off (`acceptable_iter = 0`; `ftol` is accepted and unused), as Manopt
+is given none (maintainer, 2026-11-20). Ipopt offers the cost change only inside its acceptable test, and with that test on
+(`acceptable_obj_change_tol = ftol`, `acceptable_iter = 1`, `acceptable_tol = 1e20`, IND5 until then), on the ODE BVP it
+stopped after 2 iterations reporting an objective of about 1e-53 but handing back a point whose cost is 1.7e-5 at n = 256;
+with the test off it stops on its optimality test after 3 iterations at the solution (scripts/th/ipopt.jl, ipopt2.jl).
+Ipopt's tiny-step stop (`:small_step`) counts as converged for the adapter, as SecondOrderOptimization's step stop does; the
+harness's cost test still decides `ok`.
 """
 function optimize_ipopt(target; solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, print_level=0, time_limit=nothing, kwargs...)
     nlp = as_nlpmodel(target)
@@ -1063,17 +1066,14 @@ function optimize_ipopt(target; solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAUL
     actual_maxtime = time_limit !== nothing ? Float64(time_limit) : maxtime
 
     t_start = time_ns()
-    timed = @timed NLPModelsIpopt.ipopt(nlp; tol=gtol, dual_inf_tol=gtol, tiny_step_tol=xtol, acceptable_obj_change_tol=ftol,
-        acceptable_iter=1, acceptable_tol=IPOPT_ACCEPTABLE_TOL, max_iter=maxiters, max_wall_time=actual_maxtime, print_level=print_level, kwargs...)
+    timed = @timed NLPModelsIpopt.ipopt(nlp; tol=gtol, dual_inf_tol=gtol, tiny_step_tol=xtol, acceptable_iter=0,
+        max_iter=maxiters, max_wall_time=actual_maxtime, print_level=print_level, kwargs...)
     t_total = time_ns() - t_start
     res = timed.value
     store_solution!(solution, res.solution)
     return stats_result(t_total, timed, res.iter, start_c, res.objective, res.status; converged_statuses=IPOPT_CONVERGED)
 end
 
-# Ipopt's acceptable test passes only when every one of its conditions holds; this tolerance on the optimality error is
-# Ipopt's own "infinity", so that the objective change decides (IND5)
-const IPOPT_ACCEPTABLE_TOL = 1e20
 const IPOPT_CONVERGED = (:first_order, :acceptable, :small_step)
 
 """

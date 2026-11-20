@@ -88,7 +88,7 @@ const DERIVATIVES_NOTES = Dict(
 # wherever the package offers them, and what each is called there. A package's own other criteria are at its defaults
 const STOPPING_GIVEN = (
     "CaNNOLeS" => ("`atol = gtol`, `rtol = 0`", "—", "—", "Its residual tolerances (`Fatol`, `Frtol`) at their defaults."),
-    "Ipopt" => ("`tol`, `dual_inf_tol`", "`tiny_step_tol`", "`acceptable_obj_change_tol`", "The change is tested inside Ipopt's acceptable test (`acceptable_iter = 1`, `acceptable_tol = 1e20`) and scaled by ``\\max(1, \\lvert f \\rvert)``; the acceptable and tiny-step stops count as converged."),
+    "Ipopt" => ("`tol`, `dual_inf_tol`", "`tiny_step_tol`", "—", "Ipopt tests the cost change only inside its acceptable test, which is off (`acceptable_iter = 0`): with it on, on the ODE BVP Ipopt stopped after 2 iterations and handed back a point other than the one whose objective it reported; the tiny-step stop counts as converged."),
     "JSOSolvers" => ("`atol = gtol`, `rtol = 0`", "—", "—", ""),
     "LeastSquaresOptim" => ("`g_tol`", "`x_tol`", "`f_tol`", ""),
     "MadNLP" => ("`tol` (KKT residual)", "—", "—", ""),

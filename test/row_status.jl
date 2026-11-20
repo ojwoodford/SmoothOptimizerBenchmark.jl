@@ -18,19 +18,16 @@ end, "Standalone")
     @test SOB.passes_cost_test(0.9e-4, 0.0, 1e4) && !SOB.passes_cost_test(9e-7, 0.0, 1e-5)
     @test SOB.passes_solution_test(NaN) && SOB.passes_solution_test(1e-5) && !SOB.passes_solution_test(1e-3)
 
-    # A solver that claims convergence above the known minimum, at a point that is not stationary: Ipopt on the ODE BVP at
-    # 256 points stops after 2 iterations at a cost of about 1.7e-5, above the floor of 1e-6 (CN4; before CN4's change to
-    # the problem, the case was LeastSquaresOptim (Dogleg) at 4096 points, claiming convergence at 2047.7 from 2048)
+    # Ipopt on the ODE BVP at 256 points: with its acceptable test on it claimed convergence after 2 iterations at a point
+    # costing 1.7e-5, above the floor (above_reference, CN4); with it off (2026-11-20) it reaches the solution
     ode = create_ode_bvp_problem()
     @test ode.reference_cost(256) == 0.0
     ode_models = ode.generate_models(256)
     ode_std = get_standard_optimizer_model(ode_models)
-    lso = only(filter(o -> o.name == "Ipopt", ode.compatible_optimizers))
-    r_lso = run_optimizer_benchmarks([lso], ode_std; all_models=ode_models, samples=1, reference=0.0)[lso.name]
-    @test SOB.STATUS_COST_START_FRAC * r_lso.start_cost < r_lso.final_cost < 1e-2 * r_lso.start_cost
-    @test r_lso.status === :above_reference
-    @test !r_lso.converged
-    @test occursin("; claimed convergence at cost", r_lso.message)
+    ipopt = only(filter(o -> o.name == "Ipopt", ode.compatible_optimizers))
+    r_ip = run_optimizer_benchmarks([ipopt], ode_std; all_models=ode_models, samples=1, reference=0.0)[ipopt.name]
+    @test r_ip.status === :ok
+    @test r_ip.final_cost <= SOB.STATUS_COST_START_FRAC * r_ip.start_cost
 
     # Dense Rosenbrock, n = 6: the local minimum at 2.5072 (x₁ ≈ -0.66; MadNLP's published point, polished by LM) and
     # the start (CN6: 0.5 in every coordinate), each claimed as converged. The known reference, 0, is used although no row reaches it
@@ -48,6 +45,8 @@ end, "Standalone")
                                     rd_std; all_models=rd_models, samples=1, reference=rd.reference_cost(6))
     @test rows["At a local minimum"].status === :local_minimum
     @test rows["At the start"].status === :above_reference
+    @test !rows["At the start"].converged
+    @test occursin("; claimed convergence at cost", rows["At the start"].message)
     @test ev.cost(ones(6)) == 0.0
     @test rows["Not converged at the minimum"].status === :not_converged
     @test endswith(rows["Not converged at the minimum"].message, "cost test passes")
