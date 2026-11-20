@@ -16,10 +16,6 @@ const OLD_LABEL = "for " * "Solvers"
 
 page_row_cells(line) = strip.(split(strip(line), '|')[2:end-1])
 
-# The problems added by the conditioning work (CN11, CN12), which have no committed page until the full run that follows
-# them (CN16); CN16 empties this
-const PAGES_AWAITING_A_RUN = ["conditioning_dense", "conditioning_sparse"]
-
 # The lines of "The Problem" section, after its heading and up to the next `## ` heading; empty if there is none
 function problem_section(lines)
     i = findfirst(==(THE_PROBLEM), lines)
@@ -235,10 +231,8 @@ holds_number(cell, n::Float64) = occursin(Regex("(?<![0-9.])\\Q$(n)\\E(?![0-9])"
         rm(root; recursive=true, force=true)
     end
 
-    # The committed pages pass checks 2 to 6: this fails if the generator is changed and the pages are not regenerated.
-    # A new problem has no committed page until the benchmark has run it
+    # The committed pages pass checks 2 to 6: this fails if the generator is changed and the pages are not regenerated
     for slug in CANONICAL_PROBLEM_SLUGS
-        slug in PAGES_AWAITING_A_RUN && continue
         committed = read(joinpath(PAGES_ROOT, "docs", "src", "problems", "$(slug).md"), String)
         errs = page_checks(committed)
         isempty(errs) || @info "docs/src/problems/$(slug).md" errs

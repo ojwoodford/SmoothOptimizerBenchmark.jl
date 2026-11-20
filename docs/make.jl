@@ -20,6 +20,8 @@ makedocs(
             "Exponential Curve Fitting" => "problems/curve_fitting.md",
             "Robust Exponential Curve Fitting" => "problems/curve_fitting_robust.md",
             "Ill-Conditioned Polynomial Fitting" => "problems/polynomial_fitting.md",
+            "Dense Conditioning Sweep" => "problems/conditioning_dense.md",
+            "Sparse Conditioning Sweep" => "problems/conditioning_sparse.md",
             "Dense Multi-dimensional Rosenbrock" => "problems/rosenbrock_dense.md",
             "Multilateration" => "problems/multilateration.md",
             "Dense Affine Alignment" => "problems/affine_alignment.md",
