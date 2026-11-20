@@ -38,10 +38,12 @@ const CONDITIONING_TABLE = [
     (problem = "Robust Procrustes on SO(d)", sizes = Any[3, 8, 20],
      cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = 4, nullity = 0,
      note = "exception: the iterations spread 4, 9 at d = 3 to 5 at d = 20 (CN8, accepted)"),
-    # Measured without its 7 gauge directions (rigid motion and scale); 4 cameras give each point 4 views, the others 8 or more
+    # Measured without its 7 gauge directions (rigid motion and scale). CN9 allowed an iteration spread of 3 (4 cameras give
+    # each point 4 views, the others 8 or more); the run took 3 iterations at all 12 sizes, so it is 2, as for the others
+    # (maintainer, 2026-11-20)
     (problem = "Sparse Bundle Adjustment", sizes = Any[4, 16, 32],
-     cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = 3, nullity = 7,
-     note = "the iteration spread may be 3 (CN9): 4 cameras have 4 views of each point"),
+     cond_max = WELL_CONDITIONED_MAX, growth_max = CONDITIONING_GROWTH_MAX, spread_max = ITERATION_SPREAD_MAX, nullity = 7,
+     note = "measured without its 7 gauge directions"),
 ]
 
 # Polynomial fitting, the one ill-conditioned size sweep (decision 3): cond(J) at the solution is within this fraction of
