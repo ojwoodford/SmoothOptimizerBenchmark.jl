@@ -21,14 +21,23 @@ end
 # This package's commit; the results the run is writing (docs/) do not make it dirty
 get_git_commit() = checkout_commit(normpath(joinpath(@__DIR__, "..")), [".", ":!docs"])
 
-# The sibling packages whose commits every results header records
-const RECORDED_DEPENDENCIES = ("NLLSModel", "OptimizationVariableInterface", "SecondOrderOptimization")   # alphabetical (IND8)
+# The sibling packages whose commits every results header records: all five (maintainer, 2026-11-20; D3 had dropped
+# BlockLinearSystems, and DampedLinearSolve was never recorded, though the run loads both through NLLSModel)
+const RECORDED_DEPENDENCIES = ("BlockLinearSystems", "DampedLinearSolve", "NLLSModel", "OptimizationVariableInterface", "SecondOrderOptimization")   # alphabetical (IND8)
+
+# The entry file of a package loaded indirectly (not a dependency of this package), or nothing
+function loaded_package_path(name::AbstractString)
+    for (id, m) in Base.loaded_modules
+        id.name == name && return pathof(m)
+    end
+    return nothing
+end
 
 # The commit of each recorded dependency, from the checkout it was loaded from
 function dependency_commits_line()
     entries = map(RECORDED_DEPENDENCIES) do name
         id = Base.identify_package(@__MODULE__, name)
-        path = id === nothing ? nothing : Base.locate_package(id)
+        path = id === nothing ? loaded_package_path(name) : Base.locate_package(id)
         commit = path === nothing ? "unknown" : checkout_commit(dirname(dirname(path)))
         "$name $commit"
     end

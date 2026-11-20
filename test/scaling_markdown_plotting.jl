@@ -39,12 +39,11 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
             @test opt_load.message == SmoothOptimizerBenchmark.table_message(opt_orig.message)
         end
     end
-    # D3: BlockLinearSystems is no longer recorded, and a header written before then, which names it, still loads
-    @test !occursin("BlockLinearSystems", md_text)
+    # All five siblings are recorded (2026-11-20), and a header written before then, which names three, still loads
     old_md = joinpath(tmp_data_dir, "old_header", "rosenbrock_sparse.md")
     mkpath(dirname(old_md))
-    write(old_md, replace(md_text, "**Dependency Commits**: " => "**Dependency Commits**: BlockLinearSystems d38552c, "))
-    @test occursin("BlockLinearSystems d38552c", read(old_md, String))
+    write(old_md, replace(md_text, r"BlockLinearSystems [0-9a-f]+, DampedLinearSolve [0-9a-f]+, " => ""))
+    @test !occursin("BlockLinearSystems", read(old_md, String))
     loaded_old = load_problem_markdown(old_md)
     @test loaded_old.problem == loaded.problem
     @test loaded_old.sizes == loaded.sizes
