@@ -34,6 +34,10 @@ const CONDITIONING_TABLE = [
      note = "the iteration spread may be 3 (CN9): 4 cameras have 4 views of each point"),
 ]
 
+# Polynomial fitting, the one ill-conditioned size sweep (decision 3): cond(J) at the solution is within this fraction of
+# POLYFIT_TARGET_COND at every size. A starting value (rules.md 26)
+const POLYFIT_COND_RTOL = 0.01
+
 @testset "One trait per problem: conditioning and iterations across sizes (CN13)" begin
     byname = Dict(p.name => p for p in problems)
     for e in CONDITIONING_TABLE
@@ -55,6 +59,14 @@ const CONDITIONING_TABLE = [
             @test all(<=(e.cond_max), conds)
             @test conds[end] <= e.growth_max * conds[2]
             @test maximum(iters) - minimum(iters) <= e.spread_max
+        end
+    end
+    @testset "Ill-Conditioned Polynomial Fitting" begin
+        prob = byname["Ill-Conditioned Polynomial Fitting"]
+        for n in prob.default_sizes
+            x, _, _ = solution_point(prob, n)
+            κ = jacobian_condition(solution_jacobian(prob, n; point=x))
+            @test abs(κ / SmoothOptimizerBenchmark.POLYFIT_TARGET_COND - 1) <= POLYFIT_COND_RTOL
         end
     end
 end

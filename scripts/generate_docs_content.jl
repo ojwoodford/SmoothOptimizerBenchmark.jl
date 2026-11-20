@@ -403,13 +403,13 @@ The size is the number of data points, ``m``, of which ``\operatorname{round}(0.
 | Hessian ``\mathbf{J}^T \mathbf{J}`` | ``3 \times 3``, dense | 3 × 3 | 3 × 3 |
 """,
     "polynomial_fitting" => raw"""
-Fit a polynomial of degree 13 to ``m`` samples of a smooth curve, ``y_i = \sin(3t_i) + 0.01\cos(17t_i)``, at evenly spaced points ``t_i`` in ``[0, 1]``. The unknowns are the polynomial's 14 coefficients, ``\mathbf{c} = (c_0, \dots, c_{13})``:
+Fit a polynomial with ``n`` coefficients to ``m = 8n`` samples of a smooth curve, ``y_i = \sin(3t_i) + 0.01\cos(17t_i)``, at evenly spaced points ``t_i`` in ``[-1, 1]``. The polynomial is written in a Chebyshev basis stretched by a factor ``s \ge 1``, ``T_0(t/s), \dots, T_{n-1}(t/s)``, so that the data cover only the middle of the interval on which the basis is well behaved:
 
 ```math
-f(\mathbf{c}) = \tfrac12 \sum_{i=1}^{m} \Bigl(\sigma \bigl(\textstyle\sum_{k=0}^{13} c_k\, t_i^k - y_i\bigr)\Bigr)^2, \qquad \sigma = 10^4 .
+f(\mathbf{c}) = \tfrac12 \sum_{i=1}^{m} \Bigl(\sigma \bigl(\textstyle\sum_{k=0}^{n-1} c_k\, T_k(t_i / s) - y_i\bigr)\Bigr)^2, \qquad \sigma = 10^4 .
 ```
 
-The residuals are linear in the unknowns, so this is ordinary linear least squares, and in exact arithmetic one step from the starting point (all coefficients zero) would land on the answer. The difficulty is numerical. On ``[0, 1]`` the powers ``t^8, t^9, t^{10}, \dots`` look almost alike, so very different sets of coefficients give almost the same curve. The Jacobian's condition number is about ``4 \times 10^9``. Forming ``\mathbf{J}^T \mathbf{J}`` squares it, to about ``10^{19}``, which is more than double precision can represent (about ``10^{16}``). An optimizer that forms ``\mathbf{J}^T \mathbf{J}`` therefore loses the answer's accuracy before it starts; one that factorizes ``\mathbf{J}`` itself does not. Because the cost of a computed answer is itself rounded, each row is scored by its excess cost over the true minimum, both computed in extended precision.
+The residuals are linear in the unknowns, so this is ordinary linear least squares, and in exact arithmetic one step from the starting point (all coefficients zero) would land on the answer. The difficulty is numerical. The stretch is chosen at each ``n`` so that the Jacobian's condition number is ``4 \times 10^9`` at every size (``s`` is about 840 at 4 coefficients, 2.9 at 14 and 1.07 at 64): this is the benchmark's one size sweep that is ill-conditioned at every size, and the construction that keeps the condition number fixed is contrived. Below about 14 coefficients much of that ill-conditioning is in the columns' norms, so a scaling of the coefficients would remove part of it there (at 4 coefficients the condition number after scaling the columns to unit norm is about ``4 \times 10^6``). Forming ``\mathbf{J}^T \mathbf{J}`` squares the condition number, to about ``1.6 \times 10^{19}``, which is more than double precision can represent (about ``10^{16}``). An optimizer that forms ``\mathbf{J}^T \mathbf{J}`` therefore loses the answer's accuracy before it starts; one that factorizes ``\mathbf{J}`` itself does not. Because the cost of a computed answer is itself rounded, each row is scored by its excess cost over the true minimum, both computed in extended precision.
 
 ### Where it is used
 
@@ -417,21 +417,21 @@ Polynomial regression and trend fitting, calibration curves, and any linear fit 
 
 ### Similar problems
 
-Problems that are poorly conditioned because some combination of unknowns barely changes the residuals: a camera's focal length and its distance to the scene when the scene is nearly flat, parameters that the data only weakly determine, inverse problems in general. In size it is like the curve fit, a few unknowns and many residuals, with a small dense system.
+Problems that are poorly conditioned because some combination of unknowns barely changes the residuals: a camera's focal length and its distance to the scene when the scene is nearly flat, parameters that the data only weakly determine, inverse problems in general. In shape it is like the curve fit, fewer unknowns than residuals and a dense system. The [dense conditioning sweep](conditioning_dense.md) holds the size fixed instead, and sweeps the condition number.
 
 ### How it scales
 
-The size is the number of data points, ``m``. The number of unknowns is fixed at 14, and the conditioning is set by the degree, which is fixed too; ``m`` changes only the amount of data, and the work per iteration is proportional to it.
+The size is the number of coefficients, ``n``, with 8 data points per coefficient. The conditioning is the same at every size. The work per iteration is that of a dense ``8n \times n`` least-squares problem, proportional to ``n^3``, whether the optimizer forms ``\mathbf{J}^T \mathbf{J}`` (``8n^3``) or factorizes ``\mathbf{J}`` (about ``16n^3``).
 
 | | In terms of the size | Smallest | Largest |
 |:---|:---|---:|---:|
-| Size | ``m`` | 60 | 6400 |
-| Variables | 1, of size 14 | 1 | 1 |
-| Unknowns in total | 14 | 14 | 14 |
-| Costs | ``m``, each one residual depending on the whole variable | 60 | 6400 |
-| Residuals in total | ``m`` | 60 | 6400 |
-| Jacobian | ``m \times 14``, dense | 60 × 14 | 6400 × 14 |
-| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``14 \times 14``, dense | 14 × 14 | 14 × 14 |
+| Size | ``n`` | 4 | 64 |
+| Variables | 1, of size ``n`` | 1 | 1 |
+| Unknowns in total | ``n`` | 4 | 64 |
+| Costs | ``8n``, each one residual depending on the whole variable | 32 | 512 |
+| Residuals in total | ``8n`` | 32 | 512 |
+| Jacobian | ``8n \times n``, dense | 32 × 4 | 512 × 64 |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``n \times n``, dense | 4 × 4 | 64 × 64 |
 """,
     "rosenbrock_dense" => raw"""
 A Rosenbrock-style test function (a minimum at the bottom of a curved valley) in which **every pair** of unknowns is coupled, not only neighbours. Each of the ``n`` unknowns is pulled towards 1, and for every pair ``j < k`` the later one is pulled onto the parabola ``x_k = x_j^2``:

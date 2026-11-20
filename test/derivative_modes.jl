@@ -153,12 +153,20 @@ const DM_MODES = Dict(
     end
 
     # Each analytic Jacobian is right, and of the types the autodiff path returned
-    V, y = DMB.polyfit_data(60)
-    N = DMB.POLYFIT_NCOEFFS
-    pres = DMB.PolyFitResidual(DMS.SVector{N}(view(V, 17, :)), y[17])
-    e, r0, J = dm_fd_check(pres, DMS.SVector{N, Float64}(range(-1, 1; length=N)))
-    @test e <= 1e-7
-    @test r0 isa DMS.SVector{1, Float64} && J isa DMS.SMatrix{1, N, Float64, N}
+    # The polynomial fit's residual (CN10: one Vector{Float64} variable, the cost owning its 1 × n Jacobian) against
+    # central differences, at n = 4 and 14
+    for N in (4, 14)
+        V, y = DMB.polyfit_data(N)
+        pres = DMB.PolyFitResidual(view(V, 17, :), y[17])
+        p = collect(range(-1, 1; length=N))
+        r0, J = map(copy, DMN.computeresjac(DMB.static(1), pres, p))
+        h = 1e-6
+        Jfd = reduce(hcat, [(copy(DMN.computeresidual(pres, p + h * (1:N .== k))) -
+                             copy(DMN.computeresidual(pres, p - h * (1:N .== k)))) / 2h for k in 1:N])
+        @test rel(J, Jfd) <= 1e-7
+        @test r0 ≈ DMN.computeresidual(pres, p)
+        @test r0 isa Vector{Float64} && J isa Matrix{Float64} && size(J) == (1, N)
+    end
     for d in (2, 9, 16)
         rng = DMB.MersenneTwister(d)
         mres = DMB.MultilaterationResidual{d}(DMS.SVector{d, Float64}(4 .* DMB.normalize(randn(rng, d))), 3.5)

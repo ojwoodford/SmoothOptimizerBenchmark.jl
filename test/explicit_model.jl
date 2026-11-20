@@ -22,7 +22,7 @@ const PAIRED_MODELS = Dict(
     ),
     "Ill-Conditioned Polynomial Fitting" => Dict(
         "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
-        "NLLSModel (Static)" => ["SecondOrderOptimization"],
+        "NLLSModel" => ["SecondOrderOptimization"],
         "Standalone" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
     "Dense Affine Alignment" => Dict(
