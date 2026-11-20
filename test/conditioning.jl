@@ -42,6 +42,8 @@ const POLYFIT_COND_RTOL = 0.01
 const SWEEP_COND_FACTOR = 1.3
 const SWEEP_TABLE = [
     (problem = "Dense Conditioning Sweep", values = :all),
+    # Here at three values; all fifteen are within the factor too (CN12, a scratch run)
+    (problem = "Sparse Conditioning Sweep", values = Any[1e1, 1e4, 1e8]),
 ]
 
 @testset "One trait per problem: conditioning and iterations across sizes (CN13)" begin

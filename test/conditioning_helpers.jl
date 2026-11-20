@@ -43,6 +43,24 @@ function solution_jacobian(prob, size; point=first(solution_point(prob, size)))
     return J
 end
 
+# J with its rows in the order of their largest entries' columns, if that order is a permutation; else J. A row permutation
+# leaves the singular values as they are: the Standalone model of a problem with boundary costs lists those rows first
+function cn_rows_by_diagonal(J)
+    S = sparse(J)
+    m, n = size(S)
+    m == n || return S
+    rows, cols, vals = findnz(S)
+    best = zeros(Int, m)
+    bestval = zeros(m)
+    for (r, c, v) in zip(rows, cols, vals)
+        abs(v) > bestval[r] && (bestval[r] = abs(v); best[r] = c)
+    end
+    sort(best) == 1:n || return S
+    P = zeros(Int, m)
+    P[best] = 1:m
+    return S[P, :]
+end
+
 # Whether J is symmetric tridiagonal
 function cn_symtridiagonal(J)
     size(J, 1) == size(J, 2) || return false
@@ -55,8 +73,9 @@ end
 """
     jacobian_condition(J; nullity = 0) -> Float64
 
-The largest singular value of `J` over its smallest but `nullity`, from `svdvals(Matrix(J))`; for a symmetric
-tridiagonal `J` with more than 5000 columns, from the eigenvalues of its `SymTridiagonal`.
+The largest singular value of `J` over its smallest but `nullity`, from `svdvals(Matrix(J))`; for a `J` with more than
+5000 columns that is symmetric tridiagonal once its rows are put in the order of their largest entries' columns (a row
+permutation, which leaves the singular values unchanged), from the eigenvalues of that `SymTridiagonal`.
 """
 function jacobian_condition(J; nullity::Integer=0)
     s = jacobian_singular_values(J)
@@ -66,8 +85,8 @@ end
 # The singular values of J, largest first
 function jacobian_singular_values(J)
     if size(J, 2) > 5000
-        cn_symtridiagonal(J) || throw(ArgumentError("jacobian_condition: a J with $(size(J, 2)) columns must be symmetric tridiagonal"))
-        S = sparse(J)
+        S = cn_rows_by_diagonal(J)
+        cn_symtridiagonal(S) || throw(ArgumentError("jacobian_condition: a J with $(size(J, 2)) columns must be symmetric tridiagonal, up to the order of its rows"))
         T = SymTridiagonal(Vector(diag(S)), Vector(diag(S, 1)))
         return sort(abs.(eigvals(T)); rev=true)
     end

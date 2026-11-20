@@ -8,6 +8,7 @@ const JUMP_MODEL_NAMES = Dict(
     "Robust Exponential Curve Fitting" => "JuMP (fudged)",
     "Ill-Conditioned Polynomial Fitting" => "JuMP",
     "Dense Conditioning Sweep" => "JuMP",
+    "Sparse Conditioning Sweep" => "JuMP",
     "Multilateration" => "JuMP",
     "Nonlinear 3D Pose Chain" => "JuMP",
     "Dense Affine Alignment" => "JuMP",

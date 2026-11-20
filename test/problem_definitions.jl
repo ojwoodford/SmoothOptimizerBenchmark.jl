@@ -40,6 +40,7 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
         "1D ODE Boundary Value Problem" => :autodiff, "Dense Multi-dimensional Rosenbrock" => :autodiff,
         "Sparse Multi-dimensional Rosenbrock" => :autodiff, "Nonlinear 3D Pose Chain" => :autodiff,
         "Ill-Conditioned Polynomial Fitting" => :analytic, "Multilateration" => :analytic, "Dense Conditioning Sweep" => :analytic,
+        "Sparse Conditioning Sweep" => :autodiff,
         "Dense Affine Alignment" => :analytic, "Robust Procrustes on SO(d)" => :analytic,
         "Sparse Bundle Adjustment" => :mixed)
     @test Set(p.name for p in problems) == Set(keys(expected_modes))

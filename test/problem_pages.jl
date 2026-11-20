@@ -18,7 +18,7 @@ page_row_cells(line) = strip.(split(strip(line), '|')[2:end-1])
 
 # The problems added by the conditioning work (CN11, CN12), which have no committed page until the full run that follows
 # them (CN16); CN16 empties this
-const PAGES_AWAITING_A_RUN = ["conditioning_dense"]
+const PAGES_AWAITING_A_RUN = ["conditioning_dense", "conditioning_sparse"]
 
 # The lines of "The Problem" section, after its heading and up to the next `## ` heading; empty if there is none
 function problem_section(lines)
@@ -99,6 +99,7 @@ const PAGE_COUNTS = Dict(
     "curve_fitting_robust" => (64, 3, 64, 65536, 3, 65536),
     "polynomial_fitting"   => (4, 4, 32, 64, 64, 512),
     "conditioning_dense"   => (1.0, 100, 400, 1.0e12, 100, 400),
+    "conditioning_sparse"  => (10.0, 32768, 32768, 1.0e8, 32768, 32768),
     "rosenbrock_dense"     => (2, 2, 3, 32, 32, 528),
     "multilateration"      => (2, 2, 8, 16, 16, 64),
     "affine_alignment"     => (1, 2, 4, 32, 1056, 4096),

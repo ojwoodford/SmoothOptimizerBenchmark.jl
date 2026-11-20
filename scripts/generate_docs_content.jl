@@ -22,6 +22,7 @@ const CANONICAL_PROBLEM_SLUGS = [
     "curve_fitting_robust",
     "polynomial_fitting",
     "conditioning_dense",
+    "conditioning_sparse",
     "rosenbrock_dense",
     "multilateration",
     "affine_alignment",
@@ -76,6 +77,7 @@ const DERIVATIVES_NOTES = Dict(
     "curve_fitting_robust" => DERIV_AUTODIFF * " The `Standalone (fudged)` model, which LeastSquaresOptim, NonlinearSolve and Optim run on, fills its residual vector and Jacobian by calling that same function for each cost in a plain single-threaded loop, then rewrites each residual and scales its row as described below, so the NLLSModel and Standalone models evaluate a cost with the same code. The mode applies to those two models. The `JuMP (fudged)` model, the same rewritten residuals as JuMP expressions and the native model of JSOSolvers, Ipopt, MadNLP and CaNNOLeS, is differentiated by JuMP's own automatic differentiation, exactly and with exact second derivatives: a native model's derivatives are part of the package under test.",
     "polynomial_fitting" => DERIV_ANALYTIC * DERIV_JUMP,
     "conditioning_dense" => DERIV_ANALYTIC * DERIV_JUMP,
+    "conditioning_sparse" => DERIV_AUTODIFF * DERIV_AUTODIFF_STANDALONE * DERIV_JUMP,
     "multilateration" => DERIV_ANALYTIC * DERIV_JUMP,
     "affine_alignment" => DERIV_ANALYTIC * DERIV_JUMP,
     "robust_procrustes" => "**Derivatives: analytic.** Each correspondence's residual depends on the rotation, ``d(d-1)/2`` scalar inputs (more than $(SmoothOptimizerBenchmark.AUTODIFF_MAX_INPUTS) from ``d = 5``), and every model has a hand-written Jacobian. `NLLSModel (ManifoldVar)` computes each correspondence's Jacobian in the orthonormal tangent basis of `Manifolds.jl`, through `computeresjac`; `NLLSModel (Specialized)` does the same for its own rotation type, with a specialized kernel; and the `Manifolds` model's per-correspondence Jacobian blocks, ``-\\mathbf{R}\\,\\mathbf{E}_l \\mathbf{b}_i`` with the products ``\\mathbf{E}_l \\mathbf{b}_i`` precomputed, are hand-written as well (the Manopt row builds the same blocks).",
@@ -233,7 +235,8 @@ const SOO_CONFIGS = Dict(
     "curve_fitting" => SmoothOptimizerBenchmark.CURVE_FITTING_SOO, "curve_fitting_robust" => SmoothOptimizerBenchmark.ROBUST_CURVE_FITTING_SOO,
     "multilateration" => SmoothOptimizerBenchmark.MULTILATERATION_SOO, "ode_bvp" => SmoothOptimizerBenchmark.ODE_BVP_SOO,
     "polynomial_fitting" => SmoothOptimizerBenchmark.POLYNOMIAL_FITTING_SOO,
-    "conditioning_dense" => SmoothOptimizerBenchmark.DENSE_CONDITIONING_SOO, "pose_chain" => SmoothOptimizerBenchmark.POSE_CHAIN_SOO,
+    "conditioning_dense" => SmoothOptimizerBenchmark.DENSE_CONDITIONING_SOO,
+    "conditioning_sparse" => SmoothOptimizerBenchmark.SPARSE_CONDITIONING_SOO, "pose_chain" => SmoothOptimizerBenchmark.POSE_CHAIN_SOO,
     "robust_procrustes" => SmoothOptimizerBenchmark.ROBUST_PROCRUSTES_SOO, "rosenbrock_dense" => SmoothOptimizerBenchmark.ROSENBROCK_DENSE_SOO,
     "rosenbrock_sparse" => SmoothOptimizerBenchmark.ROSENBROCK_SPARSE_SOO)
 
@@ -474,6 +477,39 @@ The size is fixed: the counts are the same at every ``\kappa``. The work per ite
 | Residuals in total | ``M`` | 400 | 400 |
 | Jacobian | ``M \times N``, dense | 400 × 100 | 400 × 100 |
 | Hessian ``\mathbf{J}^T \mathbf{J}`` | ``N \times N``, dense | 100 × 100 | 100 × 100 |
+""",
+    "conditioning_sparse" => raw"""
+This problem has one size, and what it sweeps is the condition number ``\kappa`` of the Jacobian, from 10 to ``10^8``, so that the effect of ill-conditioning on a large sparse problem is seen alone. ``\kappa`` is imposed through the spectrum: a diffusion term whose weight grows with ``\kappa``, so that no rescaling of the unknowns removes it. The measure to read is each row's error in the solution, plotted below beside its iterations: the residuals are zero at the solution, so an error ``e`` along the weakest direction adds only about ``(e/\kappa)^2/2`` to the cost, and a row can stop with a cost below the status test's floor while its solution is far from the true one. The final cost is still in the data file.
+
+With ``N = 32768`` unknowns and as many residuals,
+
+```math
+f(\mathbf{u}) = \tfrac12 \sum_{i=1}^{N} \Bigl(s\,\bigl[\alpha\,(-u_{i-1} + 2u_i - u_{i+1}) + u_i + 0.1 \sin u_i - f_i\bigr]\Bigr)^2, \qquad u_0 = u_{N+1} = 0 .
+```
+
+The Jacobian is ``s\,\bigl(\alpha\,\mathbf{L} + \operatorname{diag}(1 + 0.1\cos u_i)\bigr)``, symmetric and tridiagonal, with ``\mathbf{L}`` the second-difference matrix, whose eigenvalues lie between ``\lambda_1 = 4\sin^2\bigl(\pi/(2(N+1))\bigr)`` and 4. The weight is ``\alpha = (0.9\kappa - 1.1)/(4 - \kappa\lambda_1)`` and the scale ``s = 1/(4\alpha + 1.1)``, so that the Jacobian's eigenvalues lie between ``1/\kappa`` and 1 and its condition number is between ``\kappa/1.25`` and ``\kappa``. The scale keeps the largest singular value at 1, so that the residuals' size does not change along the sweep. The data ``f_i`` are computed from the stated solution ``u^\star_i = \sin\bigl(3\pi i/(N+1)\bigr) + 0.5\,(-1)^i``: its smooth part lies in the Jacobian's weakest directions and its alternating part in the strongest. The optimizers start from ``\mathbf{u} = \mathbf{0}``. The error in the solution is ``\lVert \mathbf{u} - \mathbf{u}^\star \rVert / \lVert \mathbf{u}^\star \rVert``.
+
+### Where it is used
+
+Discretized diffusion problems in which diffusion dominates the local terms: steady heat conduction and reaction–diffusion with a weak reaction, smoothing and regularization with a strong smoothness weight, and the large sparse systems of implicit time stepping. In each, the smooth components of the solution are the ones the data determine least.
+
+### Similar problems
+
+The [ODE boundary value problem](ode_bvp.md) has the same tridiagonal structure and sizes, with its conditioning held fixed while the size grows; this problem holds the size fixed and sweeps the condition number. The [dense conditioning sweep](conditioning_dense.md) does the same on a dense problem of 100 unknowns.
+
+### How it scales
+
+The size is fixed: the counts are the same at every ``\kappa``. The work per iteration of a sparse direct solver does not change with ``\kappa``; the number of iterations, and how accurately a solver can resolve the smooth part of the solution, may.
+
+| | In terms of the size | Smallest | Largest |
+|:---|:---|---:|---:|
+| Size | ``\kappa`` | 10.0 | 1.0e8 |
+| Variables | ``N = 32768``, each a scalar | 32768 | 32768 |
+| Unknowns in total | ``N`` | 32768 | 32768 |
+| Costs | ``N``, each one residual: ``N - 2`` depend on three variables, the 2 at the ends on two | 32768 | 32768 |
+| Residuals in total | ``N`` | 32768 | 32768 |
+| Jacobian | ``N \times N``, tridiagonal, ``3N - 2`` non-zeros | 98302 non-zeros | 98302 non-zeros |
+| Hessian ``\mathbf{J}^T \mathbf{J}`` | ``N \times N``, pentadiagonal, ``5N - 6`` non-zeros | 163834 non-zeros | 163834 non-zeros |
 """,
     "rosenbrock_dense" => raw"""
 A Rosenbrock-style test function (a minimum at the bottom of a curved valley) in which **every pair** of unknowns is coupled, not only neighbours. Each of the ``n`` unknowns is pulled towards 1, and for every pair ``j < k`` the later one is pulled onto the parabola ``x_k = x_j^2``:

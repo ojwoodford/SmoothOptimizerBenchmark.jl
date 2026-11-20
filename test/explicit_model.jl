@@ -25,6 +25,11 @@ const PAIRED_MODELS = Dict(
         "NLLSModel" => ["SecondOrderOptimization"],
         "Standalone" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
     ),
+    "Sparse Conditioning Sweep" => Dict(
+        "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
+        "NLLSModel (Sparse)" => ["SecondOrderOptimization"],
+        "Standalone (Sparse)" => ["LeastSquaresOptim (Dogleg)", "LeastSquaresOptim (LM)", "Optim (NewtonTrustRegion)", "Optim (Newton)", "NonlinearSolve (LM)", "NonlinearSolve (TrustRegion)"],
+    ),
     "Dense Conditioning Sweep" => Dict(
         "JuMP" => ["JSOSolvers (trunk)", "JSOSolvers (tron)", "Ipopt", "MadNLP", "CaNNOLeS"],
         "NLLSModel" => ["SecondOrderOptimization"],
@@ -130,7 +135,7 @@ pinned_models(name) = Dict(k => sort(v) for (k, v) in PAIRED_MODELS[name])
     end
     configs = [SB.AFFINE_ALIGNMENT_SOO, SB.BUNDLE_ADJUSTMENT_SOO, SB.CURVE_FITTING_SOO, SB.DENSE_CONDITIONING_SOO, SB.MULTILATERATION_SOO, SB.ODE_BVP_SOO,
                SB.POLYNOMIAL_FITTING_SOO, SB.POSE_CHAIN_SOO, SB.ROBUST_CURVE_FITTING_SOO, SB.ROBUST_PROCRUSTES_SOO,
-               SB.ROSENBROCK_DENSE_SOO, SB.ROSENBROCK_SPARSE_SOO]
+               SB.ROSENBROCK_DENSE_SOO, SB.ROSENBROCK_SPARSE_SOO, SB.SPARSE_CONDITIONING_SOO]
     @test all(c -> keys(c) == (:iterator, :linsolver, :formulation, :reduction, :storage), configs)
     @test SB.soo_optimizer(SB.POSE_CHAIN_SOO).name == "SecondOrderOptimization"
     @test_throws MethodError SB.soo_optimizer((; iterator = :dogleg))
