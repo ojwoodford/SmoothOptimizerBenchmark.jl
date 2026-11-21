@@ -27,6 +27,15 @@ isdefined(@__MODULE__, :SMOOTHBENCH_TEST_FIXTURES) || include("fixtures.jl")
     @test r_x.message == "small_step" && r_x.status === :ok
     @test r_x.final_cost ≈ r_g.final_cost rtol=1e-6
 
+    # JSOSolvers (tron), on affine alignment's zero-residual data at n = 2: a small-residual stop needs its gradient test
+    # as well, and counts as converged (it ends with it on Julia 1.13 and on first_order on 1.10, at a cost below 1e-16)
+    @test SB.stats_result(0, (@timed nothing), 1, 1.0, 0.0, :small_residual; converged_statuses=SB.JSO_CONVERGED).converged
+    aa = create_affine_alignment_problem()
+    aa_models = aa.generate_models(2)
+    tron = row(aa, "JSOSolvers (tron)")
+    r_t = tron.optimize(SB.resolve_optimizer_model(tron, aa_models))
+    @test Symbol(r_t.message) in SB.JSO_CONVERGED && r_t.converged && r_t.final_cost < 1e-16
+
     # Manopt, on robust Procrustes at d = 3: the gradient and the step (it is given no cost-change criterion: see the
     # Manopt row in robust_procrustes.jl)
     pr = create_robust_procrustes_problem()

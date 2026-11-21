@@ -1042,8 +1042,13 @@ function optimize_jsosolvers(target; solver=:trunk, solution=nothing, gtol=DEFAU
     t_total = time_ns() - t_start
     res = timed.value
     store_solution!(solution, res.solution)
-    return stats_result(t_total, timed, res.iter, start_c, res.objective, res.status)
+    return stats_result(t_total, timed, res.iter, start_c, res.objective, res.status; converged_statuses=JSO_CONVERGED)
 end
+
+# JSOSolvers' statuses that are convergence for the adapter. On a least-squares model tron's `:small_residual` needs its
+# gradient test as well as a residual below its tolerance, so it is a stricter stop than `:first_order`; on affine
+# alignment's zero-residual data tron ends with it (trunk's residual tolerance is zero by default)
+const JSO_CONVERGED = (:first_order, :small_residual)
 
 """
     optimize_ipopt(model; solution=nothing, gtol=DEFAULT_GTOL, xtol=DEFAULT_XTOL, ftol=DEFAULT_FTOL, maxiters=DEFAULT_MAXITERS, maxtime=DEFAULT_MAXTIME, print_level=0, time_limit=nothing, kwargs...) -> OptimizerResult
