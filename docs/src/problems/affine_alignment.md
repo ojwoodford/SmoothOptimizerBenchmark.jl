@@ -18,7 +18,7 @@ Two clouds of points in ``n`` dimensions, ``\mathbf{x}_1, \dots, \mathbf{x}_{2n}
 f(\mathbf{M}, \mathbf{t}) = \tfrac12 \sum_{i=1}^{2n} \sum_{j=1}^{2n} \bigl(D_{ij} - \lVert \mathbf{M} \mathbf{x}_i + \mathbf{t} - \mathbf{y}_j \rVert\bigr)^2 .
 ```
 
-The table is generated from a true map (``\mathbf{M}`` close to the identity, ``\mathbf{t}`` random) with no noise, so the minimum is zero. The optimizers start from ``\mathbf{M} = \mathbf{I}``, ``\mathbf{t} = \mathbf{0}``.
+The first cloud is the ``2n`` points ``\pm\sqrt{n}`` along each axis, and the second is ``2n`` random points on the sphere of radius ``3\sqrt{n}``. The table is generated from a true map with no noise, so the minimum is zero: ``\mathbf{M}`` is the identity plus a random perturbation of size about 0.1, and ``\mathbf{t}`` a random shift of size about 0.5, whatever ``n`` is. The optimizers start from ``\mathbf{M} = \mathbf{I}``, ``\mathbf{t} = \mathbf{0}``, so the start is the same distance from the solution at every size, and every distance in the table is about ``2\sqrt{n}`` or more, far from the point where a distance is zero and its derivative is undefined.
 
 ### Where it is used
 
@@ -51,7 +51,7 @@ Each row runs on its package's native model, or on the `Standalone` model if its
 | Row | Model | Stopping criteria given |
 |:---|:---|:---|
 | `CaNNOLeS` | `JuMP` | gradient |
-| `Ipopt` | `JuMP` | gradient, step, relative cost change |
+| `Ipopt` | `JuMP` | gradient, step |
 | `JSOSolvers (tron)` | `JuMP` | gradient |
 | `JSOSolvers (trunk)` | `JuMP` | gradient |
 | `LeastSquaresOptim (Dogleg)` | `Standalone` | gradient, step, relative cost change |
@@ -109,6 +109,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Dimension n = `32`, **`Standalone`** achieves the fastest Cost + Linear System evaluation at **41.53 ms** (32 B allocated).
-- **Top Converged Optimizer**: At Dimension n = `32` (7/12 solvers converged), **`Optim (Newton)`** is fastest at **320.27 ms** (6 iterations, final cost `4.12e-27`).
+- **Model Efficiency**: At Dimension n = `32`, **`Standalone`** achieves the fastest Cost + Linear System evaluation at **48.53 ms** (32 B allocated).
+- **Top Converged Optimizer**: At Dimension n = `32` (7/12 solvers converged), **`Optim (Newton)`** is fastest at **276.88 ms** (4 iterations, final cost `1.13e-26`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

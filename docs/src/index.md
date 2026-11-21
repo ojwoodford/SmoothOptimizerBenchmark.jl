@@ -44,7 +44,7 @@ To separate modeling overhead from solver algorithm efficiency, every problem is
 | Package | Gradient (`gtol`) | Step (`xtol`) | Relative cost change (`ftol`) | Note |
 |:---|:---|:---|:---|:---|
 | CaNNOLeS | `atol = gtol`, `rtol = 0` | — | — | Its residual tolerances (`Fatol`, `Frtol`) at their defaults. |
-| Ipopt | `tol`, `dual_inf_tol` | `tiny_step_tol` | `acceptable_obj_change_tol` | The change is tested inside Ipopt's acceptable test (`acceptable_iter = 1`, `acceptable_tol = 1e20`) and scaled by ``\max(1, \lvert f \rvert)``; the acceptable and tiny-step stops count as converged. |
+| Ipopt | `tol`, `dual_inf_tol` | `tiny_step_tol` | — | Ipopt tests the cost change only inside its acceptable test, which is off (`acceptable_iter = 0`): with it on, on the ODE BVP Ipopt stopped after 2 iterations and handed back a point other than the one whose objective it reported; the tiny-step stop counts as converged. |
 | JSOSolvers | `atol = gtol`, `rtol = 0` | — | — |  |
 | LeastSquaresOptim | `g_tol` | `x_tol` | `f_tol` |  |
 | MadNLP | `tol` (KKT residual) | — | — |  |
@@ -55,8 +55,8 @@ To separate modeling overhead from solver algorithm efficiency, every problem is
 
    - A row that ends `timeout` at one size is not run at the larger sizes of that table: it is recorded `timeout` there, "timed out at size N". There are no size limits otherwise.
    - Every concrete `(optimizer, model-type)` specialization is pre-warmed prior to timing so LLVM JIT compilation is excluded.
-   - Every row's final cost is evaluated by the harness at the point the solver returned, not taken from the solver. A row's status is decided by the harness too: `ok` when the solver reports convergence **and** the final cost is at most ``\max(c_{\text{ref}}(1 + 10^{-4}), 10^{-6})``, with ``c_{\text{ref}}`` the problem's known minimum at that size (0 for affine alignment, both Rosenbrocks, the ODE BVP, bundle adjustment and the two conditioning sweeps; the extended-precision minimum for the polynomial fit), or else the lowest final cost of any row at that size in the same table. A row whose solver claims convergence but fails that test is `local_minimum` if the cost reduction the Gauss–Newton model predicts from its point is below ``10^{-8}`` × its cost (a minimum of the Gauss–Newton model: a saddle of the true cost would pass), and `above_reference` otherwise. Rows that stop on the iteration or time limit or stall are `not_converged` or `timeout` (the message says when the cost test passes anyway).
-   - Only `ok` rows are plotted (`converged = true` in the raw data tables); every other status is omitted (`NaN`) from the runtime plots, `local_minimum` included, since its time is the time to a different optimum.
+   - Every row's final cost is evaluated by the harness at the point the solver returned, not taken from the solver. A row's status is decided by the harness too: `ok` when the solver reports convergence **and** the final cost is at most ``\max(c_{\text{ref}}(1 + 10^{-4}),\ 10^{-8} c_0)``, with ``c_0`` the row's start cost and ``c_{\text{ref}}`` the problem's known minimum at that size (0 for affine alignment, both Rosenbrocks, the ODE BVP, bundle adjustment and the two conditioning sweeps; the extended-precision minimum for the polynomial fit), or else the lowest final cost of any row at that size in the same table; and, where the problem states its solution (the two conditioning sweeps), when the relative error in the solution ``\lVert \mathbf{x} - \mathbf{x}^* \rVert / \lVert \mathbf{x}^* \rVert`` is at most ``10^{-4}``. A row that passes the cost test with a larger error is `wrong_solution`: the cost cannot tell its point from the solution. A row whose solver claims convergence but fails the cost test is `local_minimum` if the cost reduction the Gauss–Newton model predicts from its point is below ``10^{-8}`` × its cost (a minimum of the Gauss–Newton model: a saddle of the true cost would pass), and `above_reference` otherwise. Rows that stop on the iteration or time limit or stall are `not_converged` or `timeout` (the message says when the cost test passes anyway).
+   - Only `ok` rows are plotted (`converged = true` in the raw data tables); every other status is omitted (`NaN`) from the runtime plots, `local_minimum` included, since its time is the time to a different optimum. The conditioning sweeps' solution-error and iteration plots draw `wrong_solution` rows as well, since their error is what those plots show.
    - Results stream line-by-line directly to Markdown tables in `docs/src/data/` as each model and optimizer measurement completes.
 
 ### Derivatives
@@ -102,24 +102,9 @@ Each problem shows how performance changes with one thing, its size (or, for the
 | Sparse Conditioning Sweep | condition number ``\kappa``, 10 to ``10^8`` | 32768 unknowns, tridiagonal; the nonlinearity; the solution | ``\kappa/1.18`` to ``\kappa/1.14`` |
 | Dense Multi-dimensional Rosenbrock | dimension ``n`` | every pair coupled; the start, 0.5 | 2.12, 3.82, 4.86 (``n`` = 2, 8, 32) |
 | Multilateration | dimension ``d`` | ``4d`` anchors at distance 4; the noise | 1.17, 1.75, 2.58 (``d`` = 2, 7, 16) |
-| Dense Affine Alignment | dimension ``n`` | **not yet:** the start's distance from the solution grows with ``n`` | 32.5, 27.8, 125 (``n`` = 2, 8, 32) |
+| Dense Affine Alignment | dimension ``n`` | sources at ``\pm\sqrt{n}`` on each axis, targets on a sphere of radius ``3\sqrt{n}``; the start's distance from the solution | 2.08, 3.20, 7.42 (``n`` = 2, 8, 32): grows about as ``\sqrt{n}`` |
 | Nonlinear 3D Pose Chain | poses ``N`` | links, a loop closure every 10 poses, the self-term | 17.0, 21.4, 22.2 (``N`` = 50, 200, 400) |
 | 1D ODE Boundary Value Problem | grid points ``N`` | the spacing, 0.1; the reaction term | 112, 156, 157 (``N`` = 32, 256, 2048) |
 | Sparse Bundle Adjustment | cameras ``N_{cam}`` | a ring of cameras around a ball of points; focal length 1; each point seen by half the cameras | 856, 398, 275 (``N_{cam}`` = 4, 16, 32) |
-| Robust Procrustes on SO(d) | dimension ``d`` | **not yet:** the points lie along ``d`` directions, and 4 of them are outliers at every ``d`` | 2.50, 273, 710 (``d`` = 3, 8, 20) |
+| Robust Procrustes on SO(d) | dimension ``d`` | random unit points, spread in every direction; one outlier in about ten | 1.43, 1.99, 1.72 (``d`` = 3, 8, 20) |
 
----
-
-## Executive Summary of Results
-
-1. **Model Evaluation & Linear System Assembly**:
-   - `NLLSModel.jl` achieves zero-allocation cost and Gauss-Newton normal-equation assembly on static and block-sparse problems, outperforming generic `JuMP` / `NLPModels` and `BundleAdjustmentModels` coordinate assembly by **3×–10×** at scale.
-   - Hand-specialized manifold residuals (`NLLSModel (Specialized)`) on $SO(d)$ eliminate tangent-basis allocation overhead relative to generic `Manifolds.jl` / `ManifoldVar` representations.
-
-2. **Optimizer Efficiency & Scaling**:
-   - **`SecondOrderOptimization.jl`**: Consistently delivers the lowest latency on small-to-medium dense problems and scales linearly on banded/tridiagonal sparse problems via direct sparse `LDL` factorizations.
-   - **`CaNNOLeS.jl` & `MadNLP.jl`**: Excel on large-scale sparse Bundle Adjustment, where augmented KKT / interior-point sparse factorizations avoid dense fill-in from high-degree camera columns in $J^T J$.
-   - **`Optim.jl` (`Newton` / `NewtonTrustRegion`)**: Strong performance on dense problems and sparse line-search Newton; `NewtonTrustRegion` requires dense eigendecompositions and is inapplicable to sparse Hessians.
-   - **`JSOSolvers.jl` (`trunk` / `tron`)**: Matrix-free Krylov trust-region methods (`hprod!`) scale well on well-conditioned sparse problems (such as Sparse Rosenbrock) with minimal memory footprint, though unpreconditioned CG struggles on ill-conditioned Bundle Adjustment and long Pose Chains.
-   - **`Ipopt.jl`**: Highly reliable global convergence across dense and sparse problems, with higher per-iteration interior-point overhead at small problem sizes.
-   - **`LeastSquaresOptim.jl` & `NonlinearSolve.jl`**: Competitive on small and medium dense problems; on large sparse problems, unpreconditioned iterative `LSMR` (`LeastSquaresOptim`) and sparse QR (`NonlinearSolve`) become bottlenecked compared to sparse Cholesky/LDL normal-equation or KKT solvers.

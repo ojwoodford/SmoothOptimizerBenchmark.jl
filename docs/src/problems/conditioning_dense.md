@@ -53,7 +53,7 @@ Each row runs on its package's native model, or on the `Standalone` model if its
 | Row | Model | Stopping criteria given |
 |:---|:---|:---|
 | `CaNNOLeS` | `JuMP` | gradient |
-| `Ipopt` | `JuMP` | gradient, step, relative cost change |
+| `Ipopt` | `JuMP` | gradient, step |
 | `JSOSolvers (tron)` | `JuMP` | gradient |
 | `JSOSolvers (trunk)` | `JuMP` | gradient |
 | `LeastSquaresOptim (Dogleg)` | `Standalone` | gradient, step, relative cost change |
@@ -125,6 +125,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Condition Number κ = `1.0e12`, **`Standalone`** achieves the fastest Cost + Linear System evaluation at **294.83 μs** (32 B allocated).
-- **Top Converged Optimizer**: At Condition Number κ = `1.0e12` (10/12 solvers converged), **`LeastSquaresOptim (Dogleg)`** is fastest at **6.41 ms** (4 iterations, final cost `1.74e-29`).
+- **Model Efficiency**: At Condition Number κ = `1.0e12`, **`Standalone`** achieves the fastest Cost + Linear System evaluation at **313.33 μs** (32 B allocated).
+- **Top Converged Optimizer**: At Condition Number κ = `1.0e12` (1/12 solvers converged), **`LeastSquaresOptim (Dogleg)`** is fastest at **6.23 ms** (4 iterations, final cost `1.74e-29`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

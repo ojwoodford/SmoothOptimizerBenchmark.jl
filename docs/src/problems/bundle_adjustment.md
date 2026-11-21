@@ -51,7 +51,7 @@ Each row runs on its package's native model, or on the `Standalone` model if its
 | Row | Model | Stopping criteria given |
 |:---|:---|:---|
 | `CaNNOLeS` | `BundleAdjustmentModels` | gradient |
-| `Ipopt` | `BundleAdjustmentModels` | gradient, step, relative cost change |
+| `Ipopt` | `BundleAdjustmentModels` | gradient, step |
 | `JSOSolvers (tron)` | `BundleAdjustmentModels` | gradient |
 | `JSOSolvers (trunk)` | `BundleAdjustmentModels` | gradient |
 | `MadNLP` | `BundleAdjustmentModels` | gradient |
@@ -107,6 +107,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Cameras Ncam = `256`, **`NLLSModel`** achieves the fastest Cost + Linear System evaluation at **30.56 ms** (155.0 MiB allocated).
-- **Top Converged Optimizer**: At Cameras Ncam = `256` (4/6 solvers converged), **`SecondOrderOptimization`** is fastest at **1.64 s** (3 iterations, final cost `2.39e-19`).
+- **Model Efficiency**: At Cameras Ncam = `256`, **`NLLSModel`** achieves the fastest Cost + Linear System evaluation at **30.95 ms** (155.0 MiB allocated).
+- **Top Converged Optimizer**: At Cameras Ncam = `256` (4/6 solvers converged), **`SecondOrderOptimization`** is fastest at **1.38 s** (3 iterations, final cost `2.39e-19`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

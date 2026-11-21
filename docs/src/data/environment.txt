@@ -1,4 +1,4 @@
-Julia 1.13.3, started with -t 8
+Julia 1.13.4, started with -t 8
 Status `~/.julia/dev/SmoothOptimizerBenchmark.jl/scripts/cn/env-release/Manifest.toml`
   [47edcb42] ADTypes v1.24.0
   [14f7f29c] AMD v0.5.4
@@ -208,7 +208,7 @@ Status `~/.julia/dev/SmoothOptimizerBenchmark.jl/scripts/cn/env-release/Manifest
   [8290d209] ThreadingUtilities v0.5.7
   [a759f4b9] TimerOutputs v1.2.3
   [3bb67fe8] TranscodingStreams v0.11.3
-  [9d95972d] TupleTools v1.6.1
+⌃ [9d95972d] TupleTools v1.6.1
   [3a884ed6] UnPack v1.0.2
   [1cfade01] UnicodeFun v0.4.1
   [41fe7b60] Unzip v0.2.0

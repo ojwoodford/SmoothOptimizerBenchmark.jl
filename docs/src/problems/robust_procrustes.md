@@ -19,7 +19,7 @@ f(\mathbf{R}) = \tfrac12 \sum_{i=1}^{n} \rho\bigl(\lVert \mathbf{a}_i - \mathbf{
 \rho(s) = \begin{cases} s & s \le w^2 \\ 2w\sqrt{s} - w^2 & s > w^2 \end{cases}
 ```
 
-The points are in ``d`` dimensions, and there are ``n = d(d+1)/2`` pairs. They are generated from a known rotation with no noise, apart from four pairs displaced by 0.1; the kernel's width is ``w = 10^{-5}``, so that away from the answer nearly every pair is on the kernel's linear part. The optimizers start from the identity.
+The points are in ``d`` dimensions, and there are ``n = d(d+1)/2`` pairs. The points ``\mathbf{a}_i`` are random unit vectors, spread in every direction. The pairs are generated from a known rotation with no noise, apart from one pair in about ten, which is displaced by 0.1; the kernel's width is ``w = 10^{-5}``, so that away from the answer nearly every pair is on the kernel's linear part. The optimizers start from the identity.
 
 A rotation is not a list of freely adjustable numbers: a ``d \times d`` matrix has ``d^2`` entries, but only those matrices with ``\mathbf{R}^T \mathbf{R} = \mathbf{I}`` and determinant 1 are rotations. They form a curved space, the manifold ``SO(d)``, of dimension ``d(d-1)/2``. The optimizers work on that space directly, taking each step in the flat space of small rotations about the current estimate and mapping the result back onto the manifold.
 
@@ -100,6 +100,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Matrix Dimension d = `32`, **`Manifolds`** achieves the fastest Cost + Linear System evaluation at **183.42 ms** (32 B allocated).
-- **Top Converged Optimizer**: At Matrix Dimension d = `32` (2/2 solvers converged), **`SecondOrderOptimization`** is fastest at **745.49 ms** (11 iterations, final cost `3.92e-06`).
+- **Model Efficiency**: At Matrix Dimension d = `32`, **`Manifolds`** achieves the fastest Cost + Linear System evaluation at **202.51 ms** (32 B allocated).
+- **Top Converged Optimizer**: At Matrix Dimension d = `32` (2/2 solvers converged), **`SecondOrderOptimization`** is fastest at **375.21 ms** (5 iterations, final cost `5.30e-05`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.

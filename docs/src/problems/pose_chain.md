@@ -53,7 +53,7 @@ Each row runs on its package's native model, or on the `Standalone` model if its
 | Row | Model | Stopping criteria given |
 |:---|:---|:---|
 | `CaNNOLeS` | `JuMP` | gradient |
-| `Ipopt` | `JuMP` | gradient, step, relative cost change |
+| `Ipopt` | `JuMP` | gradient, step |
 | `JSOSolvers (tron)` | `JuMP` | gradient |
 | `JSOSolvers (trunk)` | `JuMP` | gradient |
 | `LeastSquaresOptim (Dogleg)` | `Standalone (Sparse)` | gradient, step, relative cost change |
@@ -108,6 +108,6 @@ The full numeric benchmark measurements (cost, linear system assembly times, out
 
 ## 5. Analysis & Key Takeaways
 
-- **Model Efficiency**: At Poses N = `10000`, **`NLLSModel (Sparse)`** achieves the fastest Cost + Linear System evaluation at **919.58 μs** (64 B allocated).
-- **Top Converged Optimizer**: At Poses N = `10000` (10/11 solvers converged), **`SecondOrderOptimization`** is fastest at **29.77 ms** (4 iterations, final cost `1.07e-01`).
+- **Model Efficiency**: At Poses N = `10000`, **`NLLSModel (Sparse)`** achieves the fastest Cost + Linear System evaluation at **942.88 μs** (64 B allocated).
+- **Top Converged Optimizer**: At Poses N = `10000` (10/11 solvers converged), **`SecondOrderOptimization`** is fastest at **36.60 ms** (4 iterations, final cost `1.07e-01`).
 - **Convergence Filtering**: Only runs satisfying universal convergence tolerances (`gtol = 1.0e-8`, `xtol = 1.0e-8`, `ftol = 1.0e-8`) within `500` iterations and `30.0s` are plotted.
